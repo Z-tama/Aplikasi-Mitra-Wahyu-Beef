@@ -1,0 +1,31 @@
+{
+  "name": "frozen-membership-app",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host 0.0.0.0",
+    "dev:api": "tsx src/server/server.ts",
+    "build": "tsc && vite build",
+    "build:server": "tsc -p tsconfig.server.json",
+    "build:all": "npm run build && npm run build:server",
+    "start": "tsx src/server/server.ts",
+    "preview": "vite preview --host 0.0.0.0",
+    "test": "tsx --test src/**/*.test.ts",
+    "typecheck": "tsc --noEmit && tsc -p tsconfig.server.json --noEmit"
+  },
+  "dependencies": {
+    "@vitejs/plugin-react": "^4.3.4",
+    "lucide-react": "latest",
+    "react": "latest",
+    "react-dom": "latest",
+    "tsx": "^4.22.3",
+    "typescript": "latest",
+    "vite": "^5.4.21"
+  },
+  "devDependencies": {
+    "@types/node": "^25.9.1",
+    "@types/react": "^19.2.15",
+    "@types/react-dom": "^19.2.3"
+  }
+}

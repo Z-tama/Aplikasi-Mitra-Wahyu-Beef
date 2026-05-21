@@ -1,0 +1,38 @@
+# Dependencies
+node_modules/
+.pnpm-store/
+.npm-cache/
+*.tgz
+
+# Environment / secrets
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+
+# Build outputs
+dist/
+dist-server/
+dist-tests/
+build/
+coverage/
+.vite/
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Runtime state
+data/test-app-state.json
