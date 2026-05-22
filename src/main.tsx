@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { createRoot } from 'react-dom/client';
-import { BarChart3, ClipboardList, FileText, IceCreamBowl, LayoutDashboard, LogOut, Medal, Package, ReceiptText, ShieldCheck, ShoppingCart, Truck, UserCog, Users } from 'lucide-react';
+import { BarChart3, ClipboardList, FileText, IceCreamBowl, LayoutDashboard, LogOut, MapPinned, Medal, Package, ReceiptText, ShieldCheck, ShoppingCart, Truck, UserCog, Users } from 'lucide-react';
 import './styles.css';
 import { AccountingEvent, CartItem, DeliveryNote, Invoice, Order, OrderStatus, Role, User, formatIdr, statusLabels, validTransitions } from './domain';
 import { AppState, createSeedState, demoPasswords } from './seed';
@@ -9,7 +9,7 @@ import { findPartnerForUser, getCatalogForPartner, getLeaderboard } from './serv
 
 const stateSingleton = createSeedState();
 
-type View = 'dashboard' | 'catalog' | 'orders' | 'products' | 'partners' | 'pricing' | 'documents' | 'leaderboard' | 'profile' | 'reports' | 'audit' | 'accounting';
+type View = 'dashboard' | 'catalog' | 'orders' | 'products' | 'partners' | 'pricing' | 'documents' | 'leaderboard' | 'areas' | 'profile' | 'reports' | 'audit' | 'accounting';
 
 function App() {
   const [state, setState] = useState<AppState>(stateSingleton);
@@ -67,8 +67,8 @@ function Login({ state, onLogin }: { state: AppState; onLogin: (session: Session
 function Shell({ state, user, setUser, token, view, setView, setState, refresh, onLogout }: { state: AppState; user: User; setUser: (user: User) => void; token: string; view: View; setView: (view: View) => void; setState: (state: AppState) => void; refresh: () => Promise<void>; onLogout: () => void }) {
   const isPartner = user.role === 'partner';
   const nav = isPartner
-    ? [['catalog', 'Katalog', ShoppingCart], ['orders', 'Order Saya', ClipboardList], ['documents', 'Dokumen', FileText], ['leaderboard', 'Leaderboard', Medal], ['profile', 'Profil', UserCog]] as const
-    : [['dashboard', 'Dashboard', LayoutDashboard], ['orders', 'Order', ClipboardList], ['products', 'Produk', Package], ['partners', 'Mitra', Users], ['pricing', 'Harga Tier', ReceiptText], ['documents', 'Invoice & SJ', FileText], ['leaderboard', 'Leaderboard', Medal], ['reports', 'Reports', BarChart3], ['accounting', 'Accounting Events', ShieldCheck], ['audit', 'Audit Trail', ShieldCheck]] as const;
+    ? [['catalog', 'Katalog', ShoppingCart], ['orders', 'Order Saya', ClipboardList], ['documents', 'Dokumen', FileText], ['leaderboard', 'Leaderboard', Medal], ['areas', 'Area Mitra', MapPinned], ['profile', 'Profil', UserCog]] as const
+    : [['dashboard', 'Dashboard', LayoutDashboard], ['orders', 'Order', ClipboardList], ['products', 'Produk', Package], ['partners', 'Mitra', Users], ['areas', 'Area Mitra', MapPinned], ['pricing', 'Harga Tier', ReceiptText], ['documents', 'Invoice & SJ', FileText], ['leaderboard', 'Leaderboard', Medal], ['reports', 'Reports', BarChart3], ['accounting', 'Accounting Events', ShieldCheck], ['audit', 'Audit Trail', ShieldCheck]] as const;
   return <div className="app-shell layout">
     <aside className="sidebar">
       <div className="brand"><div className="logo">WB</div><div><h2>Wahyu Beef</h2><span>Mitra App</span></div></div>
@@ -85,6 +85,7 @@ function Shell({ state, user, setUser, token, view, setView, setState, refresh, 
       {view === 'pricing' && <Pricing state={state} />}
       {view === 'documents' && <Documents state={state} user={user} token={token} refresh={refresh} />}
       {view === 'leaderboard' && <Leaderboard state={state} />}
+      {view === 'areas' && <PartnerAreas state={state} user={user} />}
       {view === 'profile' && <ProfileSettings state={state} user={user} token={token} setUser={setUser} setState={setState} />}
       {view === 'reports' && <Reports state={state} />}
       {view === 'audit' && <Audit state={state} />}
@@ -95,7 +96,7 @@ function Shell({ state, user, setUser, token, view, setView, setState, refresh, 
 
 function Topbar({ state, user, view }: { state: AppState; user: User; view: View }) {
   const partner = findPartnerForUser(state, user);
-  const title: Record<View, string> = { dashboard: 'Dashboard Operasional', catalog: 'Katalog Mitra', orders: user.role === 'partner' ? 'Order Saya' : 'Order Management', products: 'Product Catalog', partners: 'Mitra Management', pricing: 'Tier Pricing', documents: 'Invoice & Surat Jalan', leaderboard: 'Leaderboard Mitra', profile: 'Setting Profil', reports: 'Basic Reports', audit: 'Audit Trail', accounting: 'Accounting Event Log' };
+  const title: Record<View, string> = { dashboard: 'Dashboard Operasional', catalog: 'Katalog Mitra', orders: user.role === 'partner' ? 'Order Saya' : 'Order Management', products: 'Product Catalog', partners: 'Mitra Management', pricing: 'Tier Pricing', documents: 'Invoice & Surat Jalan', leaderboard: 'Leaderboard Mitra', areas: 'Area Mitra', profile: 'Setting Profil', reports: 'Basic Reports', audit: 'Audit Trail', accounting: 'Accounting Event Log' };
   return <header className="topbar"><div><h1>{title[view]}</h1><p>{partner ? `${partner.businessName} • ${tierName(state, partner.tierId)}` : 'Admin workspace Wahyu Beef'}</p></div><div className="badge" style={{ background: '#fff8e8', color: '#8f121b', border: '1px solid #ead7ae' }}>{roleLabel(user.role)}</div></header>;
 }
 
@@ -156,6 +157,77 @@ function OrdersTable({ state, orders, user, token, refresh, compact }: { state: 
 
 function OrderModal({ state, order, onClose }: { state: AppState; order: Order; onClose: () => void }) { return <div className="modal-backdrop"><div className="modal"><div className="topbar"><div><h2>{order.orderNumber}</h2><p>{partnerName(state, order.partnerId)} • {statusLabels[order.status]}</p></div><button className="btn" onClick={onClose}>Tutup</button></div><DocumentOrder state={state} order={order} /></div></div>; }
 
+
+
+type AreaPoint = { id: string; label: string; province: string; island: string; x: number; y: number; note: string };
+
+const areaPoints: AreaPoint[] = [
+  { id: 'dki-jakarta', label: 'Jakarta', province: 'DKI Jakarta', island: 'Jawa', x: 37, y: 67, note: 'Hub utama Jabodetabek dan distributor kota.' },
+  { id: 'jawa-barat', label: 'Jawa Barat', province: 'Jawa Barat', island: 'Jawa', x: 42, y: 70, note: 'Bandung, Bekasi, Bogor, Depok dan koridor retail besar.' },
+  { id: 'banten', label: 'Banten', province: 'Banten', island: 'Jawa', x: 33, y: 68, note: 'Area penyangga Jabodetabek dan jalur barat.' },
+  { id: 'jawa-tengah', label: 'Jawa Tengah', province: 'Jawa Tengah', island: 'Jawa', x: 53, y: 72, note: 'Potensi ekspansi reseller kota besar Jawa Tengah.' },
+  { id: 'diy', label: 'DIY', province: 'DIY', island: 'Jawa', x: 57, y: 76, note: 'Area komunitas reseller dan horeca lokal.' },
+  { id: 'jawa-timur', label: 'Jawa Timur', province: 'Jawa Timur', island: 'Jawa', x: 66, y: 74, note: 'Koridor Surabaya dan distribusi Indonesia timur.' },
+  { id: 'sumatera-utara', label: 'Sumut', province: 'Sumatera Utara', island: 'Sumatera', x: 17, y: 35, note: 'Target ekspansi Sumatera bagian utara.' },
+  { id: 'sumatera-selatan', label: 'Sumsel', province: 'Sumatera Selatan', island: 'Sumatera', x: 26, y: 57, note: 'Target ekspansi Sumatera bagian selatan.' },
+  { id: 'kalimantan-timur', label: 'Kaltim', province: 'Kalimantan Timur', island: 'Kalimantan', x: 55, y: 42, note: 'Target ekspansi Kalimantan dan IKN.' },
+  { id: 'sulawesi-selatan', label: 'Sulsel', province: 'Sulawesi Selatan', island: 'Sulawesi', x: 73, y: 59, note: 'Target ekspansi Indonesia timur via Makassar.' },
+  { id: 'bali', label: 'Bali', province: 'Bali', island: 'Bali-Nusa Tenggara', x: 72, y: 79, note: 'Target horeca dan reseller frozen food.' },
+];
+
+function PartnerAreas({ state, user }: { state: AppState; user: User }) {
+  const visiblePartners = user.role === 'partner' ? state.partners.filter((partner) => partner.userId === user.id) : state.partners;
+  const [selectedId, setSelectedId] = useState(() => visiblePartners[0] ? areaPoints.find((point) => point.province === visiblePartners[0].province)?.id ?? 'jawa-barat' : 'jawa-barat');
+  const selected = areaPoints.find((point) => point.id === selectedId) ?? areaPoints[0];
+  const partnersInArea = visiblePartners.filter((partner) => partner.province === selected.province);
+  const activePartners = visiblePartners.filter((partner) => partner.status === 'active').length;
+  const coveredProvinces = new Set(visiblePartners.map((partner) => partner.province)).size;
+  const islands = areaPoints.reduce<Record<string, number>>((acc, point) => {
+    const count = visiblePartners.filter((partner) => partner.province === point.province).length;
+    acc[point.island] = (acc[point.island] ?? 0) + count;
+    return acc;
+  }, {});
+
+  return <div className="area-layout">
+    <div className="card area-map-card">
+      <div className="area-head"><div><h3>Peta Sebaran Wilayah</h3><p>Tap marker untuk melihat mitra per provinsi. Warna marker makin solid jika area sudah punya mitra aktif.</p></div><span className="area-pill">{visiblePartners.length} Mitra</span></div>
+      <div className="indonesia-map" aria-label="Peta sebaran mitra Indonesia">
+        <svg className="map-shape" viewBox="0 0 1000 420" role="img" aria-label="Ilustrasi peta Indonesia">
+          <path d="M70 145 C118 118 166 130 208 170 C245 207 274 248 330 260 C257 281 183 263 138 226 C103 196 82 178 70 145Z" />
+          <path d="M315 279 C432 258 587 274 722 310 C665 339 493 336 336 307 C299 300 291 288 315 279Z" />
+          <path d="M392 132 C470 86 578 100 637 154 C596 197 485 206 412 179 C380 166 374 146 392 132Z" />
+          <path d="M676 144 C717 114 755 138 737 179 C772 188 785 234 748 260 C706 240 674 199 676 144Z" />
+          <path d="M760 273 C806 267 850 286 879 315 C829 331 778 319 748 296 C738 287 742 277 760 273Z" />
+          <path d="M832 164 C897 132 966 146 980 196 C933 224 867 222 826 197 C803 184 806 172 832 164Z" />
+          <path d="M728 324 C757 318 793 327 814 348 C776 359 735 351 712 338 C707 333 712 326 728 324Z" />
+        </svg>
+        {areaPoints.map((point) => {
+          const count = visiblePartners.filter((partner) => partner.province === point.province).length;
+          return <button key={point.id} className={`map-marker ${selected.id === point.id ? 'active' : ''} ${count ? 'has-partners' : ''}`} style={{ left: `${point.x}%`, top: `${point.y}%` }} onClick={() => setSelectedId(point.id)} title={`${point.label}: ${count} mitra`}>
+            <span className="pin-dot" />
+            <span className="pin-count">{count}</span>
+          </button>;
+        })}
+      </div>
+      <div className="area-legend"><span><i className="legend-dot filled" /> Ada mitra</span><span><i className="legend-dot" /> Target ekspansi</span><span>Marker bisa diklik</span></div>
+    </div>
+    <div className="grid area-side">
+      <div className="grid cols-3 area-stats">
+        <Metric label="Mitra Aktif" value={String(activePartners)} />
+        <Metric label="Provinsi Tercover" value={String(coveredProvinces)} />
+        <Metric label="Area Dipilih" value={String(partnersInArea.length)} />
+      </div>
+      <div className="card selected-area-card">
+        <div className="area-title"><div><span className="area-kicker">{selected.island}</span><h3>{selected.label}</h3><p>{selected.note}</p></div><span className="area-pill strong">{partnersInArea.length} mitra</span></div>
+        {partnersInArea.length ? <div className="partner-area-list">{partnersInArea.map((partner) => <div className="partner-area-item" key={partner.id}>
+          <div><b>{partner.businessName}</b><br /><small>{partner.partnerCode} • {tierName(state, partner.tierId)}</small></div>
+          <div><span className={`status ${partner.status === 'active' ? 'delivered' : 'cancelled'}`}>{partner.status}</span><br /><small>{partner.city} • {partner.phone}</small></div>
+        </div>)}</div> : <div className="notice warning">Belum ada mitra aktif di area ini. Cocok dijadikan target ekspansi berikutnya.</div>}
+      </div>
+      <div className="card island-summary"><h3>Ringkasan Pulau</h3>{Object.entries(islands).map(([island, count]) => <button key={island} className="island-row" onClick={() => { const first = areaPoints.find((point) => point.island === island); if (first) setSelectedId(first.id); }}><span>{island}</span><b>{count}</b></button>)}</div>
+    </div>
+  </div>;
+}
 
 function ProfileSettings({ state, user, token, setUser, setState }: { state: AppState; user: User; token: string; setUser: (user: User) => void; setState: (state: AppState) => void }) {
   const partner = findPartnerForUser(state, user);
