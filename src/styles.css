@@ -148,11 +148,16 @@ th { background: #fff3d8; color: #7b5b2f; font-size: 12px; text-transform: upper
 .area-head p, .area-title p { color: #8a6a37; margin: 6px 0 0; line-height: 1.55; }
 .area-pill { display: inline-flex; align-items: center; justify-content: center; border-radius: 999px; padding: 8px 12px; background: #f4dfad; color: #8f121b; font-size: 12px; font-weight: 950; white-space: nowrap; }
 .area-pill.strong { background: #8f121b; color: #fff8e8; }
-.indonesia-map { position: relative; min-height: 430px; border-radius: 26px; overflow: hidden; background: radial-gradient(circle at top, rgba(255,255,255,.68), transparent 22rem), #fbefd2; border: 1px solid #ead7ae; box-shadow: inset 0 0 0 1px rgba(255,255,255,.45); }
-.indonesia-map::before { content: 'Peta Sebaran Wilayah'; position: absolute; left: 50%; top: 22px; transform: translateX(-50%); z-index: 2; padding: 10px 22px; border-radius: 999px; background: #7f8d58; color: #fff8e8; font-weight: 950; letter-spacing: .01em; box-shadow: 0 10px 24px rgba(76,83,49,.18); }
-.map-image { position: absolute; left: 50%; top: 54px; width: min(106%, 980px); max-width: none; height: calc(100% - 78px); object-fit: contain; transform: translateX(-50%); mix-blend-mode: multiply; filter: drop-shadow(0 8px 9px rgba(92,67,26,.1)); }
-.map-marker { --pin-color: #c9a85a; position: absolute; z-index: 3; transform: translate(-50%, -100%); border: 0; background: transparent; width: 36px; height: 50px; padding: 0; cursor: pointer; filter: drop-shadow(0 10px 12px rgba(105,34,28,.22)); transition: transform .18s ease, opacity .18s ease; }
-.map-marker::before { content: ''; position: absolute; left: 50%; top: 2px; width: 31px; height: 31px; background: var(--pin-color); border: 3px solid #fff8e8; border-radius: 50% 50% 50% 0; transform: translateX(-50%) rotate(-45deg); transition: .18s ease; box-shadow: inset 0 -4px 8px rgba(0,0,0,.08); }
+.indonesia-map { --map-scale: 1; --map-x: -50%; --map-y: 0px; position: relative; min-height: 430px; border-radius: 26px; overflow: hidden; background: radial-gradient(circle at top, rgba(255,255,255,.68), transparent 22rem), #fbefd2; border: 1px solid #ead7ae; box-shadow: inset 0 0 0 1px rgba(255,255,255,.45); }
+.indonesia-map::before { content: 'Peta Sebaran Wilayah'; position: absolute; left: 50%; top: 22px; transform: translateX(-50%); z-index: 2; width: min(240px, calc(100% - 72px)); padding: 10px 18px; border-radius: 999px; background: #7f8d58; color: #fff8e8; font-weight: 950; letter-spacing: .01em; text-align: center; line-height: 1.25; box-shadow: 0 10px 24px rgba(76,83,49,.18); }
+.map-image { position: absolute; left: 50%; top: 54px; width: min(106%, 980px); max-width: none; height: calc(100% - 78px); object-fit: contain; transform: translate(var(--map-x), var(--map-y)) scale(var(--map-scale)); transform-origin: center center; mix-blend-mode: multiply; filter: drop-shadow(0 8px 9px rgba(92,67,26,.1)); transition: transform .28s ease; }
+.indonesia-map:hover, .indonesia-map:focus-within { --map-scale: 1.08; }
+.indonesia-map:has(.map-marker.active) { --map-scale: 1.12; }
+.indonesia-map:has(.map-marker.active.tier-distributor) { --map-x: -52%; --map-y: -3px; }
+.indonesia-map:has(.map-marker.active.tier-agen) { --map-x: -50%; --map-y: -4px; }
+.indonesia-map:has(.map-marker.active.tier-reseller) { --map-x: -49%; --map-y: -2px; }
+.map-marker { --pin-color: #c9a85a; position: absolute; z-index: 3; transform: translate(-50%, -100%); border: 0; background: transparent; width: 27px; height: 38px; padding: 0; cursor: pointer; filter: drop-shadow(0 10px 12px rgba(105,34,28,.22)); transition: transform .18s ease, opacity .18s ease; }
+.map-marker::before { content: ''; position: absolute; left: 50%; top: 2px; width: 23px; height: 23px; background: var(--pin-color); border: 3px solid #fff8e8; border-radius: 50% 50% 50% 0; transform: translateX(-50%) rotate(-45deg); transition: .18s ease; box-shadow: inset 0 -4px 8px rgba(0,0,0,.08); }
 .map-marker.tier-distributor { --pin-color: #b51d2b; }
 .map-marker.tier-agen { --pin-color: #c88c2f; }
 .map-marker.tier-reseller { --pin-color: #7f8d58; }
@@ -160,8 +165,8 @@ th { background: #fff3d8; color: #7b5b2f; font-size: 12px; text-transform: upper
 .map-marker.empty .pin-count { display: none; }
 .map-marker.active, .map-marker:hover { transform: translate(-50%, -100%) scale(1.12); opacity: 1; }
 .map-marker.active::before, .map-marker:hover::before { box-shadow: 0 0 0 7px color-mix(in srgb, var(--pin-color) 18%, transparent), inset 0 -4px 8px rgba(0,0,0,.08); }
-.pin-dot { position: absolute; left: 50%; top: 11px; width: 13px; height: 13px; border-radius: 999px; background: #fff8e8; transform: translateX(-50%); z-index: 2; box-shadow: inset 0 0 0 1px rgba(143,18,27,.06); }
-.pin-count { position: absolute; right: -5px; top: 0; min-width: 18px; height: 18px; border-radius: 999px; display: grid; place-items: center; background: #fff8e8; color: #8f121b; border: 1px solid #ead7ae; font-size: 10px; font-weight: 950; z-index: 4; }
+.pin-dot { position: absolute; left: 50%; top: 9px; width: 9px; height: 9px; border-radius: 999px; background: #fff8e8; transform: translateX(-50%); z-index: 2; box-shadow: inset 0 0 0 1px rgba(143,18,27,.06); }
+.pin-count { position: absolute; right: -6px; top: -2px; min-width: 16px; height: 16px; border-radius: 999px; display: grid; place-items: center; background: #fff8e8; color: #8f121b; border: 1px solid #ead7ae; font-size: 9px; font-weight: 950; z-index: 4; }
 .area-legend { display: flex; gap: 14px; flex-wrap: wrap; color: #8a6a37; font-size: 12px; font-weight: 900; margin-top: 12px; }
 .legend-dot { display: inline-block; width: 11px; height: 11px; border-radius: 999px; margin-right: 6px; background: #c9a85a; box-shadow: 0 0 0 3px rgba(201,168,90,.16); }
 .legend-dot.distributor { background: #b51d2b; box-shadow: 0 0 0 3px rgba(181,29,43,.14); }
@@ -184,7 +189,7 @@ th { background: #fff3d8; color: #7b5b2f; font-size: 12px; text-transform: upper
   .indonesia-map { min-height: 350px; border-radius: 22px; }
   .indonesia-map::before { top: 14px; font-size: 13px; padding: 8px 14px; }
   .map-image { top: 48px; width: 112%; height: calc(100% - 58px); }
-  .map-marker { width: 31px; height: 44px; }
+  .map-marker { width: 24px; height: 34px; }
   .area-stats { grid-template-columns: minmax(0, 1fr); }
   .partner-area-item { grid-template-columns: minmax(0, 1fr); }
 }

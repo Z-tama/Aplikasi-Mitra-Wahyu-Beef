@@ -198,7 +198,7 @@ function PartnerAreas({ state, user }: { state: AppState; user: User }) {
   return <div className="area-layout">
     <div className="card area-map-card">
       <div className="area-head"><div><h3>Peta Sebaran Wilayah</h3><p>Tap marker untuk melihat mitra per provinsi. Warna marker makin solid jika area sudah punya mitra aktif.</p></div><span className="area-pill">{visiblePartners.length} Mitra</span></div>
-      <div className="indonesia-map" aria-label="Peta sebaran mitra Indonesia">
+      <div className={`indonesia-map map-focus-${selected.id}`} aria-label="Peta sebaran mitra Indonesia">
         <img className="map-image" src="/assets/peta-indonesia-wb.png" alt="Peta Indonesia Wahyu Beef" />
         {areaPoints.map((point) => {
           const count = visiblePartners.filter((partner) => partner.province === point.province).length;
