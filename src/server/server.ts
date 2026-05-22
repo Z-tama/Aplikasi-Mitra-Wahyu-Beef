@@ -38,6 +38,41 @@ const handleApi: Handler = async (req, res, url) => {
   if (method === 'GET' && path === '/auth/me') return json(res, 200, { user });
   if (method === 'GET' && path === '/snapshot') return json(res, 200, filteredStateForUser(state, user.id));
 
+  if (method === 'PATCH' && path === '/profile') {
+    const body = await readJson<{ name?: string; address?: string; phone?: string; avatarUrl?: string }>(req);
+    const result = await mutateState((draft) => {
+      const actor = authenticate(draft, req.headers.authorization);
+      if (actor.role !== 'partner') throw httpError(403, 'Hanya akun mitra yang bisa mengubah profil mitra');
+      const userRecord = draft.users.find((item) => item.id === actor.id);
+      const partnerRecord = draft.partners.find((item) => item.userId === actor.id);
+      if (!userRecord || !partnerRecord) throw httpError(404, 'Profil mitra tidak ditemukan');
+      const name = String(body.name ?? '').trim();
+      const address = String(body.address ?? '').trim();
+      const phone = String(body.phone ?? '').trim();
+      const avatarUrl = String(body.avatarUrl ?? '').trim();
+      if (!name) throw httpError(400, 'Nama wajib diisi');
+      if (!address) throw httpError(400, 'Alamat wajib diisi');
+      if (!phone) throw httpError(400, 'Nomor WA wajib diisi');
+      userRecord.name = name;
+      userRecord.phone = phone;
+      userRecord.avatarUrl = avatarUrl || undefined;
+      partnerRecord.contactPerson = name;
+      partnerRecord.address = address;
+      partnerRecord.phone = phone;
+      draft.auditLogs.unshift({
+        id: `audit-profile-${Date.now()}`,
+        actorUserId: actor.id,
+        action: 'PARTNER_PROFILE_UPDATED',
+        entityType: 'partner',
+        entityId: partnerRecord.id,
+        newValue: { name, address, phone, hasAvatar: Boolean(avatarUrl) },
+        timestamp: new Date().toISOString(),
+      });
+      return { user: userRecord, state: filteredStateForUser(draft, actor.id) };
+    });
+    return json(res, 200, result);
+  }
+
   if (method === 'POST' && path === '/orders') {
     const body = await readJson<{ partnerId?: string; shippingAddress: string; notes?: string; items: { productId: string; qty: number }[] }>(req);
     const result = await mutateState((draft) => {

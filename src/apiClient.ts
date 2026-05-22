@@ -32,6 +32,9 @@ export const api = {
   snapshot(token: string) {
     return request<AppState>('/snapshot', {}, token);
   },
+  updateProfile(token: string, input: { name: string; address: string; phone: string; avatarUrl?: string }) {
+    return request<{ user: User; state: AppState }>('/profile', { method: 'PATCH', body: JSON.stringify(input) }, token);
+  },
   createOrder(token: string, input: { partnerId?: string; shippingAddress: string; notes?: string; items: CartItem[] }) {
     return request('/orders', { method: 'POST', body: JSON.stringify(input) }, token);
   },

@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { createRoot } from 'react-dom/client';
-import { BarChart3, ClipboardList, FileText, IceCreamBowl, LayoutDashboard, LogOut, Medal, Package, ReceiptText, ShieldCheck, ShoppingCart, Truck, Users } from 'lucide-react';
+import { BarChart3, ClipboardList, FileText, IceCreamBowl, LayoutDashboard, LogOut, Medal, Package, ReceiptText, ShieldCheck, ShoppingCart, Truck, UserCog, Users } from 'lucide-react';
 import './styles.css';
 import { AccountingEvent, CartItem, DeliveryNote, Invoice, Order, OrderStatus, Role, User, formatIdr, statusLabels, validTransitions } from './domain';
 import { AppState, createSeedState, demoPasswords } from './seed';
@@ -9,7 +9,7 @@ import { findPartnerForUser, getCatalogForPartner, getLeaderboard } from './serv
 
 const stateSingleton = createSeedState();
 
-type View = 'dashboard' | 'catalog' | 'orders' | 'products' | 'partners' | 'pricing' | 'documents' | 'leaderboard' | 'reports' | 'audit' | 'accounting';
+type View = 'dashboard' | 'catalog' | 'orders' | 'products' | 'partners' | 'pricing' | 'documents' | 'leaderboard' | 'profile' | 'reports' | 'audit' | 'accounting';
 
 function App() {
   const [state, setState] = useState<AppState>(stateSingleton);
@@ -23,7 +23,7 @@ function App() {
   }
 
   if (!currentUser) return <Login onLogin={async (session) => { setToken(session.token); setCurrentUser(session.user); setView(session.user.role === 'partner' ? 'catalog' : 'dashboard'); await refresh(session.token); }} state={state} />;
-  return <Shell state={state} user={currentUser} token={token} view={view} setView={setView} refresh={refresh} onLogout={() => { setCurrentUser(null); setToken(''); }} />;
+  return <Shell state={state} user={currentUser} setUser={setCurrentUser} token={token} view={view} setView={setView} setState={setState} refresh={refresh} onLogout={() => { setCurrentUser(null); setToken(''); }} />;
 }
 
 function Login({ state, onLogin }: { state: AppState; onLogin: (session: Session) => Promise<void> }) {
@@ -64,10 +64,10 @@ function Login({ state, onLogin }: { state: AppState; onLogin: (session: Session
   </main>;
 }
 
-function Shell({ state, user, token, view, setView, refresh, onLogout }: { state: AppState; user: User; token: string; view: View; setView: (view: View) => void; refresh: () => Promise<void>; onLogout: () => void }) {
+function Shell({ state, user, setUser, token, view, setView, setState, refresh, onLogout }: { state: AppState; user: User; setUser: (user: User) => void; token: string; view: View; setView: (view: View) => void; setState: (state: AppState) => void; refresh: () => Promise<void>; onLogout: () => void }) {
   const isPartner = user.role === 'partner';
   const nav = isPartner
-    ? [['catalog', 'Katalog', ShoppingCart], ['orders', 'Order Saya', ClipboardList], ['documents', 'Dokumen', FileText], ['leaderboard', 'Leaderboard', Medal]] as const
+    ? [['catalog', 'Katalog', ShoppingCart], ['orders', 'Order Saya', ClipboardList], ['documents', 'Dokumen', FileText], ['leaderboard', 'Leaderboard', Medal], ['profile', 'Profil', UserCog]] as const
     : [['dashboard', 'Dashboard', LayoutDashboard], ['orders', 'Order', ClipboardList], ['products', 'Produk', Package], ['partners', 'Mitra', Users], ['pricing', 'Harga Tier', ReceiptText], ['documents', 'Invoice & SJ', FileText], ['leaderboard', 'Leaderboard', Medal], ['reports', 'Reports', BarChart3], ['accounting', 'Accounting Events', ShieldCheck], ['audit', 'Audit Trail', ShieldCheck]] as const;
   return <div className="app-shell layout">
     <aside className="sidebar">
@@ -85,6 +85,7 @@ function Shell({ state, user, token, view, setView, refresh, onLogout }: { state
       {view === 'pricing' && <Pricing state={state} />}
       {view === 'documents' && <Documents state={state} user={user} token={token} refresh={refresh} />}
       {view === 'leaderboard' && <Leaderboard state={state} />}
+      {view === 'profile' && <ProfileSettings state={state} user={user} token={token} setUser={setUser} setState={setState} />}
       {view === 'reports' && <Reports state={state} />}
       {view === 'audit' && <Audit state={state} />}
       {view === 'accounting' && <Accounting state={state} />}
@@ -94,7 +95,7 @@ function Shell({ state, user, token, view, setView, refresh, onLogout }: { state
 
 function Topbar({ state, user, view }: { state: AppState; user: User; view: View }) {
   const partner = findPartnerForUser(state, user);
-  const title: Record<View, string> = { dashboard: 'Dashboard Operasional', catalog: 'Katalog Mitra', orders: user.role === 'partner' ? 'Order Saya' : 'Order Management', products: 'Product Catalog', partners: 'Mitra Management', pricing: 'Tier Pricing', documents: 'Invoice & Surat Jalan', leaderboard: 'Leaderboard Mitra', reports: 'Basic Reports', audit: 'Audit Trail', accounting: 'Accounting Event Log' };
+  const title: Record<View, string> = { dashboard: 'Dashboard Operasional', catalog: 'Katalog Mitra', orders: user.role === 'partner' ? 'Order Saya' : 'Order Management', products: 'Product Catalog', partners: 'Mitra Management', pricing: 'Tier Pricing', documents: 'Invoice & Surat Jalan', leaderboard: 'Leaderboard Mitra', profile: 'Setting Profil', reports: 'Basic Reports', audit: 'Audit Trail', accounting: 'Accounting Event Log' };
   return <header className="topbar"><div><h1>{title[view]}</h1><p>{partner ? `${partner.businessName} • ${tierName(state, partner.tierId)}` : 'Admin workspace Wahyu Beef'}</p></div><div className="badge" style={{ background: '#fff8e8', color: '#8f121b', border: '1px solid #ead7ae' }}>{roleLabel(user.role)}</div></header>;
 }
 
@@ -154,6 +155,53 @@ function OrdersTable({ state, orders, user, token, refresh, compact }: { state: 
 }
 
 function OrderModal({ state, order, onClose }: { state: AppState; order: Order; onClose: () => void }) { return <div className="modal-backdrop"><div className="modal"><div className="topbar"><div><h2>{order.orderNumber}</h2><p>{partnerName(state, order.partnerId)} • {statusLabels[order.status]}</p></div><button className="btn" onClick={onClose}>Tutup</button></div><DocumentOrder state={state} order={order} /></div></div>; }
+
+
+function ProfileSettings({ state, user, token, setUser, setState }: { state: AppState; user: User; token: string; setUser: (user: User) => void; setState: (state: AppState) => void }) {
+  const partner = findPartnerForUser(state, user);
+  const [name, setName] = useState(user.name);
+  const [address, setAddress] = useState(partner?.address ?? '');
+  const [phone, setPhone] = useState(partner?.phone ?? user.phone ?? '');
+  const [avatarUrl, setAvatarUrl] = useState(user.avatarUrl ?? '');
+  const [message, setMessage] = useState('');
+  const [saving, setSaving] = useState(false);
+
+  async function saveProfile() {
+    setSaving(true);
+    setMessage('');
+    try {
+      const result = await api.updateProfile(token, { name, address, phone, avatarUrl });
+      setUser(result.user);
+      setState(result.state);
+      setMessage('Profil berhasil disimpan.');
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Profil gagal disimpan.');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return <div className="profile-layout">
+    <div className="card profile-card">
+      <div className="profile-hero">
+        <div className="avatar-preview">{avatarUrl ? <img src={avatarUrl} alt={name} /> : <span>{initials(name)}</span>}</div>
+        <div><h3>Profil Mitra</h3><p className="footer-note">Update identitas yang tampil di akun mitra dan dokumen operasional.</p></div>
+      </div>
+      <div className="grid cols-2">
+        <div className="field"><label>Foto Profil URL</label><input className="input" value={avatarUrl} onChange={(e) => setAvatarUrl(e.target.value)} placeholder="https://.../foto.jpg" /></div>
+        <div className="field"><label>Nama</label><input className="input" value={name} onChange={(e) => setName(e.target.value)} /></div>
+        <div className="field"><label>Nomor WA</label><input className="input" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="08xxxxxxxxxx" /></div>
+        <div className="field"><label>Kode Mitra</label><input className="input" value={partner?.partnerCode ?? '-'} disabled /></div>
+        <div className="field profile-address"><label>Alamat</label><textarea value={address} onChange={(e) => setAddress(e.target.value)} rows={4} /></div>
+      </div>
+      {message && <div className={`notice ${message.includes('berhasil') ? '' : 'warning'}`}>{message}</div>}
+      <div className="actions"><button className="btn primary" disabled={saving} onClick={saveProfile}>{saving ? 'Menyimpan...' : 'Simpan Profil'}</button></div>
+    </div>
+    <div className="card profile-summary"><h3>Ringkasan Akun</h3><p><b>{partner?.businessName ?? name}</b><br />{partner ? tierName(state, partner.tierId) : 'Mitra'}</p><p>WA: {phone || '-'}</p><p>{address || '-'}</p></div>
+  </div>;
+}
+
+function initials(name: string) { return name.split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part[0]?.toUpperCase()).join('') || 'M'; }
 
 function Products({ state }: { state: AppState }) { return <div className="card mobile-card-table"><h3>Produk Frozen Food</h3><div className="table-wrap responsive-table"><table><thead><tr><th>SKU</th><th>Produk</th><th>Kategori</th><th>MOQ</th><th>Status</th></tr></thead><tbody>{state.products.map((p) => <tr key={p.id}><td data-label="SKU"><b>{p.sku}</b></td><td data-label="Produk">{p.name}<br /><small>{p.description}</small></td><td data-label="Kategori">{state.categories.find((c) => c.id === p.categoryId)?.name}</td><td data-label="MOQ">{p.minimumOrderQty} {p.unit}</td><td data-label="Status"><span className="status delivered">Aktif</span></td></tr>)}</tbody></table></div></div>; }
 function Partners({ state }: { state: AppState }) { return <div className="card mobile-card-table"><h3>Data Mitra</h3><div className="table-wrap responsive-table"><table><thead><tr><th>Kode</th><th>Nama Bisnis</th><th>Tier</th><th>Kontak</th><th>Termin</th><th>Status</th></tr></thead><tbody>{state.partners.map((p) => <tr key={p.id}><td data-label="Kode">{p.partnerCode}</td><td data-label="Nama Bisnis"><b>{p.businessName}</b><br /><small>{p.address}</small></td><td data-label="Tier">{tierName(state, p.tierId)}</td><td data-label="Kontak">{p.contactPerson}<br /><small>{p.phone}</small></td><td data-label="Termin">{p.paymentTermDays} hari</td><td data-label="Status"><span className={`status ${p.status === 'active' ? 'delivered' : 'cancelled'}`}>{p.status}</span></td></tr>)}</tbody></table></div></div>; }
