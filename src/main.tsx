@@ -44,15 +44,15 @@ function Login({ state, onLogin }: { state: AppState; onLogin: (session: Session
   return <main className="login-page">
     <section className="login-card">
       <div className="hero-panel">
-        <span className="badge"><IceCreamBowl size={16} /> MVP B2B Frozen Food</span>
-        <h1>Membership mitra dengan harga tier yang rapi.</h1>
-        <p>Portal mitra dan dashboard internal untuk order, status produksi, invoice, surat jalan, leaderboard, audit trail, dan accounting event log PSAK-oriented.</p>
-        <div className="notice" style={{ background: 'rgba(255,255,255,.14)', color: 'white', borderColor: 'rgba(255,255,255,.24)' }}>Order menyimpan snapshot harga saat checkout. Invoice/surat jalan selalu bersumber dari order valid.</div>
+        <span className="badge"><IceCreamBowl size={16} /> Mitra Wahyu Beef</span>
+        <h1>Portal mitra Wahyu Beef yang hangat dan rapi.</h1>
+        <p>Kelola order, invoice, surat jalan, harga tier, dan status mitra dalam satu dashboard yang mudah dipakai.</p>
+        <div className="notice" style={{ background: 'rgba(255,255,255,.14)', color: 'white', borderColor: 'rgba(255,255,255,.24)' }}>Tone baru mengikuti brand Wahyu Beef: hangat, premium, dan mudah dibaca di mobile.</div>
       </div>
       <form className="login-form" onSubmit={submit}>
         <div>
           <h2>Masuk Demo</h2>
-          <p style={{ color: '#64748b' }}>Pilih role untuk mencoba flow admin atau mitra.</p>
+          <p style={{ color: '#8a6a37' }}>Pilih role untuk mencoba flow admin atau mitra.</p>
         </div>
         <div className="field"><label>Email</label><input className="input" value={email} onChange={(e) => setEmail(e.target.value)} /></div>
         <div className="field"><label>Password</label><input className="input" type="password" value={password} onChange={(e) => setPassword(e.target.value)} /></div>
@@ -71,7 +71,7 @@ function Shell({ state, user, token, view, setView, refresh, onLogout }: { state
     : [['dashboard', 'Dashboard', LayoutDashboard], ['orders', 'Order', ClipboardList], ['products', 'Produk', Package], ['partners', 'Mitra', Users], ['pricing', 'Harga Tier', ReceiptText], ['documents', 'Invoice & SJ', FileText], ['leaderboard', 'Leaderboard', Medal], ['reports', 'Reports', BarChart3], ['accounting', 'Accounting Events', ShieldCheck], ['audit', 'Audit Trail', ShieldCheck]] as const;
   return <div className="app-shell layout">
     <aside className="sidebar">
-      <div className="brand"><div className="logo">FF</div><div><h2>Mitra Frozen</h2><span>Membership App</span></div></div>
+      <div className="brand"><div className="logo">WB</div><div><h2>Wahyu Beef</h2><span>Mitra App</span></div></div>
       <nav className="nav">{nav.map(([key, label, Icon]) => <button key={key} className={view === key ? 'active' : ''} onClick={() => setView(key)}><Icon size={18} /> {label}</button>)}</nav>
       <div className="user-box"><b>{user.name}</b><br /><span>{roleLabel(user.role)}</span><br /><br /><button className="btn small" onClick={onLogout}><LogOut size={14} /> Keluar</button></div>
     </aside>
@@ -95,7 +95,7 @@ function Shell({ state, user, token, view, setView, refresh, onLogout }: { state
 function Topbar({ state, user, view }: { state: AppState; user: User; view: View }) {
   const partner = findPartnerForUser(state, user);
   const title: Record<View, string> = { dashboard: 'Dashboard Operasional', catalog: 'Katalog Mitra', orders: user.role === 'partner' ? 'Order Saya' : 'Order Management', products: 'Product Catalog', partners: 'Mitra Management', pricing: 'Tier Pricing', documents: 'Invoice & Surat Jalan', leaderboard: 'Leaderboard Mitra', reports: 'Basic Reports', audit: 'Audit Trail', accounting: 'Accounting Event Log' };
-  return <header className="topbar"><div><h1>{title[view]}</h1><p>{partner ? `${partner.businessName} • ${tierName(state, partner.tierId)}` : 'Admin workspace untuk frozen food B2B'}</p></div><div className="badge" style={{ background: 'white', color: '#0f766e', border: '1px solid #dbeafe' }}>{roleLabel(user.role)}</div></header>;
+  return <header className="topbar"><div><h1>{title[view]}</h1><p>{partner ? `${partner.businessName} • ${tierName(state, partner.tierId)}` : 'Admin workspace Wahyu Beef'}</p></div><div className="badge" style={{ background: '#fff8e8', color: '#8f121b', border: '1px solid #ead7ae' }}>{roleLabel(user.role)}</div></header>;
 }
 
 function Dashboard({ state }: { state: AppState }) {
