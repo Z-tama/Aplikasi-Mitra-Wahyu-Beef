@@ -187,6 +187,13 @@ function PartnerAreas({ state, user }: { state: AppState; user: User }) {
     acc[point.island] = (acc[point.island] ?? 0) + count;
     return acc;
   }, {});
+  const tierClassForArea = (province: string) => {
+    const partners = visiblePartners.filter((partner) => partner.province === province);
+    if (!partners.length) return 'tier-empty';
+    if (partners.some((partner) => state.tiers.find((tier) => tier.id === partner.tierId)?.code === 'DISTRIBUTOR')) return 'tier-distributor';
+    if (partners.some((partner) => state.tiers.find((tier) => tier.id === partner.tierId)?.code === 'AGEN')) return 'tier-agen';
+    return 'tier-reseller';
+  };
 
   return <div className="area-layout">
     <div className="card area-map-card">
@@ -195,13 +202,14 @@ function PartnerAreas({ state, user }: { state: AppState; user: User }) {
         <img className="map-image" src="/assets/peta-indonesia-wb.png" alt="Peta Indonesia Wahyu Beef" />
         {areaPoints.map((point) => {
           const count = visiblePartners.filter((partner) => partner.province === point.province).length;
-          return <button key={point.id} className={`map-marker ${selected.id === point.id ? 'active' : ''} ${count ? 'has-partners' : 'empty'}`} style={{ left: `${point.x}%`, top: `${point.y}%` }} onClick={() => setSelectedId(point.id)} title={`${point.label}: ${count} mitra`}>
+          const tierClass = tierClassForArea(point.province);
+          return <button key={point.id} className={`map-marker ${selected.id === point.id ? 'active' : ''} ${count ? 'has-partners' : 'empty'} ${tierClass}`} style={{ left: `${point.x}%`, top: `${point.y}%` }} onClick={() => setSelectedId(point.id)} title={`${point.label}: ${count} mitra`}>
             <span className="pin-dot" />
             <span className="pin-count">{count}</span>
           </button>;
         })}
       </div>
-      <div className="area-legend"><span><i className="legend-dot filled" /> Ada mitra</span><span><i className="legend-dot" /> Target ekspansi</span><span>Marker bisa diklik</span></div>
+      <div className="area-legend"><span><i className="legend-dot distributor" /> Distributor</span><span><i className="legend-dot agen" /> Agen</span><span><i className="legend-dot reseller" /> Reseller</span></div>
     </div>
     <div className="grid area-side">
       <div className="grid cols-3 area-stats">

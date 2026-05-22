@@ -151,17 +151,22 @@ th { background: #fff3d8; color: #7b5b2f; font-size: 12px; text-transform: upper
 .indonesia-map { position: relative; min-height: 430px; border-radius: 26px; overflow: hidden; background: radial-gradient(circle at top, rgba(255,255,255,.68), transparent 22rem), #fbefd2; border: 1px solid #ead7ae; box-shadow: inset 0 0 0 1px rgba(255,255,255,.45); }
 .indonesia-map::before { content: 'Peta Sebaran Wilayah'; position: absolute; left: 50%; top: 22px; transform: translateX(-50%); z-index: 2; padding: 10px 22px; border-radius: 999px; background: #7f8d58; color: #fff8e8; font-weight: 950; letter-spacing: .01em; box-shadow: 0 10px 24px rgba(76,83,49,.18); }
 .map-image { position: absolute; left: 50%; top: 54px; width: min(106%, 980px); max-width: none; height: calc(100% - 78px); object-fit: contain; transform: translateX(-50%); mix-blend-mode: multiply; filter: drop-shadow(0 8px 9px rgba(92,67,26,.1)); }
-.map-marker { position: absolute; z-index: 3; transform: translate(-50%, -100%); border: 0; background: transparent; width: 31px; height: 40px; padding: 0; cursor: pointer; filter: drop-shadow(0 8px 9px rgba(105,34,28,.18)); }
-.map-marker::before { content: ''; position: absolute; inset: 1px 5px 10px; background: #c9a85a; border: 3px solid #fff8e8; border-radius: 50% 50% 50% 0; transform: rotate(-45deg); transition: .18s ease; }
-.map-marker.has-partners::before { background: #b51d2b; }
-.map-marker.empty { opacity: .58; transform: translate(-50%, -100%) scale(.76); }
+.map-marker { --pin-color: #c9a85a; position: absolute; z-index: 3; transform: translate(-50%, -100%); border: 0; background: transparent; width: 36px; height: 50px; padding: 0; cursor: pointer; filter: drop-shadow(0 10px 12px rgba(105,34,28,.22)); transition: transform .18s ease, opacity .18s ease; }
+.map-marker::before { content: ''; position: absolute; left: 50%; top: 2px; width: 31px; height: 31px; background: var(--pin-color); border: 3px solid #fff8e8; border-radius: 50% 50% 50% 0; transform: translateX(-50%) rotate(-45deg); transition: .18s ease; box-shadow: inset 0 -4px 8px rgba(0,0,0,.08); }
+.map-marker.tier-distributor { --pin-color: #b51d2b; }
+.map-marker.tier-agen { --pin-color: #c88c2f; }
+.map-marker.tier-reseller { --pin-color: #7f8d58; }
+.map-marker.empty { opacity: .45; transform: translate(-50%, -100%) scale(.72); filter: drop-shadow(0 7px 8px rgba(105,34,28,.12)); }
 .map-marker.empty .pin-count { display: none; }
-.map-marker.active::before, .map-marker:hover::before { transform: rotate(-45deg) scale(1.15); background: #8f121b; box-shadow: 0 0 0 6px rgba(181,29,43,.16); }
-.pin-dot { position: absolute; left: 50%; top: 9px; width: 8px; height: 8px; border-radius: 999px; background: #fff8e8; transform: translateX(-50%); z-index: 2; }
-.pin-count { position: absolute; right: -6px; top: -4px; min-width: 18px; height: 18px; border-radius: 999px; display: grid; place-items: center; background: #fff8e8; color: #8f121b; border: 1px solid #ead7ae; font-size: 10px; font-weight: 950; z-index: 4; }
-.area-legend { display: flex; gap: 14px; flex-wrap: wrap; color: #8a6a37; font-size: 12px; font-weight: 800; margin-top: 12px; }
-.legend-dot { display: inline-block; width: 10px; height: 10px; border-radius: 999px; margin-right: 6px; background: #c9a85a; }
-.legend-dot.filled { background: #b51d2b; }
+.map-marker.active, .map-marker:hover { transform: translate(-50%, -100%) scale(1.12); opacity: 1; }
+.map-marker.active::before, .map-marker:hover::before { box-shadow: 0 0 0 7px color-mix(in srgb, var(--pin-color) 18%, transparent), inset 0 -4px 8px rgba(0,0,0,.08); }
+.pin-dot { position: absolute; left: 50%; top: 11px; width: 13px; height: 13px; border-radius: 999px; background: #fff8e8; transform: translateX(-50%); z-index: 2; box-shadow: inset 0 0 0 1px rgba(143,18,27,.06); }
+.pin-count { position: absolute; right: -5px; top: 0; min-width: 18px; height: 18px; border-radius: 999px; display: grid; place-items: center; background: #fff8e8; color: #8f121b; border: 1px solid #ead7ae; font-size: 10px; font-weight: 950; z-index: 4; }
+.area-legend { display: flex; gap: 14px; flex-wrap: wrap; color: #8a6a37; font-size: 12px; font-weight: 900; margin-top: 12px; }
+.legend-dot { display: inline-block; width: 11px; height: 11px; border-radius: 999px; margin-right: 6px; background: #c9a85a; box-shadow: 0 0 0 3px rgba(201,168,90,.16); }
+.legend-dot.distributor { background: #b51d2b; box-shadow: 0 0 0 3px rgba(181,29,43,.14); }
+.legend-dot.agen { background: #c88c2f; box-shadow: 0 0 0 3px rgba(200,140,47,.16); }
+.legend-dot.reseller { background: #7f8d58; box-shadow: 0 0 0 3px rgba(127,141,88,.16); }
 .area-side { align-content: start; }
 .area-stats { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 .selected-area-card { background: linear-gradient(160deg, #fffaf0, #fff3d8); }
@@ -179,7 +184,7 @@ th { background: #fff3d8; color: #7b5b2f; font-size: 12px; text-transform: upper
   .indonesia-map { min-height: 350px; border-radius: 22px; }
   .indonesia-map::before { top: 14px; font-size: 13px; padding: 8px 14px; }
   .map-image { top: 48px; width: 112%; height: calc(100% - 58px); }
-  .map-marker { width: 27px; height: 36px; }
+  .map-marker { width: 31px; height: 44px; }
   .area-stats { grid-template-columns: minmax(0, 1fr); }
   .partner-area-item { grid-template-columns: minmax(0, 1fr); }
 }
