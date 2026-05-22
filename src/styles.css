@@ -193,3 +193,42 @@ th { background: #fff3d8; color: #7b5b2f; font-size: 12px; text-transform: upper
   .area-stats { grid-template-columns: minmax(0, 1fr); }
   .partner-area-item { grid-template-columns: minmax(0, 1fr); }
 }
+.catalog-toolbar { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin: 2px 0 -4px; color: #5f4631; }
+.catalog-toolbar > div:first-child { display: grid; gap: 2px; }
+.catalog-toolbar span { color: #8a6a37; font-size: 13px; font-weight: 800; }
+.catalog-view-label { display: flex; align-items: center; gap: 8px; font-weight: 950; }
+.grid-icon { font-size: 22px; line-height: 1; color: #2d2118 !important; }
+.marketplace-catalog { grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 14px; align-items: start; }
+.marketplace-card { padding: 0; border-radius: 18px; overflow: hidden; background: #fffaf0; border-color: #ead7ae; box-shadow: none; display: flex; flex-direction: column; gap: 0; }
+.marketplace-card:hover { box-shadow: 0 14px 28px rgba(105,34,28,.12); transform: translateY(-1px); transition: .18s ease; }
+.marketplace-visual { position: relative; aspect-ratio: 1 / .96; height: auto; border-radius: 0; background: linear-gradient(160deg, #b51d2b 0%, #8f121b 70%); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; padding: 14px; color: #fff8e8; text-align: center; overflow: hidden; }
+.marketplace-visual::before { content: ''; position: absolute; inset: auto -20% -34% -20%; height: 58%; background: #fff8e8; border-radius: 50% 50% 0 0; }
+.marketplace-visual::after { content: ''; position: absolute; width: 82px; height: 54px; border-radius: 44% 56% 48% 52%; background: linear-gradient(135deg, #ead7ae, #c88c2f); box-shadow: inset -10px -8px 0 rgba(143,18,27,.15); transform: rotate(-8deg); z-index: 1; }
+.discount-badge { position: absolute; left: 0; top: 10px; z-index: 3; padding: 5px 9px; border-radius: 0 999px 999px 0; background: #e63b61; color: white; font-size: 12px; font-weight: 950; }
+.placeholder-brand { position: absolute; right: 10px; top: 10px; opacity: .84; font-size: 10px; font-weight: 900; z-index: 3; }
+.placeholder-title { position: relative; z-index: 2; max-width: 92%; font-size: clamp(16px, 2.8vw, 22px); line-height: 1.05; font-weight: 950; text-transform: uppercase; letter-spacing: -.02em; text-shadow: 0 2px 8px rgba(0,0,0,.18); }
+.placeholder-pack { position: absolute; left: 10px; bottom: 10px; z-index: 3; border-radius: 9px; background: #fff8e8; color: #8f121b; padding: 4px 7px; font-size: 10px; font-weight: 950; }
+.product-info { padding: 9px 10px 12px; display: grid; gap: 5px; }
+.marketplace-card h3 { margin: 0; font-size: 14px; line-height: 1.28; font-weight: 800; color: #2d2118; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; min-height: 36px; }
+.product-meta { font-size: 11px; color: #8a6a37; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.price-row { display: flex; align-items: center; gap: 5px; margin-top: 2px; }
+.voucher-tag { display: inline-grid; place-items: center; width: 21px; height: 18px; border-radius: 5px; background: #f3d7d8; color: #b51d2b; font-weight: 950; font-size: 12px; }
+.marketplace-card .price { font-size: 17px; line-height: 1; color: #b51d2b; }
+.deal-note { color: #c88c2f; font-weight: 900; font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.rating-row { display: flex; gap: 5px; align-items: center; color: #8a6a37; font-size: 12px; }
+.rating-row span:first-child { color: #d9a900; font-weight: 950; }
+.qty-row.compact { grid-template-columns: minmax(0, 1fr) auto; gap: 6px; margin-top: 5px; }
+.qty-row.compact .input { padding: 8px 9px; border-radius: 11px; font-size: 13px; }
+.qty-row.compact .btn { padding: 8px 9px; border-radius: 11px; }
+@media (max-width: 560px) {
+  .catalog-toolbar { padding: 0 2px; }
+  .marketplace-catalog { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+  .marketplace-card { border-radius: 14px; }
+  .product-info { padding: 8px; }
+  .marketplace-card h3 { font-size: 13px; min-height: 34px; }
+  .marketplace-card .price { font-size: 15px; }
+  .deal-note, .product-meta { font-size: 10px; }
+  .rating-row { font-size: 11px; }
+  .placeholder-title { font-size: 15px; }
+  .qty-row.compact { grid-template-columns: minmax(0, 1fr); }
+}
