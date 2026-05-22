@@ -107,6 +107,18 @@ th { background: #f8fbff; color: #526174; font-size: 12px; text-transform: upper
   .metric .value { font-size: clamp(26px, 8vw, 32px); }
   table { min-width: 640px; }
   th, td { padding: 11px 12px; font-size: 13px; }
+  .orders-card { padding: 16px; }
+  .orders-table { overflow: visible; border: 0; border-radius: 0; }
+  .orders-table table { min-width: 0; display: block; background: transparent; }
+  .orders-table thead { display: none; }
+  .orders-table tbody { display: grid; gap: 12px; }
+  .orders-table tr { display: grid; gap: 10px; padding: 14px; border: 1px solid #e3edf8; border-radius: 18px; background: #fff; box-shadow: 0 10px 26px rgba(20,49,95,.07); }
+  .orders-table td { display: grid; grid-template-columns: 88px minmax(0, 1fr); gap: 10px; align-items: start; padding: 0; border: 0; font-size: 13px; overflow-wrap: anywhere; }
+  .orders-table td::before { content: attr(data-label); color: #64748b; font-size: 11px; font-weight: 900; text-transform: uppercase; letter-spacing: .04em; }
+  .orders-table td[data-label="No Order"] { grid-template-columns: minmax(0, 1fr); }
+  .orders-table td[data-label="No Order"]::before { display: none; }
+  .orders-table td[data-label="Aksi"] .actions { justify-content: flex-start; }
+  .orders-table .status { justify-self: start; white-space: normal; }
   .catalog { grid-template-columns: minmax(0, 1fr); }
   .qty-row { grid-template-columns: minmax(0, 1fr); }
   .modal-backdrop { padding: 12px; align-items: start; }
