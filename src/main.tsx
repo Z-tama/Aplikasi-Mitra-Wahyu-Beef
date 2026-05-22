@@ -192,23 +192,7 @@ function PartnerAreas({ state, user }: { state: AppState; user: User }) {
     <div className="card area-map-card">
       <div className="area-head"><div><h3>Peta Sebaran Wilayah</h3><p>Tap marker untuk melihat mitra per provinsi. Warna marker makin solid jika area sudah punya mitra aktif.</p></div><span className="area-pill">{visiblePartners.length} Mitra</span></div>
       <div className="indonesia-map" aria-label="Peta sebaran mitra Indonesia">
-        <svg className="map-shape" viewBox="0 0 1120 520" role="img" aria-label="Ilustrasi peta Indonesia">
-          <path className="island main-island" d="M66 122 C112 96 166 112 205 151 C239 185 268 218 315 238 C292 260 241 258 195 232 C154 209 121 179 86 151 C70 139 60 132 66 122Z" />
-          <path className="island main-island" d="M162 246 C205 231 254 242 298 274 C337 303 376 322 426 324 C399 347 338 350 279 330 C221 310 176 283 162 246Z" />
-          <path className="island main-island" d="M306 328 C383 300 506 309 626 334 C708 351 782 360 862 346 C824 385 696 398 560 377 C445 360 354 351 306 328Z" />
-          <path className="island main-island" d="M450 142 C507 97 607 94 680 132 C728 157 729 200 680 222 C608 253 498 232 442 190 C423 176 425 160 450 142Z" />
-          <path className="island main-island" d="M760 144 C805 105 854 126 837 178 C873 188 897 221 874 258 C849 298 791 279 773 230 C758 190 735 169 760 144Z" />
-          <path className="island main-island" d="M884 206 C922 185 966 199 983 234 C953 270 909 265 882 239 C869 226 871 214 884 206Z" />
-          <path className="island main-island" d="M952 154 C1017 118 1091 137 1110 188 C1068 222 996 226 948 200 C924 187 927 169 952 154Z" />
-          <path className="island small-island" d="M822 363 C856 354 899 365 928 388 C884 405 834 397 802 379 C795 371 803 365 822 363Z" />
-          <path className="island small-island" d="M912 382 C950 375 987 386 1012 407 C971 421 925 417 896 397 C890 390 896 384 912 382Z" />
-          <path className="island small-island" d="M742 354 C765 349 792 357 810 373 C783 385 748 380 731 367 C728 361 733 356 742 354Z" />
-          <path className="island mini" d="M690 333 C708 328 726 331 740 342 C724 352 699 351 684 341 C681 337 684 334 690 333Z" />
-          <path className="island mini" d="M622 320 C642 315 666 320 680 332 C657 343 630 338 616 328 C613 324 617 321 622 320Z" />
-          <path className="island mini" d="M526 300 C548 294 573 300 589 313 C566 324 535 321 518 309 C515 305 519 302 526 300Z" />
-          <path className="island mini" d="M232 188 C247 181 266 186 277 199 C258 209 237 204 226 194 C224 191 226 189 232 188Z" />
-          <path className="island mini" d="M882 112 C898 106 917 111 927 124 C908 134 888 130 878 119 C876 116 878 114 882 112Z" />
-        </svg>
+        <img className="map-image" src="/assets/peta-indonesia-wb.png" alt="Peta Indonesia Wahyu Beef" />
         {areaPoints.map((point) => {
           const count = visiblePartners.filter((partner) => partner.province === point.province).length;
           return <button key={point.id} className={`map-marker ${selected.id === point.id ? 'active' : ''} ${count ? 'has-partners' : 'empty'}`} style={{ left: `${point.x}%`, top: `${point.y}%` }} onClick={() => setSelectedId(point.id)} title={`${point.label}: ${count} mitra`}>
