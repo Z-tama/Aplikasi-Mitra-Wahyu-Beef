@@ -211,7 +211,7 @@ function respond(data: unknown, status = 200) {
 
 function login(currentState: AppState, identifier: string, password: string, env?: Env) {
   const normalizedIdentifier = normalizeIdentifier(identifier);
-  const user = currentState.users.find((item) => item.email.toLowerCase() === normalizedIdentifier || normalizePhone(item.phone) === normalizedIdentifier);
+  const user = currentState.users.find((item) => normalizeIdentifier(item.email) === normalizedIdentifier || normalizePhone(item.phone) === normalizedIdentifier);
   if (!user || !verifyPassword(user, password, env)) throw httpError(401, 'Kredensial tidak valid');
   if (user.status !== 'active') throw httpError(403, 'User tidak aktif');
   return { token: signToken(user.id, env?.AUTH_SECRET), user };
