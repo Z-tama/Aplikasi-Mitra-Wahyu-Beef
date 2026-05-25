@@ -4,6 +4,17 @@ import type { OrderStatus, Payment, Role, User } from '../../../src/domain';
 
 interface Env {
   AUTH_SECRET?: string;
+  DB?: D1Database;
+}
+
+interface D1Database {
+  prepare(sql: string): D1PreparedStatement;
+}
+
+interface D1PreparedStatement {
+  bind(...values: unknown[]): D1PreparedStatement;
+  first<T = unknown>(): Promise<T | null>;
+  run(): Promise<unknown>;
 }
 
 let state: AppState | null = null;
@@ -20,7 +31,7 @@ export const onRequest = async ({ request, env }: PagesHandlerContext) => {
 
     if (method === 'POST' && path === '/auth/login') {
       const body = await readJson<{ identifier: string; password: string }>(request);
-      return respond(login(await loadState(), body.identifier, body.password, env.AUTH_SECRET), 200);
+      return respond(login(await loadState(env), body.identifier, body.password, env.AUTH_SECRET), 200);
     }
 
     if (method === 'POST' && path === '/partner-registrations') {
@@ -38,11 +49,11 @@ export const onRequest = async ({ request, env }: PagesHandlerContext) => {
           timestamp: registration.submittedAt,
         });
         return registration;
-      });
+      }, env);
       return respond(result, 201);
     }
 
-    const currentState = await loadState();
+    const currentState = await loadState(env);
     const actor = authenticate(currentState, request.headers.get('authorization') ?? undefined, env.AUTH_SECRET);
 
     if (method === 'GET' && path === '/auth/me') return respond({ user: actor }, 200);
@@ -64,7 +75,7 @@ export const onRequest = async ({ request, env }: PagesHandlerContext) => {
         userRecord.passwordHash = hashPassword(newPassword);
         draft.auditLogs.unshift({ id: `audit-password-${Date.now()}`, actorUserId: actor.id, action: 'PARTNER_PASSWORD_UPDATED', entityType: 'user', entityId: actor.id, newValue: { changedByPartner: true }, timestamp: new Date().toISOString() });
         return { user: userRecord };
-      });
+      }, env);
       return respond(result, 200);
     }
 
@@ -90,7 +101,7 @@ export const onRequest = async ({ request, env }: PagesHandlerContext) => {
         partnerRecord.phone = phone;
         draft.auditLogs.unshift({ id: `audit-profile-${Date.now()}`, actorUserId: actor.id, action: 'PARTNER_PROFILE_UPDATED', entityType: 'partner', entityId: partnerRecord.id, newValue: { name, address, phone, hasAvatar: Boolean(avatarUrl) }, timestamp: new Date().toISOString() });
         return { user: userRecord, state: filteredStateForUser(draft, actor.id) };
-      });
+      }, env);
       return respond(result, 200);
     }
 
@@ -101,7 +112,7 @@ export const onRequest = async ({ request, env }: PagesHandlerContext) => {
         const partnerId = actor.role === 'partner' ? actorPartner?.id : body.partnerId;
         if (!partnerId) throw httpError(400, 'partnerId wajib untuk admin atau user mitra harus punya partner');
         return createOrder(draft, actor, partnerId, body.items, body.shippingAddress, body.notes);
-      });
+      }, env);
       return respond(result, 201);
     }
 
@@ -111,7 +122,7 @@ export const onRequest = async ({ request, env }: PagesHandlerContext) => {
       const result = await mutateState((draft) => {
         requireRole(actor, ['super_admin', 'sales_admin', 'warehouse']);
         return updateOrderStatus(draft, actor, statusMatch[1], body.status, body.note);
-      });
+      }, env);
       return respond(result, 200);
     }
 
@@ -120,7 +131,7 @@ export const onRequest = async ({ request, env }: PagesHandlerContext) => {
       const result = await mutateState((draft) => {
         requireRole(actor, ['super_admin', 'finance_admin', 'sales_admin']);
         return createInvoice(draft, actor, invoiceMatch[1]);
-      });
+      }, env);
       return respond(result, 201);
     }
 
@@ -130,7 +141,7 @@ export const onRequest = async ({ request, env }: PagesHandlerContext) => {
       const result = await mutateState((draft) => {
         requireRole(actor, ['super_admin', 'sales_admin', 'warehouse']);
         return createDeliveryNote(draft, actor, deliveryMatch[1], body.driverName, body.vehicleNumber);
-      });
+      }, env);
       return respond(result, 201);
     }
 
@@ -140,7 +151,7 @@ export const onRequest = async ({ request, env }: PagesHandlerContext) => {
       const result = await mutateState((draft) => {
         requireRole(actor, ['super_admin', 'finance_admin']);
         return recordPayment(draft, actor, paymentMatch[1], Number(body.amount), body.method, body.referenceNumber);
-      });
+      }, env);
       return respond(result, 201);
     }
 
@@ -151,15 +162,32 @@ export const onRequest = async ({ request, env }: PagesHandlerContext) => {
   }
 };
 
-async function loadState() {
-  state ??= createSeedState();
+async function loadState(env?: Env) {
+  if (state) return state;
+  if (env?.DB) {
+    const row = await env.DB.prepare("SELECT value FROM app_state WHERE key = ?").bind('state').first<{ value: string }>();
+    if (row?.value) {
+      state = JSON.parse(row.value) as AppState;
+      return state;
+    }
+  }
+  state = createSeedState();
+  if (env?.DB) await saveState(env, state);
   return state;
 }
 
-async function mutateState<T>(fn: (draft: AppState) => T | Promise<T>) {
-  const current = await loadState();
+async function saveState(env: Env | undefined, nextState: AppState) {
+  state = nextState;
+  if (!env?.DB) return;
+  await env.DB.prepare("INSERT OR REPLACE INTO app_state (key, value, updated_at) VALUES (?, ?, CURRENT_TIMESTAMP)")
+    .bind('state', JSON.stringify(nextState))
+    .run();
+}
+
+async function mutateState<T>(fn: (draft: AppState) => T | Promise<T>, env?: Env) {
+  const current = await loadState(env);
   const result = await fn(current);
-  state = current;
+  await saveState(env, current);
   return result;
 }
 
