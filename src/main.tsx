@@ -3,7 +3,7 @@ import { createRoot } from 'react-dom/client';
 import { BarChart3, ClipboardList, Eye, EyeOff, FileText, IceCreamBowl, LayoutDashboard, LogOut, MapPinned, Medal, Package, ReceiptText, ShieldCheck, ShoppingCart, Truck, UserCog, Users } from 'lucide-react';
 import './styles.css';
 import { AccountingEvent, CartItem, DeliveryNote, Invoice, Order, OrderStatus, Role, User, formatIdr, statusLabels, validTransitions } from './domain';
-import { AppState, createSeedState, demoPasswords } from './seed';
+import { AppState, createSeedState } from './seed';
 import { api, type Session } from './apiClient';
 import { findPartnerForUser, getCatalogForPartner, getLeaderboard } from './services';
 
@@ -30,12 +30,9 @@ function App() {
 }
 
 function Login({ state, onLogin, onRegister }: { state: AppState; onLogin: (session: Session) => Promise<void>; onRegister: () => void }) {
-  const demoUsers = state.users.filter((user) => demoPasswords[user.email]);
-  const phoneDemos = demoUsers.filter((user) => user.phone);
-  const emailDemos = demoUsers;
   const [loginMode, setLoginMode] = useState<'phone' | 'email'>('phone');
-  const [identifier, setIdentifier] = useState(phoneDemos[0]?.phone ?? '0811111111');
-  const [password, setPassword] = useState('password');
+  const [identifier, setIdentifier] = useState('');
+  const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
   async function submit(e: React.FormEvent) {
@@ -50,8 +47,8 @@ function Login({ state, onLogin, onRegister }: { state: AppState; onLogin: (sess
   }
   function switchMode(nextMode: 'phone' | 'email') {
     setLoginMode(nextMode);
-    setIdentifier(nextMode === 'phone' ? phoneDemos[0]?.phone ?? '0811111111' : emailDemos[0]?.email ?? 'admin@frozen.local');
-    setPassword('password');
+    setIdentifier('');
+    setPassword('');
     setError('');
   }
   return <main className="login-page">
@@ -70,7 +67,6 @@ function Login({ state, onLogin, onRegister }: { state: AppState; onLogin: (sess
         {error && <div className="notice warning">{error}</div>}
         <button className="btn primary" type="submit">Masuk</button>
         <button className="btn register-cta" type="button" onClick={onRegister}>Daftar Menjadi Mitra</button>
-        <div className="demo-grid">{loginMode === 'phone' ? phoneDemos.map((user) => <button type="button" className="demo-account" key={user.id} onClick={() => { setIdentifier(user.phone ?? ''); setPassword('password'); }}><b>{user.name}</b><br />{user.phone}</button>) : emailDemos.map((user) => <button type="button" className="demo-account" key={user.id} onClick={() => { setIdentifier(user.email); setPassword('password'); }}><b>{user.name}</b><br />{user.email}</button>)}</div>
       </form>
     </section>
   </main>;
