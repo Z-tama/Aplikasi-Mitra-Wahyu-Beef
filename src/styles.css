@@ -55,6 +55,11 @@ button { cursor: pointer; border: 0; }
 .field label { font-size: 13px; color: #6f5230; font-weight: 800; }
 .input, select, textarea { border: 1px solid #ead7ae; border-radius: 16px; padding: 12px 14px; background: #fffaf0; color: #2d2118; outline: none; }
 .input:focus, select:focus, textarea:focus { border-color: #b39140; box-shadow: 0 0 0 4px rgba(179,145,64,.16); }
+.password-input-wrap { position: relative; display: flex; align-items: center; }
+.password-input-wrap .input { width: 100%; padding-right: 48px; }
+.password-eye { position: absolute; right: 10px; width: 34px; height: 34px; border-radius: 999px; display: inline-flex; align-items: center; justify-content: center; color: #8a6a37; background: transparent; }
+.password-eye:hover { background: rgba(179,145,64,.14); color: #8f121b; }
+.password-eye svg { width: 19px; height: 19px; stroke-width: 2.4; }
 .btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; border-radius: 14px; padding: 11px 15px; background: #f0dfb8; color: #3a2819; font-weight: 800; transition: .2s; }
 .btn:hover { transform: translateY(-1px); box-shadow: 0 12px 24px rgba(143,18,27,.16); }
 .btn.primary { background: linear-gradient(135deg, #8f121b, #bd1d2d); color: #fff8e8; }

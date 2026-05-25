@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { createRoot } from 'react-dom/client';
-import { BarChart3, ClipboardList, FileText, IceCreamBowl, LayoutDashboard, LogOut, MapPinned, Medal, Package, ReceiptText, ShieldCheck, ShoppingCart, Truck, UserCog, Users } from 'lucide-react';
+import { BarChart3, ClipboardList, Eye, EyeOff, FileText, IceCreamBowl, LayoutDashboard, LogOut, MapPinned, Medal, Package, ReceiptText, ShieldCheck, ShoppingCart, Truck, UserCog, Users } from 'lucide-react';
 import './styles.css';
 import { AccountingEvent, CartItem, DeliveryNote, Invoice, Order, OrderStatus, Role, User, formatIdr, statusLabels, validTransitions } from './domain';
 import { AppState, createSeedState, demoPasswords } from './seed';
@@ -36,6 +36,7 @@ function Login({ state, onLogin, onRegister }: { state: AppState; onLogin: (sess
   const [loginMode, setLoginMode] = useState<'phone' | 'email'>('phone');
   const [identifier, setIdentifier] = useState(phoneDemos[0]?.phone ?? '0811111111');
   const [password, setPassword] = useState('password');
+  const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -65,7 +66,7 @@ function Login({ state, onLogin, onRegister }: { state: AppState; onLogin: (sess
       <form className="login-form compact-login-form" onSubmit={submit}>
         <div className="login-mode-toggle"><button className={loginMode === 'phone' ? 'active' : ''} type="button" onClick={() => switchMode('phone')}>Masuk dengan<br /><span>Nomor HP</span></button><button className={loginMode === 'email' ? 'active' : ''} type="button" onClick={() => switchMode('email')}>Masuk dengan<br /><span>Email</span></button></div>
         <div className="field"><label>{loginMode === 'phone' ? 'Nomor HP / WhatsApp' : 'Email'}</label><input className="input" inputMode={loginMode === 'phone' ? 'tel' : 'email'} value={identifier} onChange={(e) => setIdentifier(e.target.value)} placeholder={loginMode === 'phone' ? '08xxxxxxxxxx' : 'nama@email.com'} /></div>
-        <div className="field"><label>Password</label><input className="input" type="password" value={password} onChange={(e) => setPassword(e.target.value)} /></div>
+        <div className="field"><label>Password</label><div className="password-input-wrap"><input className="input" type={showPassword ? 'text' : 'password'} value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="current-password" /><button className="password-eye" type="button" onClick={() => setShowPassword((value) => !value)} aria-label={showPassword ? 'Sembunyikan password' : 'Lihat password'}>{showPassword ? <EyeOff aria-hidden="true" /> : <Eye aria-hidden="true" />}</button></div></div>
         {error && <div className="notice warning">{error}</div>}
         <button className="btn primary" type="submit">Masuk</button>
         <button className="btn register-cta" type="button" onClick={onRegister}>Daftar Menjadi Mitra</button>
