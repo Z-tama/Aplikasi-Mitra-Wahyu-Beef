@@ -387,7 +387,7 @@ function ProfileSettings({ state, user, token, setUser, setState }: { state: App
   const [passwordMessage, setPasswordMessage] = useState('');
   const [savingPassword, setSavingPassword] = useState(false);
 
-  function chooseProfilePhoto(file?: File) {
+  async function chooseProfilePhoto(file?: File) {
     if (!file) return;
     if (!file.type.startsWith('image/')) {
       setMessage('File harus berupa gambar.');
@@ -397,13 +397,19 @@ function ProfileSettings({ state, user, token, setUser, setState }: { state: App
       setMessage('Ukuran foto maksimal 1 MB. Pilih foto yang lebih kecil.');
       return;
     }
-    const reader = new FileReader();
-    reader.onload = () => {
-      setAvatarUrl(String(reader.result));
-      setMessage('Foto siap disimpan. Tekan Simpan Profil untuk menyimpan perubahan.');
-    };
-    reader.onerror = () => setMessage('Foto gagal dibaca. Coba pilih file lain.');
-    reader.readAsDataURL(file);
+    setSaving(true);
+    setMessage('Mengupload foto profil...');
+    try {
+      const result = await api.uploadProfilePhoto(token, file);
+      setAvatarUrl(result.avatarUrl);
+      setUser(result.user);
+      setState(result.state);
+      setMessage('Foto profil berhasil diupload.');
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Foto gagal diupload.');
+    } finally {
+      setSaving(false);
+    }
   }
 
   async function saveProfile() {

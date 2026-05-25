@@ -38,6 +38,16 @@ export const api = {
   updateProfile(token: string, input: { name: string; address: string; phone: string; avatarUrl?: string }) {
     return request<{ user: User; state: AppState }>('/profile', { method: 'PATCH', body: JSON.stringify(input) }, token);
   },
+  async uploadProfilePhoto(token: string, file: File) {
+    const response = await fetch(`${API_BASE}/profile/photo`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': file.type || 'application/octet-stream' },
+      body: file,
+    });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(payload.error ?? `API error ${response.status}`);
+    return payload as { avatarUrl: string; user: User; state: AppState };
+  },
   updatePassword(token: string, input: { currentPassword: string; newPassword: string; confirmPassword: string }) {
     return request<{ user: User }>('/profile/password', { method: 'PATCH', body: JSON.stringify(input) }, token);
   },

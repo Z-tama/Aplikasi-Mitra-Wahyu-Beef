@@ -6,6 +6,18 @@ interface Env {
   AUTH_SECRET?: string;
   ALLOW_DEMO_LOGIN?: string;
   DB?: D1Database;
+  UPLOADS?: R2Bucket;
+}
+
+interface R2Bucket {
+  put(key: string, value: ArrayBuffer, options?: { httpMetadata?: { contentType?: string }; customMetadata?: Record<string, string> }): Promise<unknown>;
+  get(key: string): Promise<R2ObjectBody | null>;
+  delete(key: string): Promise<void>;
+}
+
+interface R2ObjectBody {
+  httpMetadata?: { contentType?: string };
+  arrayBuffer(): Promise<ArrayBuffer>;
 }
 
 interface D1Database {
@@ -78,6 +90,42 @@ export const onRequest = async ({ request, env }: PagesHandlerContext) => {
         return { user: userRecord };
       }, env);
       return respond(result, 200);
+    }
+
+    if (method === 'POST' && path === '/profile/photo') {
+      if (!env.UPLOADS) throw httpError(503, 'Storage foto belum aktif');
+      const actorPartner = findPartnerForUser(currentState, actor);
+      if (actor.role !== 'partner' || !actorPartner) throw httpError(403, 'Hanya akun mitra yang bisa upload foto profil');
+      const contentType = request.headers.get('content-type') ?? '';
+      if (!contentType.startsWith('image/')) throw httpError(400, 'File harus berupa gambar JPG/PNG/WebP');
+      const contentLength = Number(request.headers.get('content-length') ?? '0');
+      if (contentLength > 1024 * 1024) throw httpError(400, 'Ukuran foto maksimal 1 MB');
+      const body = await request.arrayBuffer();
+      if (!body.byteLength) throw httpError(400, 'File foto kosong');
+      if (body.byteLength > 1024 * 1024) throw httpError(400, 'Ukuran foto maksimal 1 MB');
+      const extension = imageExtension(contentType);
+      const key = `profile-photos/${actor.id}/${Date.now()}.${extension}`;
+      await env.UPLOADS.put(key, body, { httpMetadata: { contentType }, customMetadata: { userId: actor.id, partnerId: actorPartner.id } });
+      const avatarUrl = `/api/v1/uploads/${key}`;
+      const result = await mutateState((draft) => {
+        const userRecord = draft.users.find((item) => item.id === actor.id);
+        const partnerRecord = draft.partners.find((item) => item.userId === actor.id);
+        if (!userRecord || !partnerRecord) throw httpError(404, 'Profil mitra tidak ditemukan');
+        userRecord.avatarUrl = avatarUrl;
+        draft.auditLogs.unshift({ id: `audit-photo-${Date.now()}`, actorUserId: actor.id, action: 'PARTNER_PROFILE_PHOTO_UPLOADED', entityType: 'user', entityId: actor.id, newValue: { key, contentType, size: body.byteLength }, timestamp: new Date().toISOString() });
+        return { avatarUrl, user: userRecord, state: filteredStateForUser(draft, actor.id) };
+      }, env);
+      return respond(result, 201);
+    }
+
+    const uploadMatch = path.match(/^\/uploads\/(.+)$/);
+    if (method === 'GET' && uploadMatch) {
+      if (!env.UPLOADS) throw httpError(404, 'File tidak ditemukan');
+      const key = decodeURIComponent(uploadMatch[1]);
+      if (!key.startsWith('profile-photos/')) throw httpError(403, 'File tidak boleh diakses');
+      const object = await env.UPLOADS.get(key);
+      if (!object) throw httpError(404, 'File tidak ditemukan');
+      return new Response(await object.arrayBuffer(), { status: 200, headers: { 'Content-Type': object.httpMetadata?.contentType ?? 'application/octet-stream', 'Cache-Control': 'public, max-age=31536000, immutable' } });
     }
 
     if (method === 'PATCH' && path === '/profile') {
@@ -284,6 +332,12 @@ function normalizePhone(value?: string) {
   if (!digits) return '';
   if (digits.startsWith('62')) return `0${digits.slice(2)}`;
   return digits;
+}
+
+function imageExtension(contentType: string) {
+  if (contentType.includes('png')) return 'png';
+  if (contentType.includes('webp')) return 'webp';
+  return 'jpg';
 }
 
 function buildPartnerRegistration(body: Record<string, string>) {
