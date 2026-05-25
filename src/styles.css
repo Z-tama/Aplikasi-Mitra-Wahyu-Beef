@@ -407,3 +407,4 @@ th { background: #fff3d8; color: #7b5b2f; font-size: 12px; text-transform: upper
   .floating-cart-badge { right: -18px; top: -18px; }
   .main { padding-bottom: calc(92px + env(safe-area-inset-bottom)); }
 }
+.shipping-panel { margin-top: 18px; padding: 16px; border: 1px solid #ead7ae; border-radius: 18px; background: #fff8e8; display: grid; gap: 12px; }

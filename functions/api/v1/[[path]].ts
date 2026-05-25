@@ -1,5 +1,5 @@
 import { createSeedState, type AppState } from '../../../src/seed';
-import { createDeliveryNote, createInvoice, createOrder, findPartnerForUser, recordPayment, updateOrderStatus } from '../../../src/services';
+import { createDeliveryNote, createInvoice, createOrder, findPartnerForUser, recordPayment, updateOrderShipping, updateOrderStatus } from '../../../src/services';
 import type { OrderStatus, Payment, Role, User } from '../../../src/domain';
 
 interface Env {
@@ -163,6 +163,16 @@ export const onRequest = async ({ request, env }: PagesHandlerContext) => {
         return createOrder(draft, actor, partnerId, body.items, body.shippingAddress, body.notes);
       }, env);
       return respond(result, 201);
+    }
+
+    const shippingMatch = path.match(/^\/orders\/([^/]+)\/shipping$/);
+    if (method === 'PATCH' && shippingMatch) {
+      const body = await readJson<{ shippingCost?: number; packingFee?: number; packingType?: 'none' | 'small_styrofoam' | 'medium_styrofoam' | 'large_styrofoam'; trackingNumber?: string; trackingReceiptUrl?: string }>(request);
+      const result = await mutateState((draft) => {
+        requireRole(actor, ['super_admin', 'sales_admin', 'warehouse']);
+        return updateOrderShipping(draft, actor, shippingMatch[1], body);
+      }, env);
+      return respond(result, 200);
     }
 
     const statusMatch = path.match(/^\/orders\/([^/]+)\/status$/);

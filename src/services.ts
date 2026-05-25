@@ -96,6 +96,24 @@ export function createOrder(state: AppState, actor: User, partnerId: string, car
   return order;
 }
 
+export function updateOrderShipping(state: AppState, actor: User, orderId: string, input: { shippingCost?: number; packingFee?: number; packingType?: Order['packingType']; trackingNumber?: string; trackingReceiptUrl?: string }) {
+  const order = state.orders.find((item) => item.id === orderId);
+  if (!order) throw new Error('Order tidak ditemukan');
+  const oldValue = { shippingCost: order.shippingCost, packingFee: order.packingFee, packingType: order.packingType, trackingNumber: order.trackingNumber, trackingReceiptUrl: order.trackingReceiptUrl, grandTotal: order.grandTotal };
+  const shippingCost = Number(input.shippingCost ?? 0);
+  const packingFee = Number(input.packingFee ?? 0);
+  if (!Number.isFinite(shippingCost) || shippingCost < 0) throw new Error('Ongkir tidak valid');
+  if (!Number.isFinite(packingFee) || packingFee < 0) throw new Error('Biaya packing tidak valid');
+  order.shippingCost = Math.round(shippingCost);
+  order.packingFee = Math.round(packingFee);
+  order.packingType = input.packingType ?? 'none';
+  order.trackingNumber = input.trackingNumber?.trim() || undefined;
+  order.trackingReceiptUrl = input.trackingReceiptUrl?.trim() || undefined;
+  order.grandTotal = order.subtotal - order.discountTotal + order.taxTotal + (order.shippingCost ?? 0) + (order.packingFee ?? 0);
+  audit(state, actor.id, 'ORDER_SHIPPING_UPDATED', 'order', orderId, oldValue, { shippingCost: order.shippingCost, packingFee: order.packingFee, packingType: order.packingType, trackingNumber: order.trackingNumber, trackingReceiptUrl: order.trackingReceiptUrl, grandTotal: order.grandTotal });
+  return order;
+}
+
 export function updateOrderStatus(state: AppState, actor: User, orderId: string, targetStatus: OrderStatus, note?: string) {
   const order = state.orders.find((item) => item.id === orderId);
   if (!order) throw new Error('Order tidak ditemukan');

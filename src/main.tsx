@@ -294,12 +294,55 @@ function Orders({ state, user, token, refresh }: { state: AppState; user: User; 
   return <div className="grid"><OrdersTable state={state} orders={orders} user={user} token={token} refresh={refresh} /></div>;
 }
 
-function OrdersTable({ state, orders, user, token, refresh, compact }: { state: AppState; orders: Order[]; user?: User; token?: string; refresh?: () => Promise<void>; compact?: boolean }) {
-  const [selected, setSelected] = useState<Order | null>(null);
-  return <div className="card orders-card"><h3>{compact ? 'Order Terbaru' : 'Daftar Order'}</h3><div className="table-wrap orders-table"><table><thead><tr><th>No Order</th><th>Mitra</th><th>Status</th><th>Total</th><th>Item</th><th>Aksi</th></tr></thead><tbody>{orders.map((order) => <tr key={order.id}><td data-label="No Order"><b>{order.orderNumber}</b><br /><small>{new Date(order.orderDate).toLocaleString('id-ID')}</small></td><td data-label="Mitra">{partnerName(state, order.partnerId)}<br /><small>{tierName(state, state.partners.find((p) => p.id === order.partnerId)?.tierId ?? '')}</small></td><td data-label="Status"><span className={`status ${order.status}`}>{statusLabels[order.status]}</span></td><td data-label="Total"><b>{formatIdr(order.grandTotal)}</b></td><td data-label="Item">{order.items.length} item</td><td data-label="Aksi"><div className="actions"><button className="btn small" onClick={() => setSelected(order)}>Detail</button>{user && token && refresh && user.role !== 'partner' && validTransitions[order.status].map((target) => <button key={target} className="btn small" onClick={async () => { await api.updateOrderStatus(token, order.id, target, `Update ke ${target}`); await refresh(); }}>{statusLabels[target]}</button>)}</div></td></tr>)}</tbody></table></div>{selected && <OrderModal state={state} order={selected} onClose={() => setSelected(null)} />}</div>;
+
+const packingOptions = [
+  { value: 'none', label: 'Tanpa packing tambahan', fee: 0 },
+  { value: 'small_styrofoam', label: 'Sterofoam kecil', fee: 20000 },
+  { value: 'medium_styrofoam', label: 'Sterofoam sedang', fee: 30000 },
+  { value: 'large_styrofoam', label: 'Sterofoam besar', fee: 50000 },
+] as const;
+
+function packingLabel(value?: Order['packingType']) {
+  return packingOptions.find((item) => item.value === (value ?? 'none'))?.label ?? '-';
 }
 
-function OrderModal({ state, order, onClose }: { state: AppState; order: Order; onClose: () => void }) { return <div className="modal-backdrop"><div className="modal"><div className="topbar"><div><h2>{order.orderNumber}</h2><p>{partnerName(state, order.partnerId)} • {statusLabels[order.status]}</p></div><button className="btn" onClick={onClose}>Tutup</button></div><DocumentOrder state={state} order={order} /></div></div>; }
+function OrderShippingPanel({ order, token, refresh }: { order: Order; token: string; refresh: () => Promise<void> }) {
+  const [shippingCost, setShippingCost] = useState(String(order.shippingCost ?? 0));
+  const [packingType, setPackingType] = useState<Order['packingType']>(order.packingType ?? 'none');
+  const [trackingNumber, setTrackingNumber] = useState(order.trackingNumber ?? '');
+  const [trackingReceiptUrl, setTrackingReceiptUrl] = useState(order.trackingReceiptUrl ?? '');
+  const [message, setMessage] = useState('');
+  const selectedPacking = packingOptions.find((item) => item.value === packingType) ?? packingOptions[0];
+  async function save() {
+    setMessage('');
+    try {
+      await api.updateOrderShipping(token, order.id, { shippingCost: Number(shippingCost || 0), packingFee: selectedPacking.fee, packingType, trackingNumber, trackingReceiptUrl });
+      await refresh();
+      setMessage('Info ongkir, packing, dan resi berhasil disimpan.');
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Info pengiriman gagal disimpan.');
+    }
+  }
+  return <div className="shipping-panel">
+    <b>Biaya & Resi Pengiriman</b>
+    <div className="grid cols-2">
+      <div className="field"><label>Ongkir sesuai resi</label><input className="input" type="number" min="0" value={shippingCost} onChange={(e) => setShippingCost(e.target.value)} placeholder="Contoh: 45000" /></div>
+      <div className="field"><label>Biaya packing</label><select value={packingType} onChange={(e) => setPackingType(e.target.value as Order['packingType'])}>{packingOptions.map((item) => <option key={item.value} value={item.value}>{item.label} - {formatIdr(item.fee)}</option>)}</select></div>
+      <div className="field"><label>Nomor resi</label><input className="input" value={trackingNumber} onChange={(e) => setTrackingNumber(e.target.value)} placeholder="Nomor resi ekspedisi" /></div>
+      <div className="field"><label>Link / foto resi</label><input className="input" value={trackingReceiptUrl} onChange={(e) => setTrackingReceiptUrl(e.target.value)} placeholder="Link tracking atau foto resi" /></div>
+    </div>
+    <div className="notice">Tambahan tagihan: ongkir {formatIdr(Number(shippingCost || 0))} + packing {formatIdr(selectedPacking.fee)} = <b>{formatIdr(Number(shippingCost || 0) + selectedPacking.fee)}</b></div>
+    {message && <div className={`notice ${message.includes('berhasil') ? '' : 'warning'}`}>{message}</div>}
+    <div className="actions"><button className="btn primary" type="button" onClick={save}>Simpan Ongkir / Resi</button></div>
+  </div>;
+}
+
+function OrdersTable({ state, orders, user, token, refresh, compact }: { state: AppState; orders: Order[]; user?: User; token?: string; refresh?: () => Promise<void>; compact?: boolean }) {
+  const [selected, setSelected] = useState<Order | null>(null);
+  return <div className="card orders-card"><h3>{compact ? 'Order Terbaru' : 'Daftar Order'}</h3><div className="table-wrap orders-table"><table><thead><tr><th>No Order</th><th>Mitra</th><th>Status</th><th>Total</th><th>Item</th><th>Aksi</th></tr></thead><tbody>{orders.map((order) => <tr key={order.id}><td data-label="No Order"><b>{order.orderNumber}</b><br /><small>{new Date(order.orderDate).toLocaleString('id-ID')}</small></td><td data-label="Mitra">{partnerName(state, order.partnerId)}<br /><small>{tierName(state, state.partners.find((p) => p.id === order.partnerId)?.tierId ?? '')}</small></td><td data-label="Status"><span className={`status ${order.status}`}>{statusLabels[order.status]}</span></td><td data-label="Total"><b>{formatIdr(order.grandTotal)}</b></td><td data-label="Item">{order.items.length} item</td><td data-label="Aksi"><div className="actions"><button className="btn small" onClick={() => setSelected(order)}>Detail</button>{user && token && refresh && user.role !== 'partner' && validTransitions[order.status].map((target) => <button key={target} className="btn small" onClick={async () => { await api.updateOrderStatus(token, order.id, target, `Update ke ${target}`); await refresh(); }}>{statusLabels[target]}</button>)}</div></td></tr>)}</tbody></table></div>{selected && <OrderModal state={state} order={selected} user={user} token={token} refresh={refresh} onClose={() => setSelected(null)} />}</div>;
+}
+
+function OrderModal({ state, order, user, token, refresh, onClose }: { state: AppState; order: Order; user?: User; token?: string; refresh?: () => Promise<void>; onClose: () => void }) { return <div className="modal-backdrop"><div className="modal"><div className="topbar"><div><h2>{order.orderNumber}</h2><p>{partnerName(state, order.partnerId)} • {statusLabels[order.status]}</p></div><button className="btn" onClick={onClose}>Tutup</button></div><DocumentOrder state={state} order={order} />{user && token && refresh && user.role !== 'partner' && <OrderShippingPanel order={order} token={token} refresh={refresh} />}</div></div>; }
 
 
 
@@ -489,8 +532,8 @@ function Documents({ state, user, token, refresh }: { state: AppState; user: Use
 
 function DocumentModal({ state, doc, onClose }: { state: AppState; doc: { type: 'invoice'; invoice: Invoice } | { type: 'dn'; deliveryNote: DeliveryNote }; onClose: () => void }) { const order = state.orders.find((o) => o.id === (doc.type === 'invoice' ? doc.invoice.orderId : doc.deliveryNote.orderId))!; return <div className="modal-backdrop"><div className="modal"><div className="actions no-print" style={{ justifyContent: 'flex-end' }}><button className="btn" onClick={() => window.print()}>Print / PDF</button><button className="btn" onClick={onClose}>Tutup</button></div>{doc.type === 'invoice' ? <InvoiceDocument state={state} invoice={doc.invoice} order={order} /> : <DeliveryDocument state={state} deliveryNote={doc.deliveryNote} order={order} />}</div></div>; }
 
-function DocumentOrder({ state, order }: { state: AppState; order: Order }) { return <div className="document"><div className="doc-head"><div><h2>Detail Order</h2><b>{order.orderNumber}</b></div><div><span className={`status ${order.status}`}>{statusLabels[order.status]}</span></div></div><div className="kv"><b>Mitra</b><span>{partnerName(state, order.partnerId)}</span><b>Alamat</b><span>{order.shippingAddress}</span><b>Tanggal</b><span>{new Date(order.orderDate).toLocaleString('id-ID')}</span></div><LineItems order={order} /></div>; }
-function InvoiceDocument({ state, invoice, order }: { state: AppState; invoice: Invoice; order: Order }) { return <div className="document"><div className="doc-head"><div><h2>INVOICE</h2><b>{invoice.invoiceNumber}</b></div><div><b>{partnerName(state, invoice.partnerId)}</b><br />Tanggal: {invoice.invoiceDate}<br />Jatuh tempo: {invoice.dueDate}</div></div><LineItems order={order} /><div className="kv"><b>Total</b><span>{formatIdr(invoice.grandTotal)}</span><b>Dibayar</b><span>{formatIdr(invoice.amountPaid)}</span><b>Sisa</b><span>{formatIdr(invoice.amountDue)}</span><b>Status</b><span>{invoice.status}</span></div><p className="footer-note">Invoice berasal dari snapshot order; invoice issued tidak diedit langsung tanpa void/revisi.</p></div>; }
+function DocumentOrder({ state, order }: { state: AppState; order: Order }) { return <div className="document"><div className="doc-head"><div><h2>Detail Order</h2><b>{order.orderNumber}</b></div><div><span className={`status ${order.status}`}>{statusLabels[order.status]}</span></div></div><div className="kv"><b>Mitra</b><span>{partnerName(state, order.partnerId)}</span><b>Alamat</b><span>{order.shippingAddress}</span><b>Tanggal</b><span>{new Date(order.orderDate).toLocaleString('id-ID')}</span><b>Ongkir</b><span>{formatIdr(order.shippingCost ?? 0)}</span><b>Packing</b><span>{packingLabel(order.packingType)} • {formatIdr(order.packingFee ?? 0)}</span><b>No Resi</b><span>{order.trackingNumber ?? '-'}</span>{order.trackingReceiptUrl && <><b>Tracking / Resi</b><span><a href={order.trackingReceiptUrl} target="_blank" rel="noreferrer">Lihat resi / tracking</a></span></>}</div><LineItems order={order} />{(order.shippingCost || order.packingFee) ? <div className="kv" style={{ marginTop: 18 }}><b>Subtotal Produk</b><span>{formatIdr(order.subtotal)}</span><b>Tambahan Ongkir + Packing</b><span>{formatIdr((order.shippingCost ?? 0) + (order.packingFee ?? 0))}</span><b>Total Tagihan</b><span><b>{formatIdr(order.grandTotal)}</b></span></div> : null}</div>; }
+function InvoiceDocument({ state, invoice, order }: { state: AppState; invoice: Invoice; order: Order }) { return <div className="document"><div className="doc-head"><div><h2>INVOICE</h2><b>{invoice.invoiceNumber}</b></div><div><b>{partnerName(state, invoice.partnerId)}</b><br />Tanggal: {invoice.invoiceDate}<br />Jatuh tempo: {invoice.dueDate}</div></div><LineItems order={order} /><div className="kv"><b>Subtotal Produk</b><span>{formatIdr(order.subtotal)}</span><b>Ongkir</b><span>{formatIdr(order.shippingCost ?? 0)}</span><b>Packing</b><span>{packingLabel(order.packingType)} • {formatIdr(order.packingFee ?? 0)}</span><b>Total</b><span>{formatIdr(invoice.grandTotal)}</span><b>Dibayar</b><span>{formatIdr(invoice.amountPaid)}</span><b>Sisa</b><span>{formatIdr(invoice.amountDue)}</span><b>Status</b><span>{invoice.status}</span></div><p className="footer-note">Invoice berasal dari snapshot order; invoice issued tidak diedit langsung tanpa void/revisi.</p></div>; }
 function DeliveryDocument({ state, deliveryNote, order }: { state: AppState; deliveryNote: DeliveryNote; order: Order }) { return <div className="document"><div className="doc-head"><div><h2>SURAT JALAN</h2><b>{deliveryNote.deliveryNoteNumber}</b></div><div><b>{partnerName(state, order.partnerId)}</b><br />Tanggal: {deliveryNote.deliveryDate}<br />Driver: {deliveryNote.driverName ?? '-'}</div></div><LineItems order={order} showPrice={false} /><div className="grid cols-2" style={{ marginTop: 28 }}><div>Pengirim<br /><br /><br />(................)</div><div>Penerima<br /><br /><br />(................)</div></div></div>; }
 function LineItems({ order, showPrice = true }: { order: Order; showPrice?: boolean }) { return <div className="table-wrap" style={{ marginTop: 18 }}><table><thead><tr><th>SKU</th><th>Produk</th><th>Qty</th>{showPrice && <><th>Harga</th><th>Total</th></>}</tr></thead><tbody>{order.items.map((item) => <tr key={item.id}><td>{item.skuSnapshot}</td><td>{item.productNameSnapshot}<br /><small>{item.tierNameSnapshot}</small>{item.notes && <div className="line-item-note"><b>Catatan:</b> {item.notes}</div>}</td><td>{item.qty} {item.unitSnapshot}</td>{showPrice && <><td>{formatIdr(item.unitPrice)}</td><td>{formatIdr(item.lineTotal)}</td></>}</tr>)}</tbody></table></div>; }
 
