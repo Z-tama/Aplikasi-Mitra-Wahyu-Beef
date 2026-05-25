@@ -3,7 +3,7 @@ import { readFile } from 'node:fs/promises';
 import { extname, join, normalize, resolve } from 'node:path';
 import { authenticate, hashPassword, httpError, login, requireRole, verifyPassword } from './auth.ts';
 import { loadState, mutateState } from './persistence.ts';
-import { createDeliveryNote, createInvoice, createOrder, findPartnerForUser, recordPayment, updateOrderStatus } from '../services.ts';
+import { createDeliveryNote, createInvoice, createOrder, findPartnerForUser, recordPayment, updateOrderShipping, updateOrderStatus } from '../services.ts';
 import type { OrderStatus, Payment } from '../domain.ts';
 
 const PORT = Number(process.env.PORT ?? 3000);
@@ -144,6 +144,17 @@ const handleApi: Handler = async (req, res, url) => {
     return json(res, 200, result);
   }
 
+  const shippingMatch = path.match(/^\/orders\/([^/]+)\/shipping$/);
+  if (method === 'PATCH' && shippingMatch) {
+    const body = await readJson<{ shippingCost?: number; packingFee?: number; packingType?: 'none' | 'small_styrofoam' | 'medium_styrofoam' | 'large_styrofoam'; packingQuantity?: number; trackingNumber?: string; trackingReceiptUrl?: string }>(req);
+    const result = await mutateState((draft) => {
+      const actor = authenticate(draft, req.headers.authorization);
+      requireRole(actor, ['super_admin', 'sales_admin', 'warehouse']);
+      return updateOrderShipping(draft, actor, shippingMatch[1], body);
+    });
+    return json(res, 200, result);
+  }
+
   const invoiceMatch = path.match(/^\/orders\/([^/]+)\/invoices$/);
   if (method === 'POST' && invoiceMatch) {
     const result = await mutateState((draft) => {
@@ -265,13 +276,21 @@ async function serveStatic(res: ServerResponse, pathname: string) {
   const finalPath = filePath.startsWith(DIST_DIR) ? filePath : join(DIST_DIR, 'index.html');
   try {
     const data = await readFile(finalPath);
-    res.writeHead(200, { 'Content-Type': contentType(finalPath) });
+    res.writeHead(200, staticHeaders(finalPath));
     res.end(data);
   } catch {
     const data = await readFile(join(DIST_DIR, 'index.html'));
-    res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+    res.writeHead(200, staticHeaders(join(DIST_DIR, 'index.html')));
     res.end(data);
   }
+}
+
+function staticHeaders(filePath: string) {
+  const ext = extname(filePath);
+  return {
+    'Content-Type': contentType(filePath),
+    'Cache-Control': ext === '.html' ? 'no-store, max-age=0' : 'no-cache, max-age=0, must-revalidate',
+  };
 }
 
 function contentType(filePath: string) {

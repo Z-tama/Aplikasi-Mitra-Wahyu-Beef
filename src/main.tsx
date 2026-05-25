@@ -176,6 +176,21 @@ function Dashboard({ state }: { state: AppState }) {
 function Metric({ label, value }: { label: string; value: string }) { return <div className="card metric"><span className="label">{label}</span><span className="value">{value}</span></div>; }
 
 type CatalogProduct = ReturnType<typeof getCatalogForPartner>[number];
+
+const preferredCategoryIds = ['cat-daging-sapi', 'cat-tulang-sapi', 'cat-jerohan-sapi', 'cat-processed-meat', 'cat-seafood-series'];
+function orderedCategories(state: AppState) {
+  return [...state.categories].sort((a, b) => {
+    const ai = preferredCategoryIds.indexOf(a.id);
+    const bi = preferredCategoryIds.indexOf(b.id);
+    return (ai === -1 ? 999 : ai) - (bi === -1 ? 999 : bi) || a.name.localeCompare(b.name);
+  });
+}
+function categoryName(state: AppState, categoryId: string) {
+  return state.categories.find((category) => category.id === categoryId)?.name ?? '-';
+}
+function productsByCategory<T extends { categoryId: string }>(state: AppState, products: T[]) {
+  return orderedCategories(state).map((category) => ({ category, products: products.filter((product) => product.categoryId === category.id) })).filter((group) => group.products.length > 0);
+}
 type PackageOption = { weightGram: 250 | 500 | 1000; label: string; ratio: number };
 const packageOptions: PackageOption[] = [
   { weightGram: 250, label: '250 gr', ratio: 0.25 },
@@ -194,6 +209,7 @@ function Catalog({ state, user, token, refresh, setView }: { state: AppState; us
   if (!partner) return <div className="notice warning">User ini tidak punya data mitra.</div>;
   const activePartner = partner;
   const catalog = getCatalogForPartner(state, activePartner.id);
+  const catalogGroups = productsByCategory(state, catalog);
   const items: CartItem[] = Object.entries(cart).filter(([, qty]) => qty > 0).map(([key, qty]) => ({ ...cartKeyToItem(key, qty), notes: cartNotes[key]?.trim() || undefined }));
   const total = items.reduce((sum, item) => {
     const product = catalog.find((p) => p.id === item.productId);
@@ -234,13 +250,16 @@ function Catalog({ state, user, token, refresh, setView }: { state: AppState; us
     <div className="card"><b>Tier aktif: {tierName(state, activePartner.tierId)}</b><p className="footer-note">Harga di bawah dihitung server-side berdasarkan tier mitra. Untuk daging sapi, tulang sapi, dan jeroan sapi, klik produk untuk memilih kemasan 250 gr, 500 gr, atau 1000 gr.</p></div>
     {message && <div className="notice">{message}</div>}
     <div className="catalog-toolbar"><div><b>{catalog.length} Produk</b><span>Harga {tierName(state, activePartner.tierId)}</span></div><div className="catalog-view-label">Tampilan <span className="grid-icon">▦</span></div></div>
-    <div className="catalog marketplace-catalog">{catalog.map((product) => {
-      const hasPackageOptions = canChoosePackaging(product);
-      return <div className="product-card marketplace-card" key={product.id} onClick={() => hasPackageOptions && setSelectedProduct(product)} role={hasPackageOptions ? 'button' : undefined} tabIndex={hasPackageOptions ? 0 : undefined} onKeyDown={(event) => { if (hasPackageOptions && (event.key === 'Enter' || event.key === ' ')) setSelectedProduct(product); }}>
-        <div className={`product-visual marketplace-visual ${product.imageUrl ? 'has-photo' : ''}`}>{product.imageUrl && <img src={product.imageUrl} alt={product.name} loading="lazy" />}<span className="discount-badge">Mitra</span><div className="placeholder-brand">Wahyu Beef</div>{!product.imageUrl && <div className="placeholder-title">{product.name}</div>}<div className="placeholder-pack">{hasPackageOptions ? '250g • 500g • 1kg' : product.unit}</div></div>
-        <div className="product-info"><h3>{product.name}</h3><span className="product-meta">{product.sku} • {hasPackageOptions ? 'Pilih kemasan' : `MOQ ${product.minimumOrderQty} ${product.unit}`}</span><div className="price-row"><span className="voucher-tag">%</span><div className="price">{product.price ? formatIdr(product.price) : 'Belum ada harga'}</div></div><div className="deal-note">{hasPackageOptions ? 'Klik untuk pilih ukuran kemasan' : `Harga khusus ${tierName(state, activePartner.tierId)}`}</div><div className="rating-row"><span>★ 5.0</span><span>•</span><span>{Math.max(10, product.minimumOrderQty * 10)}+ terjual</span></div>{hasPackageOptions ? <button className="btn small product-pick-btn" onClick={(event) => { event.stopPropagation(); setSelectedProduct(product); }}>Pilih</button> : <div className="qty-row compact" onClick={(event) => event.stopPropagation()}><input className="input" type="number" min="0" placeholder="Qty" value={cart[cartKey(product.id)] ?? ''} onChange={(e) => setCart({ ...cart, [cartKey(product.id)]: Number(e.target.value) })} /><button className="btn small" onClick={() => addToCart(product)}>Tambah</button></div>}</div>
-      </div>;
-    })}</div>
+    <div className="catalog-category-stack">{catalogGroups.map(({ category, products }) => <section className="catalog-category-section" key={category.id}>
+      <div className="category-section-head"><div><span>Kategori</span><h3>{category.name}</h3></div><b>{products.length} Produk</b></div>
+      <div className="catalog marketplace-catalog">{products.map((product) => {
+        const hasPackageOptions = canChoosePackaging(product);
+        return <div className="product-card marketplace-card" key={product.id} onClick={() => hasPackageOptions && setSelectedProduct(product)} role={hasPackageOptions ? 'button' : undefined} tabIndex={hasPackageOptions ? 0 : undefined} onKeyDown={(event) => { if (hasPackageOptions && (event.key === 'Enter' || event.key === ' ')) setSelectedProduct(product); }}>
+          <div className={`product-visual marketplace-visual ${product.imageUrl ? 'has-photo' : ''}`}>{product.imageUrl && <img src={product.imageUrl} alt={product.name} loading="lazy" />}<span className="discount-badge">Mitra</span><div className="placeholder-brand">Wahyu Beef</div>{!product.imageUrl && <div className="placeholder-title">{product.name}</div>}<div className="placeholder-pack">{hasPackageOptions ? '250g • 500g • 1kg' : product.unit}</div></div>
+          <div className="product-info"><h3>{product.name}</h3><span className="product-meta">{product.sku} • {hasPackageOptions ? 'Pilih kemasan' : `MOQ ${product.minimumOrderQty} ${product.unit}`}</span><div className="price-row"><span className="voucher-tag">%</span><div className="price">{product.price ? formatIdr(product.price) : 'Belum ada harga'}</div></div><div className="deal-note">{hasPackageOptions ? 'Klik untuk pilih ukuran kemasan' : `Harga khusus ${tierName(state, activePartner.tierId)}`}</div><div className="rating-row"><span>★ 5.0</span><span>•</span><span>{Math.max(10, product.minimumOrderQty * 10)}+ terjual</span></div>{hasPackageOptions ? <button className="btn small product-pick-btn" onClick={(event) => { event.stopPropagation(); setSelectedProduct(product); }}>Pilih</button> : <div className="qty-row compact" onClick={(event) => event.stopPropagation()}><input className="input" type="number" min="0" placeholder="Qty" value={cart[cartKey(product.id)] ?? ''} onChange={(e) => setCart({ ...cart, [cartKey(product.id)]: Number(e.target.value) })} /><button className="btn small" onClick={() => addToCart(product)}>Tambah</button></div>}</div>
+        </div>;
+      })}</div>
+    </section>)}</div>
     <button className="floating-cart" type="button" disabled={items.length === 0} onClick={() => setIsCheckout(true)} aria-label={`Checkout ${cartQty} item dengan total ${formatIdr(total)}`}>
       <span className="floating-cart-icon"><ShoppingCart size={23} strokeWidth={2.8} /><span className="floating-cart-badge">{cartQty > 99 ? '99+' : cartQty}</span></span>
       <span className="floating-cart-copy"><span>Total Harga</span><b>{formatIdr(total)}</b></span>
@@ -305,18 +324,51 @@ const packingOptions = [
 function packingLabel(value?: Order['packingType']) {
   return packingOptions.find((item) => item.value === (value ?? 'none'))?.label ?? '-';
 }
+function packingQty(order: Order) {
+  return order.packingType && order.packingType !== 'none' ? Math.max(1, order.packingQuantity ?? 1) : 0;
+}
+function packingSummary(order: Order) {
+  const qty = packingQty(order);
+  return qty ? `${packingLabel(order.packingType)} × ${qty} pcs` : packingLabel(order.packingType);
+}
 
 function OrderShippingPanel({ order, token, refresh }: { order: Order; token: string; refresh: () => Promise<void> }) {
   const [shippingCost, setShippingCost] = useState(String(order.shippingCost ?? 0));
   const [packingType, setPackingType] = useState<Order['packingType']>(order.packingType ?? 'none');
+  const [packingQuantity, setPackingQuantity] = useState(String(order.packingQuantity ?? (order.packingType && order.packingType !== 'none' ? 1 : 0)));
   const [trackingNumber, setTrackingNumber] = useState(order.trackingNumber ?? '');
   const [trackingReceiptUrl, setTrackingReceiptUrl] = useState(order.trackingReceiptUrl ?? '');
   const [message, setMessage] = useState('');
+  const [uploadingReceipt, setUploadingReceipt] = useState(false);
   const selectedPacking = packingOptions.find((item) => item.value === packingType) ?? packingOptions[0];
+  const normalizedPackingQty = packingType === 'none' ? 0 : Math.max(1, Math.round(Number(packingQuantity || 1)));
+  const packingTotal = selectedPacking.fee * normalizedPackingQty;
+  async function chooseReceipt(file?: File) {
+    if (!file) return;
+    if (!file.type.startsWith('image/') && file.type !== 'application/pdf') {
+      setMessage('File resi harus gambar atau PDF.');
+      return;
+    }
+    if (file.size > 1024 * 1024) {
+      setMessage('Ukuran file resi maksimal 1 MB.');
+      return;
+    }
+    setUploadingReceipt(true);
+    setMessage('Mengupload resi pengiriman...');
+    try {
+      const result = await api.uploadTrackingReceipt(token, file);
+      setTrackingReceiptUrl(result.trackingReceiptUrl);
+      setMessage('Resi berhasil diupload. Klik Simpan Ongkir / Resi untuk menyimpan ke order.');
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Upload resi gagal.');
+    } finally {
+      setUploadingReceipt(false);
+    }
+  }
   async function save() {
     setMessage('');
     try {
-      await api.updateOrderShipping(token, order.id, { shippingCost: Number(shippingCost || 0), packingFee: selectedPacking.fee, packingType, trackingNumber, trackingReceiptUrl });
+      await api.updateOrderShipping(token, order.id, { shippingCost: Number(shippingCost || 0), packingFee: packingTotal, packingType, packingQuantity: normalizedPackingQty, trackingNumber, trackingReceiptUrl });
       await refresh();
       setMessage('Info ongkir, packing, dan resi berhasil disimpan.');
     } catch (error) {
@@ -324,14 +376,20 @@ function OrderShippingPanel({ order, token, refresh }: { order: Order; token: st
     }
   }
   return <div className="shipping-panel">
-    <b>Biaya & Resi Pengiriman</b>
-    <div className="grid cols-2">
-      <div className="field"><label>Ongkir sesuai resi</label><input className="input" type="number" min="0" value={shippingCost} onChange={(e) => setShippingCost(e.target.value)} placeholder="Contoh: 45000" /></div>
-      <div className="field"><label>Biaya packing</label><select value={packingType} onChange={(e) => setPackingType(e.target.value as Order['packingType'])}>{packingOptions.map((item) => <option key={item.value} value={item.value}>{item.label} - {formatIdr(item.fee)}</option>)}</select></div>
-      <div className="field"><label>Nomor resi</label><input className="input" value={trackingNumber} onChange={(e) => setTrackingNumber(e.target.value)} placeholder="Nomor resi ekspedisi" /></div>
-      <div className="field"><label>Link / foto resi</label><input className="input" value={trackingReceiptUrl} onChange={(e) => setTrackingReceiptUrl(e.target.value)} placeholder="Link tracking atau foto resi" /></div>
+    <b>Biaya Packing, Ongkir & Resi</b>
+    {order.status === 'in_production' && <div className="notice">Tahap packing: pilih jenis sterofoam di bawah. Biaya packing otomatis masuk ke total tagihan saat disimpan.</div>}
+    <div className="packing-choice-grid">
+      {packingOptions.filter((item) => item.value !== 'none').map((item) => <button key={item.value} type="button" className={`packing-choice ${packingType === item.value ? 'active' : ''}`} onClick={() => { setPackingType(item.value); setPackingQuantity((current) => Number(current || 0) > 0 ? current : '1'); }}><b>{item.label}</b><span>{formatIdr(item.fee)} / pcs</span></button>)}
     </div>
-    <div className="notice">Tambahan tagihan: ongkir {formatIdr(Number(shippingCost || 0))} + packing {formatIdr(selectedPacking.fee)} = <b>{formatIdr(Number(shippingCost || 0) + selectedPacking.fee)}</b></div>
+    <div className="grid cols-2">
+      <div className="field"><label>Ongkir sesuai total resi</label><input className="input" type="number" min="0" value={shippingCost} onChange={(e) => setShippingCost(e.target.value)} placeholder="Contoh: 45000" /></div>
+      <div className="field"><label>Jenis packing</label><select value={packingType} onChange={(e) => { const next = e.target.value as Order['packingType']; setPackingType(next); setPackingQuantity(next === 'none' ? '0' : (Number(packingQuantity || 0) > 0 ? packingQuantity : '1')); }}>{packingOptions.map((item) => <option key={item.value} value={item.value}>{item.label} - {formatIdr(item.fee)} / pcs</option>)}</select></div>
+      <div className="field"><label>Qty packing / pcs</label><input className="input" type="number" min={packingType === 'none' ? 0 : 1} value={packingQuantity} disabled={packingType === 'none'} onChange={(e) => setPackingQuantity(e.target.value)} placeholder="Contoh: 3" /><small>{packingType === 'none' ? 'Pilih jenis packing dulu' : `${formatIdr(selectedPacking.fee)} × ${normalizedPackingQty} pcs = ${formatIdr(packingTotal)}`}</small></div>
+      <div className="field"><label>Nomor resi untuk tracking customer</label><input className="input" value={trackingNumber} onChange={(e) => setTrackingNumber(e.target.value)} placeholder="Nomor resi ekspedisi" /></div>
+      <div className="field"><label>Upload foto resi</label><label className="upload-box receipt-upload"><input type="file" accept="image/*,.pdf" onChange={(e) => chooseReceipt(e.target.files?.[0])} /><span>{uploadingReceipt ? 'Mengupload...' : trackingReceiptUrl ? 'Ganti Foto Resi' : 'Upload Foto Resi'}</span><small>JPG/PNG/PDF, maksimal 1 MB</small></label></div>
+      {trackingReceiptUrl && <div className="field shipping-wide"><label>File resi tersimpan</label><div className="uploaded-receipt-row"><span>Resi sudah diupload dan siap disimpan ke order.</span><button className="btn small" type="button" onClick={() => setTrackingReceiptUrl('')}>Hapus Upload</button></div></div>}
+    </div>
+    <div className="notice">Tambahan tagihan: ongkir {formatIdr(Number(shippingCost || 0))} + packing {formatIdr(selectedPacking.fee)} × {normalizedPackingQty} pcs = <b>{formatIdr(Number(shippingCost || 0) + packingTotal)}</b></div>
     {message && <div className={`notice ${message.includes('berhasil') ? '' : 'warning'}`}>{message}</div>}
     <div className="actions"><button className="btn primary" type="button" onClick={save}>Simpan Ongkir / Resi</button></div>
   </div>;
@@ -339,7 +397,7 @@ function OrderShippingPanel({ order, token, refresh }: { order: Order; token: st
 
 function OrdersTable({ state, orders, user, token, refresh, compact }: { state: AppState; orders: Order[]; user?: User; token?: string; refresh?: () => Promise<void>; compact?: boolean }) {
   const [selected, setSelected] = useState<Order | null>(null);
-  return <div className="card orders-card"><h3>{compact ? 'Order Terbaru' : 'Daftar Order'}</h3><div className="table-wrap orders-table"><table><thead><tr><th>No Order</th><th>Mitra</th><th>Status</th><th>Total</th><th>Item</th><th>Aksi</th></tr></thead><tbody>{orders.map((order) => <tr key={order.id}><td data-label="No Order"><b>{order.orderNumber}</b><br /><small>{new Date(order.orderDate).toLocaleString('id-ID')}</small></td><td data-label="Mitra">{partnerName(state, order.partnerId)}<br /><small>{tierName(state, state.partners.find((p) => p.id === order.partnerId)?.tierId ?? '')}</small></td><td data-label="Status"><span className={`status ${order.status}`}>{statusLabels[order.status]}</span></td><td data-label="Total"><b>{formatIdr(order.grandTotal)}</b></td><td data-label="Item">{order.items.length} item</td><td data-label="Aksi"><div className="actions"><button className="btn small" onClick={() => setSelected(order)}>Detail</button>{user && token && refresh && user.role !== 'partner' && validTransitions[order.status].map((target) => <button key={target} className="btn small" onClick={async () => { await api.updateOrderStatus(token, order.id, target, `Update ke ${target}`); await refresh(); }}>{statusLabels[target]}</button>)}</div></td></tr>)}</tbody></table></div>{selected && <OrderModal state={state} order={selected} user={user} token={token} refresh={refresh} onClose={() => setSelected(null)} />}</div>;
+  return <div className="card orders-card"><h3>{compact ? 'Order Terbaru' : 'Daftar Order'}</h3><div className="table-wrap orders-table"><table><thead><tr><th>No Order</th><th>Mitra</th><th>Status</th><th>Total</th><th>Packing</th><th>Item</th><th>Aksi</th></tr></thead><tbody>{orders.map((order) => <tr key={order.id}><td data-label="No Order"><b>{order.orderNumber}</b><br /><small>{new Date(order.orderDate).toLocaleString('id-ID')}</small></td><td data-label="Mitra">{partnerName(state, order.partnerId)}<br /><small>{tierName(state, state.partners.find((p) => p.id === order.partnerId)?.tierId ?? '')}</small></td><td data-label="Status"><span className={`status ${order.status}`}>{statusLabels[order.status]}</span></td><td data-label="Total"><b>{formatIdr(order.grandTotal)}</b><br /><small>{(order.shippingCost || order.packingFee) ? `+ ${formatIdr((order.shippingCost ?? 0) + (order.packingFee ?? 0))} ongkir/packing` : 'Belum ada tambahan'}</small></td><td data-label="Packing">{packingSummary(order)}<br /><small>{formatIdr(order.packingFee ?? 0)}</small></td><td data-label="Item">{order.items.length} item</td><td data-label="Aksi"><div className="actions"><button className="btn small" onClick={() => setSelected(order)}>{order.status === 'in_production' && user?.role !== 'partner' ? 'Atur Packing' : 'Detail'}</button>{user && token && refresh && user.role !== 'partner' && validTransitions[order.status].map((target) => <button key={target} className="btn small" onClick={async () => { await api.updateOrderStatus(token, order.id, target, `Update ke ${target}`); await refresh(); }}>{statusLabels[target]}</button>)}</div></td></tr>)}</tbody></table></div>{selected && <OrderModal state={state} order={selected} user={user} token={token} refresh={refresh} onClose={() => setSelected(null)} />}</div>;
 }
 
 function OrderModal({ state, order, user, token, refresh, onClose }: { state: AppState; order: Order; user?: User; token?: string; refresh?: () => Promise<void>; onClose: () => void }) { return <div className="modal-backdrop"><div className="modal"><div className="topbar"><div><h2>{order.orderNumber}</h2><p>{partnerName(state, order.partnerId)} • {statusLabels[order.status]}</p></div><button className="btn" onClick={onClose}>Tutup</button></div><DocumentOrder state={state} order={order} />{user && token && refresh && user.role !== 'partner' && <OrderShippingPanel order={order} token={token} refresh={refresh} />}</div></div>; }
@@ -349,47 +407,66 @@ function OrderModal({ state, order, user, token, refresh, onClose }: { state: Ap
 type AreaPoint = { id: string; label: string; province: string; island: string; x: number; y: number; note: string };
 
 const areaPoints: AreaPoint[] = [
-  { id: 'dki-jakarta', label: 'Jakarta', province: 'DKI Jakarta', island: 'Jawa', x: 40, y: 70, note: 'Hub utama Jabodetabek dan distributor kota.' },
-  { id: 'jawa-barat', label: 'Jawa Barat', province: 'Jawa Barat', island: 'Jawa', x: 35, y: 74, note: 'Bandung, Bekasi, Bogor, Depok dan koridor retail besar.' },
-  { id: 'banten', label: 'Banten', province: 'Banten', island: 'Jawa', x: 29, y: 69, note: 'Area penyangga Jabodetabek dan jalur barat.' },
-  { id: 'jawa-tengah', label: 'Jawa Tengah', province: 'Jawa Tengah', island: 'Jawa', x: 50, y: 76, note: 'Potensi ekspansi reseller kota besar Jawa Tengah.' },
-  { id: 'diy', label: 'DIY', province: 'DIY', island: 'Jawa', x: 56, y: 84, note: 'Area komunitas reseller dan horeca lokal.' },
-  { id: 'jawa-timur', label: 'Jawa Timur', province: 'Jawa Timur', island: 'Jawa', x: 66, y: 78, note: 'Koridor Surabaya dan distribusi Indonesia timur.' },
-  { id: 'sumatera-utara', label: 'Sumut', province: 'Sumatera Utara', island: 'Sumatera', x: 12, y: 30, note: 'Target ekspansi Sumatera bagian utara.' },
-  { id: 'sumatera-selatan', label: 'Sumsel', province: 'Sumatera Selatan', island: 'Sumatera', x: 23, y: 57, note: 'Target ekspansi Sumatera bagian selatan.' },
-  { id: 'kalimantan-timur', label: 'Kaltim', province: 'Kalimantan Timur', island: 'Kalimantan', x: 54, y: 38, note: 'Target ekspansi Kalimantan dan IKN.' },
-  { id: 'sulawesi-selatan', label: 'Sulsel', province: 'Sulawesi Selatan', island: 'Sulawesi', x: 73, y: 59, note: 'Target ekspansi Indonesia timur via Makassar.' },
-  { id: 'bali', label: 'Bali', province: 'Bali', island: 'Bali-Nusa Tenggara', x: 74, y: 83, note: 'Target horeca dan reseller frozen food.' },
+  { id: 'aceh', label: 'Aceh', province: 'Aceh', island: 'Sumatera', x: 8, y: 20, note: 'Sebaran mitra Aceh dan wilayah barat Indonesia.' },
+  { id: 'sumatera-utara', label: 'Sumut', province: 'Sumatera Utara', island: 'Sumatera', x: 12, y: 30, note: 'Mitra Sumatera bagian utara.' },
+  { id: 'riau', label: 'Riau', province: 'Riau', island: 'Sumatera', x: 19, y: 42, note: 'Mitra koridor Riau dan sekitarnya.' },
+  { id: 'jambi', label: 'Jambi', province: 'Jambi', island: 'Sumatera', x: 23, y: 51, note: 'Mitra Jambi dan area Sumatera tengah.' },
+  { id: 'sumatera-selatan', label: 'Sumsel', province: 'Sumatera Selatan', island: 'Sumatera', x: 25, y: 58, note: 'Mitra Sumatera bagian selatan.' },
+  { id: 'lampung', label: 'Lampung', province: 'Lampung', island: 'Sumatera', x: 30, y: 66, note: 'Mitra pintu masuk Sumatera-Jawa.' },
+  { id: 'bangka-belitung', label: 'Babel', province: 'Kepulauan Bangka Belitung', island: 'Sumatera', x: 33, y: 55, note: 'Mitra Kepulauan Bangka Belitung.' },
+  { id: 'dki-jakarta', label: 'Jakarta', province: 'DKI Jakarta', island: 'Jawa', x: 38, y: 70, note: 'Mitra Jabodetabek dan pusat distribusi kota.' },
+  { id: 'jawa-barat', label: 'Jawa Barat', province: 'Jawa Barat', island: 'Jawa', x: 42, y: 74, note: 'Bandung, Bekasi, Bogor, Depok, dan koridor Jawa Barat.' },
+  { id: 'banten', label: 'Banten', province: 'Banten', island: 'Jawa', x: 35, y: 70, note: 'Tangerang, Cilegon, BSD, dan area penyangga Jabodetabek.' },
+  { id: 'jawa-tengah', label: 'Jawa Tengah', province: 'Jawa Tengah', island: 'Jawa', x: 51, y: 77, note: 'Semarang, Solo, Banjarnegara, dan area Jawa Tengah.' },
+  { id: 'diy', label: 'DIY', province: 'DIY', island: 'Jawa', x: 56, y: 82, note: 'Mitra Yogyakarta dan sekitarnya.' },
+  { id: 'jawa-timur', label: 'Jawa Timur', province: 'Jawa Timur', island: 'Jawa', x: 66, y: 78, note: 'Surabaya, Sidoarjo, Malang, Gresik, Jember, dan Mojokerto.' },
+  { id: 'bali', label: 'Bali', province: 'Bali', island: 'Bali-Nusa Tenggara', x: 73, y: 82, note: 'Mitra Bali dan area horeca/retail sehat.' },
+  { id: 'ntb', label: 'NTB', province: 'Nusa Tenggara Barat', island: 'Bali-Nusa Tenggara', x: 78, y: 83, note: 'Mitra Nusa Tenggara Barat.' },
+  { id: 'kalimantan-timur', label: 'Kaltim', province: 'Kalimantan Timur', island: 'Kalimantan', x: 55, y: 38, note: 'Balikpapan, Samarinda, Kutai Kartanegara, dan IKN.' },
+  { id: 'kalimantan-selatan', label: 'Kalsel', province: 'Kalimantan Selatan', island: 'Kalimantan', x: 51, y: 55, note: 'Mitra Kalimantan Selatan.' },
+  { id: 'sulawesi-selatan', label: 'Sulsel', province: 'Sulawesi Selatan', island: 'Sulawesi', x: 74, y: 60, note: 'Mitra Indonesia timur via Makassar.' },
+  { id: 'area-belum-diisi', label: 'Belum Diisi', province: 'Area belum diisi', island: 'Data perlu dilengkapi', x: 86, y: 27, note: 'Mitra asli yang data kota/provinsinya belum lengkap. Lengkapi profil agar marker pindah ke wilayah sebenarnya.' },
 ];
 
+function isRealPartner(partner: AppState['partners'][number]) {
+  return partner.partnerCode?.startsWith('MWB-');
+}
+function tierCode(state: AppState, tierId: string) {
+  return state.tiers.find((tier) => tier.id === tierId)?.code ?? 'RESELLER';
+}
+function tierSummary(state: AppState, partners: AppState['partners']) {
+  return state.tiers.map((tier) => ({ tier, count: partners.filter((partner) => partner.tierId === tier.id).length }));
+}
+function areaForPartner(partner: AppState['partners'][number]) {
+  return areaPoints.find((point) => point.province === partner.province) ?? areaPoints.find((point) => point.id === 'area-belum-diisi')!;
+}
+
 function PartnerAreas({ state, user }: { state: AppState; user: User }) {
-  const visiblePartners = user.role === 'partner' ? state.partners.filter((partner) => partner.userId === user.id) : state.partners;
-  const [selectedId, setSelectedId] = useState(() => visiblePartners[0] ? areaPoints.find((point) => point.province === visiblePartners[0].province)?.id ?? 'jawa-barat' : 'jawa-barat');
+  const realPartners = state.partners.filter(isRealPartner);
+  const visiblePartners = user.role === 'partner' ? realPartners.filter((partner) => partner.userId === user.id) : realPartners;
+  const firstArea = visiblePartners[0] ? areaForPartner(visiblePartners[0]).id : 'jawa-barat';
+  const [selectedId, setSelectedId] = useState(firstArea);
   const selected = areaPoints.find((point) => point.id === selectedId) ?? areaPoints[0];
-  const partnersInArea = visiblePartners.filter((partner) => partner.province === selected.province);
+  const partnersInArea = visiblePartners.filter((partner) => areaForPartner(partner).id === selected.id);
   const activePartners = visiblePartners.filter((partner) => partner.status === 'active').length;
-  const coveredProvinces = new Set(visiblePartners.map((partner) => partner.province)).size;
-  const islands = areaPoints.reduce<Record<string, number>>((acc, point) => {
-    const count = visiblePartners.filter((partner) => partner.province === point.province).length;
-    acc[point.island] = (acc[point.island] ?? 0) + count;
-    return acc;
-  }, {});
-  const tierClassForArea = (province: string) => {
-    const partners = visiblePartners.filter((partner) => partner.province === province);
+  const coveredAreas = new Set(visiblePartners.map((partner) => areaForPartner(partner).province).filter((province) => province !== 'Area belum diisi')).size;
+  const summary = tierSummary(state, visiblePartners);
+  const tierClassForArea = (point: AreaPoint) => {
+    const partners = visiblePartners.filter((partner) => areaForPartner(partner).id === point.id);
     if (!partners.length) return 'tier-empty';
-    if (partners.some((partner) => state.tiers.find((tier) => tier.id === partner.tierId)?.code === 'DISTRIBUTOR')) return 'tier-distributor';
-    if (partners.some((partner) => state.tiers.find((tier) => tier.id === partner.tierId)?.code === 'AGEN')) return 'tier-agen';
+    if (partners.some((partner) => tierCode(state, partner.tierId) === 'DISTRIBUTOR')) return 'tier-distributor';
+    if (partners.some((partner) => tierCode(state, partner.tierId) === 'AGEN')) return 'tier-agen';
     return 'tier-reseller';
   };
 
   return <div className="area-layout">
     <div className="card area-map-card">
-      <div className="area-head"><div><h3>Peta Sebaran Wilayah</h3><p>Tap marker untuk melihat mitra per provinsi. Warna marker makin solid jika area sudah punya mitra aktif.</p></div><span className="area-pill">{visiblePartners.length} Mitra</span></div>
+      <div className="area-head"><div><h3>Peta Sebaran Wilayah</h3><p>Data diambil dari database mitra asli Wahyu Beef. Mitra dummy tidak ditampilkan.</p></div><span className="area-pill">{visiblePartners.length} Mitra</span></div>
       <div className={`indonesia-map map-focus-${selected.id}`} aria-label="Peta sebaran mitra Indonesia">
         <img className="map-image" src="/assets/peta-indonesia-wb.png" alt="Peta Indonesia Wahyu Beef" />
         {areaPoints.map((point) => {
-          const count = visiblePartners.filter((partner) => partner.province === point.province).length;
-          const tierClass = tierClassForArea(point.province);
+          const count = visiblePartners.filter((partner) => areaForPartner(partner).id === point.id).length;
+          const tierClass = tierClassForArea(point);
           return <button key={point.id} className={`map-marker ${selected.id === point.id ? 'active' : ''} ${count ? 'has-partners' : 'empty'} ${tierClass}`} style={{ left: `${point.x}%`, top: `${point.y}%` }} onClick={() => setSelectedId(point.id)} title={`${point.label}: ${count} mitra`}>
             <span className="pin-dot" />
             <span className="pin-count">{count}</span>
@@ -401,7 +478,7 @@ function PartnerAreas({ state, user }: { state: AppState; user: User }) {
     <div className="grid area-side">
       <div className="grid cols-3 area-stats">
         <Metric label="Mitra Aktif" value={String(activePartners)} />
-        <Metric label="Provinsi Tercover" value={String(coveredProvinces)} />
+        <Metric label="Area Tercover" value={String(coveredAreas)} />
         <Metric label="Area Dipilih" value={String(partnersInArea.length)} />
       </div>
       <div className="card selected-area-card">
@@ -409,9 +486,9 @@ function PartnerAreas({ state, user }: { state: AppState; user: User }) {
         {partnersInArea.length ? <div className="partner-area-list">{partnersInArea.map((partner) => <div className="partner-area-item" key={partner.id}>
           <div><b>{partner.businessName}</b><br /><small>{partner.partnerCode} • {tierName(state, partner.tierId)}</small></div>
           <div><span className={`status ${partner.status === 'active' ? 'delivered' : 'cancelled'}`}>{partner.status}</span><br /><small>{partner.city} • {partner.phone}</small></div>
-        </div>)}</div> : <div className="notice warning">Belum ada mitra aktif di area ini. Cocok dijadikan target ekspansi berikutnya.</div>}
+        </div>)}</div> : <div className="notice warning">Belum ada mitra asli di area ini.</div>}
       </div>
-      <div className="card island-summary"><h3>Ringkasan Pulau</h3>{Object.entries(islands).map(([island, count]) => <button key={island} className="island-row" onClick={() => { const first = areaPoints.find((point) => point.island === island); if (first) setSelectedId(first.id); }}><span>{island}</span><b>{count}</b></button>)}</div>
+      <div className="card tier-summary"><h3>Rekap Jumlah Mitra</h3>{summary.map(({ tier, count }) => <button key={tier.id} className={`tier-summary-row tier-${tier.code.toLowerCase()}`} onClick={() => { const first = visiblePartners.find((partner) => partner.tierId === tier.id); if (first) setSelectedId(areaForPartner(first).id); }}><span>{tier.name}</span><b>{count}</b></button>)}<p className="footer-note">Total dihitung dari database mitra asli yang aktif di app.</p></div>
     </div>
   </div>;
 }
@@ -519,8 +596,12 @@ function ProfileSettings({ state, user, token, setUser, setState }: { state: App
 
 function initials(name: string) { return name.split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part[0]?.toUpperCase()).join('') || 'M'; }
 
-function Products({ state }: { state: AppState }) { return <div className="card products-catalog-card"><div className="products-catalog-head"><div><h3>Produk Frozen Food</h3><p className="footer-note">Katalog produk aktif dalam tampilan grid agar lebih enak dibaca di mobile.</p></div><span className="area-pill">{state.products.length} Produk</span></div><div className="admin-product-grid">{state.products.map((p) => <article className="admin-product-card" key={p.id}><div className={`admin-product-visual ${p.imageUrl ? 'has-photo' : ''}`}>{p.imageUrl ? <img src={p.imageUrl} alt={p.name} loading="lazy" /> : <span>WB</span>}</div><div className="admin-product-body"><div className="admin-product-kicker">{p.sku}</div><h4>{p.name}</h4><p>{p.description}</p><div className="admin-product-meta"><span>{state.categories.find((c) => c.id === p.categoryId)?.name}</span><span>MOQ {p.minimumOrderQty} {p.unit}</span></div><span className="status delivered">Aktif</span></div></article>)}</div></div>; }
-function Partners({ state }: { state: AppState }) { return <div className="card mobile-card-table"><h3>Data Mitra</h3><div className="table-wrap responsive-table"><table><thead><tr><th>Kode</th><th>Nama Bisnis</th><th>Tier</th><th>Kontak</th><th>Termin</th><th>Status</th></tr></thead><tbody>{state.partners.map((p) => <tr key={p.id}><td data-label="Kode">{p.partnerCode}</td><td data-label="Nama Bisnis"><b>{p.businessName}</b><br /><small>{p.address}</small></td><td data-label="Tier">{tierName(state, p.tierId)}</td><td data-label="Kontak">{p.contactPerson}<br /><small>{p.phone}</small></td><td data-label="Termin">{p.paymentTermDays} hari</td><td data-label="Status"><span className={`status ${p.status === 'active' ? 'delivered' : 'cancelled'}`}>{p.status}</span></td></tr>)}</tbody></table></div></div>; }
+function Products({ state }: { state: AppState }) {
+  const groups = productsByCategory(state, state.products);
+  return <div className="card products-catalog-card"><div className="products-catalog-head"><div><h3>Produk Frozen Food</h3><p className="footer-note">Katalog produk dirapikan per kategori sesuai PDF: Daging Sapi, Tulang Sapi, Jeroan Sapi, Olahan Daging, dan Seafood Series.</p></div><span className="area-pill">{state.products.length} Produk</span></div><div className="admin-category-stack">{groups.map(({ category, products }) => <section className="admin-category-section" key={category.id}><div className="category-section-head"><div><span>Kategori Produk</span><h3>{category.name}</h3></div><b>{products.length} Produk</b></div><div className="admin-product-grid">{products.map((p) => <article className="admin-product-card" key={p.id}><div className={`admin-product-visual ${p.imageUrl ? 'has-photo' : ''}`}>{p.imageUrl ? <img src={p.imageUrl} alt={p.name} loading="lazy" /> : <span>WB</span>}</div><div className="admin-product-body"><div className="admin-product-kicker">{p.sku}</div><h4>{p.name}</h4><p>{p.description}</p><div className="admin-product-meta"><span>{categoryName(state, p.categoryId)}</span><span>MOQ {p.minimumOrderQty} {p.unit}</span></div><span className="status delivered">Aktif</span></div></article>)}</div></section>)}</div></div>;
+}
+
+function Partners({ state }: { state: AppState }) { const partners = state.partners.filter(isRealPartner); return <div className="card mobile-card-table"><h3>Data Mitra</h3><p className="footer-note">Menampilkan database mitra asli Wahyu Beef. Mitra dummy sudah dihapus dari data live.</p><div className="table-wrap responsive-table"><table><thead><tr><th>Kode</th><th>Nama Bisnis</th><th>Tier</th><th>Kontak</th><th>Area</th><th>Termin</th><th>Status</th></tr></thead><tbody>{partners.map((p) => <tr key={p.id}><td data-label="Kode">{p.partnerCode}</td><td data-label="Nama Bisnis"><b>{p.businessName}</b><br /><small>{p.address}</small></td><td data-label="Tier">{tierName(state, p.tierId)}</td><td data-label="Kontak">{p.contactPerson}<br /><small>{p.phone}</small></td><td data-label="Area">{p.city}<br /><small>{p.province || '-'}</small></td><td data-label="Termin">{p.paymentTermDays} hari</td><td data-label="Status"><span className={`status ${p.status === 'active' ? 'delivered' : 'cancelled'}`}>{p.status}</span></td></tr>)}</tbody></table></div></div>; }
 function Pricing({ state }: { state: AppState }) { return <div className="card mobile-card-table"><h3>Harga Produk per Tier</h3><div className="table-wrap responsive-table"><table><thead><tr><th>Produk</th>{state.tiers.map((t) => <th key={t.id}>{t.name}</th>)}</tr></thead><tbody>{state.products.map((p) => <tr key={p.id}><td data-label="Produk"><b>{p.name}</b><br /><small>{p.sku}</small></td>{state.tiers.map((t) => <td data-label={t.name} key={t.id}>{formatIdr(state.prices.find((price) => price.productId === p.id && price.tierId === t.id)?.price ?? 0)}</td>)}</tr>)}</tbody></table></div></div>; }
 
 function Documents({ state, user, token, refresh }: { state: AppState; user: User; token: string; refresh: () => Promise<void> }) {
@@ -530,11 +611,14 @@ function Documents({ state, user, token, refresh }: { state: AppState; user: Use
   return <div className="grid"><div className="card documents-card"><h3>Generate & Print Dokumen</h3><div className="table-wrap documents-table"><table><thead><tr><th>Order</th><th>Mitra</th><th>Invoice</th><th>Surat Jalan</th><th>Aksi</th></tr></thead><tbody>{orders.map((order) => { const inv = state.invoices.find((i) => i.orderId === order.id && i.status !== 'void'); const dn = state.deliveryNotes.find((d) => d.orderId === order.id && d.status !== 'void'); return <tr key={order.id}><td data-label="Order"><b>{order.orderNumber}</b><br /><span className={`status ${order.status}`}>{statusLabels[order.status]}</span></td><td data-label="Mitra">{partnerName(state, order.partnerId)}</td><td data-label="Invoice">{inv ? <button className="btn small" onClick={() => setDoc({ type: 'invoice', invoice: inv })}>{inv.invoiceNumber}</button> : '-'}</td><td data-label="Surat Jalan">{dn ? <button className="btn small" onClick={() => setDoc({ type: 'dn', deliveryNote: dn })}>{dn.deliveryNoteNumber}</button> : '-'}</td><td data-label="Aksi"><div className="actions">{user.role !== 'partner' && <><button className="btn small" onClick={async () => { await api.createInvoice(token, order.id); await refresh(); }}>Generate Invoice</button><button className="btn small" onClick={async () => { await api.createDeliveryNote(token, order.id, { driverName: 'Driver Demo', vehicleNumber: 'B 1234 XYZ' }); await refresh(); }}>Generate SJ</button>{inv && inv.amountDue > 0 && <button className="btn small success" onClick={async () => { await api.recordPayment(token, inv.id, { amount: Math.min(500000, inv.amountDue), method: 'bank_transfer', referenceNumber: 'PAY-DEMO' }); await refresh(); }}>Catat Bayar</button>}</>}</div></td></tr>; })}</tbody></table></div></div>{doc && <DocumentModal state={state} doc={doc} onClose={() => setDoc(null)} />}</div>;
 }
 
-function DocumentModal({ state, doc, onClose }: { state: AppState; doc: { type: 'invoice'; invoice: Invoice } | { type: 'dn'; deliveryNote: DeliveryNote }; onClose: () => void }) { const order = state.orders.find((o) => o.id === (doc.type === 'invoice' ? doc.invoice.orderId : doc.deliveryNote.orderId))!; return <div className="modal-backdrop"><div className="modal"><div className="actions no-print" style={{ justifyContent: 'flex-end' }}><button className="btn" onClick={() => window.print()}>Print / PDF</button><button className="btn" onClick={onClose}>Tutup</button></div>{doc.type === 'invoice' ? <InvoiceDocument state={state} invoice={doc.invoice} order={order} /> : <DeliveryDocument state={state} deliveryNote={doc.deliveryNote} order={order} />}</div></div>; }
+function DocumentModal({ state, doc, onClose }: { state: AppState; doc: { type: 'invoice'; invoice: Invoice } | { type: 'dn'; deliveryNote: DeliveryNote }; onClose: () => void }) { const order = state.orders.find((o) => o.id === (doc.type === 'invoice' ? doc.invoice.orderId : doc.deliveryNote.orderId))!; return <div className="modal-backdrop print-backdrop"><div className="modal print-modal"><div className="actions no-print" style={{ justifyContent: 'flex-end' }}><button className="btn" onClick={() => window.print()}>Print / PDF</button><button className="btn" onClick={onClose}>Tutup</button></div>{doc.type === 'invoice' ? <InvoiceDocument state={state} invoice={doc.invoice} order={order} /> : <DeliveryDocument state={state} deliveryNote={doc.deliveryNote} order={order} />}</div></div>; }
 
-function DocumentOrder({ state, order }: { state: AppState; order: Order }) { return <div className="document"><div className="doc-head"><div><h2>Detail Order</h2><b>{order.orderNumber}</b></div><div><span className={`status ${order.status}`}>{statusLabels[order.status]}</span></div></div><div className="kv"><b>Mitra</b><span>{partnerName(state, order.partnerId)}</span><b>Alamat</b><span>{order.shippingAddress}</span><b>Tanggal</b><span>{new Date(order.orderDate).toLocaleString('id-ID')}</span><b>Ongkir</b><span>{formatIdr(order.shippingCost ?? 0)}</span><b>Packing</b><span>{packingLabel(order.packingType)} • {formatIdr(order.packingFee ?? 0)}</span><b>No Resi</b><span>{order.trackingNumber ?? '-'}</span>{order.trackingReceiptUrl && <><b>Tracking / Resi</b><span><a href={order.trackingReceiptUrl} target="_blank" rel="noreferrer">Lihat resi / tracking</a></span></>}</div><LineItems order={order} />{(order.shippingCost || order.packingFee) ? <div className="kv" style={{ marginTop: 18 }}><b>Subtotal Produk</b><span>{formatIdr(order.subtotal)}</span><b>Tambahan Ongkir + Packing</b><span>{formatIdr((order.shippingCost ?? 0) + (order.packingFee ?? 0))}</span><b>Total Tagihan</b><span><b>{formatIdr(order.grandTotal)}</b></span></div> : null}</div>; }
-function InvoiceDocument({ state, invoice, order }: { state: AppState; invoice: Invoice; order: Order }) { return <div className="document"><div className="doc-head"><div><h2>INVOICE</h2><b>{invoice.invoiceNumber}</b></div><div><b>{partnerName(state, invoice.partnerId)}</b><br />Tanggal: {invoice.invoiceDate}<br />Jatuh tempo: {invoice.dueDate}</div></div><LineItems order={order} /><div className="kv"><b>Subtotal Produk</b><span>{formatIdr(order.subtotal)}</span><b>Ongkir</b><span>{formatIdr(order.shippingCost ?? 0)}</span><b>Packing</b><span>{packingLabel(order.packingType)} • {formatIdr(order.packingFee ?? 0)}</span><b>Total</b><span>{formatIdr(invoice.grandTotal)}</span><b>Dibayar</b><span>{formatIdr(invoice.amountPaid)}</span><b>Sisa</b><span>{formatIdr(invoice.amountDue)}</span><b>Status</b><span>{invoice.status}</span></div><p className="footer-note">Invoice berasal dari snapshot order; invoice issued tidak diedit langsung tanpa void/revisi.</p></div>; }
-function DeliveryDocument({ state, deliveryNote, order }: { state: AppState; deliveryNote: DeliveryNote; order: Order }) { return <div className="document"><div className="doc-head"><div><h2>SURAT JALAN</h2><b>{deliveryNote.deliveryNoteNumber}</b></div><div><b>{partnerName(state, order.partnerId)}</b><br />Tanggal: {deliveryNote.deliveryDate}<br />Driver: {deliveryNote.driverName ?? '-'}</div></div><LineItems order={order} showPrice={false} /><div className="grid cols-2" style={{ marginTop: 28 }}><div>Pengirim<br /><br /><br />(................)</div><div>Penerima<br /><br /><br />(................)</div></div></div>; }
+function DocumentOrder({ state, order }: { state: AppState; order: Order }) { return <div className="document"><div className="doc-head"><div><h2>Detail Order</h2><b>{order.orderNumber}</b></div><div><span className={`status ${order.status}`}>{statusLabels[order.status]}</span></div></div><div className="kv"><b>Mitra</b><span>{partnerName(state, order.partnerId)}</span><b>Alamat</b><span>{order.shippingAddress}</span><b>Tanggal</b><span>{new Date(order.orderDate).toLocaleString('id-ID')}</span><b>Ongkir</b><span>{formatIdr(order.shippingCost ?? 0)}</span><b>Packing</b><span>{packingSummary(order)} • {formatIdr(order.packingFee ?? 0)}</span><b>No Resi</b><span>{order.trackingNumber ?? '-'}</span>{order.trackingReceiptUrl && <><b>Tracking / Resi</b><span><a href={order.trackingReceiptUrl} target="_blank" rel="noreferrer">Lihat resi / tracking</a></span></>}</div><LineItems order={order} />{(order.shippingCost || order.packingFee) ? <div className="kv" style={{ marginTop: 18 }}><b>Subtotal Produk</b><span>{formatIdr(order.subtotal)}</span><b>Tambahan Ongkir + Packing</b><span>{formatIdr((order.shippingCost ?? 0) + (order.packingFee ?? 0))}</span><b>Total Tagihan</b><span><b>{formatIdr(order.grandTotal)}</b></span></div> : null}</div>; }
+function InvoiceDocument({ state, invoice, order }: { state: AppState; invoice: Invoice; order: Order }) { const partner = state.partners.find((item) => item.id === invoice.partnerId); return <div className="document a4-document invoice-document"><DocHeader title="INVOICE" number={invoice.invoiceNumber} /><div className="doc-meta-grid"><div><span>Ditagihkan Kepada</span><b>{partner?.businessName ?? partnerName(state, invoice.partnerId)}</b><p>{partner?.address ?? order.shippingAddress}<br />{partner?.city ?? '-'}{partner?.province ? `, ${partner.province}` : ''}<br />PIC: {partner?.contactPerson ?? '-'} • {partner?.phone ?? '-'}</p></div><div><span>Tanggal Invoice</span><b>{invoice.invoiceDate}</b><span>Jatuh Tempo</span><b>{invoice.dueDate}</b><span>Status</span><b>{invoice.status}</b></div></div><LineItems order={order} /><div className="doc-total-box"><div><span>Subtotal Produk</span><b>{formatIdr(order.subtotal)}</b></div><div><span>Ongkir</span><b>{formatIdr(order.shippingCost ?? 0)}</b></div><div><span>Packing</span><b>{packingSummary(order)} • {formatIdr(order.packingFee ?? 0)}</b></div><div className="grand"><span>Total Invoice</span><b>{formatIdr(invoice.grandTotal)}</b></div><div><span>Dibayar</span><b>{formatIdr(invoice.amountPaid)}</b></div><div><span>Sisa Tagihan</span><b>{formatIdr(invoice.amountDue)}</b></div></div><DocFooter /></div>; }
+function DeliveryDocument({ state, deliveryNote, order }: { state: AppState; deliveryNote: DeliveryNote; order: Order }) { const partner = state.partners.find((item) => item.id === order.partnerId); return <div className="document a4-document delivery-document"><DocHeader title="SURAT JALAN" number={deliveryNote.deliveryNoteNumber} /><div className="doc-meta-grid"><div><span>Dikirim Kepada</span><b>{partner?.businessName ?? partnerName(state, order.partnerId)}</b><p>{order.shippingAddress}<br />PIC: {partner?.contactPerson ?? '-'} • {partner?.phone ?? '-'}</p></div><div><span>Tanggal Kirim</span><b>{deliveryNote.deliveryDate}</b><span>No Order</span><b>{order.orderNumber}</b><span>Driver / Kendaraan</span><b>{deliveryNote.driverName ?? '-'} / {deliveryNote.vehicleNumber ?? '-'}</b></div></div><LineItems order={order} showPrice={false} /><div className="doc-signatures"><div><span>Pengirim</span><i>(........................)</i></div><div><span>Kurir</span><i>(........................)</i></div><div><span>Penerima</span><i>(........................)</i></div></div><DocFooter /></div>; }
+
+function DocHeader({ title, number }: { title: string; number: string }) { return <div className="doc-brand-head"><div className="doc-brand"><img src="/assets/logo-wahyu-beef.png" alt="Wahyu Beef" /><div><b>Wahyu Beef</b><span>Frozen Food & Meat Supplier</span></div></div><div className="doc-title"><h2>{title}</h2><b>{number}</b></div></div>; }
+function DocFooter() { return <div className="doc-footer"><b>Wahyu Beef</b><span>Dokumen dicetak otomatis dari Mitra App Wahyu Beef.</span></div>; }
 function LineItems({ order, showPrice = true }: { order: Order; showPrice?: boolean }) { return <div className="table-wrap" style={{ marginTop: 18 }}><table><thead><tr><th>SKU</th><th>Produk</th><th>Qty</th>{showPrice && <><th>Harga</th><th>Total</th></>}</tr></thead><tbody>{order.items.map((item) => <tr key={item.id}><td>{item.skuSnapshot}</td><td>{item.productNameSnapshot}<br /><small>{item.tierNameSnapshot}</small>{item.notes && <div className="line-item-note"><b>Catatan:</b> {item.notes}</div>}</td><td>{item.qty} {item.unitSnapshot}</td>{showPrice && <><td>{formatIdr(item.unitPrice)}</td><td>{formatIdr(item.lineTotal)}</td></>}</tr>)}</tbody></table></div>; }
 
 function Leaderboard({ state }: { state: AppState }) { return <div className="card mobile-card-table"><h3>Leaderboard Bulan Berjalan</h3><div className="table-wrap responsive-table"><table><thead><tr><th>Rank</th><th>Mitra</th><th>Tier</th><th>Delivered GMV</th><th>Total Qty</th><th>Order</th><th>Poin</th></tr></thead><tbody>{getLeaderboard(state).map((row) => <tr key={row.partnerId}><td data-label="Rank"><b>#{row.rank}</b></td><td data-label="Mitra">{row.partnerName}</td><td data-label="Tier">{row.tier}</td><td data-label="Delivered GMV">{formatIdr(row.totalOrderValue)}</td><td data-label="Total Qty">{row.totalOrderQty}</td><td data-label="Order">{row.totalOrders}</td><td data-label="Poin"><b>{row.points}</b></td></tr>)}</tbody></table></div><p className="footer-note">Hanya order delivered yang dihitung agar ranking tidak dimanipulasi dari pending/cancelled.</p></div>; }

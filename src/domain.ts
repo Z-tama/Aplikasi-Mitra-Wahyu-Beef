@@ -114,6 +114,7 @@ export interface Order {
   shippingCost?: number;
   packingFee?: number;
   packingType?: 'none' | 'small_styrofoam' | 'medium_styrofoam' | 'large_styrofoam';
+  packingQuantity?: number;
   trackingNumber?: string;
   trackingReceiptUrl?: string;
   notes?: string;

@@ -57,8 +57,16 @@ export const api = {
   updateOrderStatus(token: string, orderId: string, status: OrderStatus, note?: string) {
     return request(`/orders/${orderId}/status`, { method: 'PATCH', body: JSON.stringify({ status, note }) }, token);
   },
-  updateOrderShipping(token: string, orderId: string, input: { shippingCost?: number; packingFee?: number; packingType?: 'none' | 'small_styrofoam' | 'medium_styrofoam' | 'large_styrofoam'; trackingNumber?: string; trackingReceiptUrl?: string }) {
+  updateOrderShipping(token: string, orderId: string, input: { shippingCost?: number; packingFee?: number; packingType?: 'none' | 'small_styrofoam' | 'medium_styrofoam' | 'large_styrofoam'; packingQuantity?: number; trackingNumber?: string; trackingReceiptUrl?: string }) {
     return request(`/orders/${orderId}/shipping`, { method: 'PATCH', body: JSON.stringify(input) }, token);
+  },
+  uploadTrackingReceipt(_token: string, file: File) {
+    return new Promise<{ trackingReceiptUrl: string }>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onerror = () => reject(new Error('File resi gagal dibaca.'));
+      reader.onload = () => resolve({ trackingReceiptUrl: String(reader.result) });
+      reader.readAsDataURL(file);
+    });
   },
   createInvoice(token: string, orderId: string) {
     return request(`/orders/${orderId}/invoices`, { method: 'POST', body: JSON.stringify({}) }, token);

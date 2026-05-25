@@ -79,8 +79,8 @@ export function createSeedState(): AppState {
   const categories: ProductCategory[] = [
     { id: 'cat-daging-sapi', name: 'Daging Sapi', slug: 'daging-sapi', isActive: true },
     { id: 'cat-tulang-sapi', name: 'Tulang Sapi', slug: 'tulang-sapi', isActive: true },
-    { id: 'cat-jerohan-sapi', name: 'Jerohan Sapi', slug: 'jerohan-sapi', isActive: true },
-    { id: 'cat-processed-meat', name: 'Processed Meat', slug: 'processed-meat', isActive: true },
+    { id: 'cat-jerohan-sapi', name: 'Jeroan Sapi', slug: 'jeroan-sapi', isActive: true },
+    { id: 'cat-processed-meat', name: 'Olahan Daging', slug: 'olahan-daging', isActive: true },
     { id: 'cat-seafood-series', name: 'Seafood Series', slug: 'seafood-series', isActive: true },
   ];
 
