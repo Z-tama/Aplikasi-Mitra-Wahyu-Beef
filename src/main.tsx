@@ -59,7 +59,7 @@ function Login({ state, onLogin, onRegister }: { state: AppState; onLogin: (sess
       <div className="hero-panel wb-css-hero">
         <img className="wb-css-logo" src="/assets/logo-wahyu-beef.png" alt="Logo Wahyu Beef" />
         <p className="wb-script-title">Sukses Berjamaah</p>
-        <h1>Bersinergi Bersama</h1>
+        <h1><span>Bersinergi</span><span>Bersama</span></h1>
         <p className="wb-social">@wahyubeef.id</p>
         <span className="wb-join-button">Join Now!</span>
       </div>
@@ -106,7 +106,7 @@ function PartnerRegistration({ onBack }: { onBack: () => void }) {
       <div className="registration-hero wb-css-hero">
         <img className="wb-css-logo" src="/assets/logo-wahyu-beef.png" alt="Logo Wahyu Beef" />
         <p className="wb-script-title">Sukses Berjamaah</p>
-        <h1>Bersinergi Bersama</h1>
+        <h1><span>Bersinergi</span><span>Bersama</span></h1>
         <p className="wb-social">@wahyubeef.id</p>
         <span className="wb-join-button">Daftar Mitra</span>
       </div>
