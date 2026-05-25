@@ -248,6 +248,7 @@ function hashPassword(password: string) {
 const knownPasswordHashes: Record<string, string> = {
   password: '5e884898da28047151d0e56f8dc6292773603d0d6aabbdd62a11ef721d1542d8',
   mitrawahyubeef: '2862ae49e05e2b5c76d20d348bf41d4ac203b01dce9dca6ce6302272a6554832',
+  wahyubeef: '62e005f8eedafada91e509c342ffaefb1c06ec79484610d10189b30e418a626c',
 };
 
 function verifyPassword(user: User, password: string, env?: Env) {
