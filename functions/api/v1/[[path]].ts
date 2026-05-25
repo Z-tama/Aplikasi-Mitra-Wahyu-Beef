@@ -4,6 +4,7 @@ import type { OrderStatus, Payment, Role, User } from '../../../src/domain';
 
 interface Env {
   AUTH_SECRET?: string;
+  ALLOW_DEMO_LOGIN?: string;
   DB?: D1Database;
 }
 
@@ -31,7 +32,7 @@ export const onRequest = async ({ request, env }: PagesHandlerContext) => {
 
     if (method === 'POST' && path === '/auth/login') {
       const body = await readJson<{ identifier: string; password: string }>(request);
-      return respond(login(await loadState(env), body.identifier, body.password, env.AUTH_SECRET), 200);
+      return respond(login(await loadState(env), body.identifier, body.password, env), 200);
     }
 
     if (method === 'POST' && path === '/partner-registrations') {
@@ -208,12 +209,12 @@ function respond(data: unknown, status = 200) {
   });
 }
 
-function login(currentState: AppState, identifier: string, password: string, secret?: string) {
+function login(currentState: AppState, identifier: string, password: string, env?: Env) {
   const normalizedIdentifier = normalizeIdentifier(identifier);
   const user = currentState.users.find((item) => item.email.toLowerCase() === normalizedIdentifier || normalizePhone(item.phone) === normalizedIdentifier);
-  if (!user || !verifyPassword(user, password)) throw httpError(401, 'Kredensial tidak valid');
+  if (!user || !verifyPassword(user, password, env)) throw httpError(401, 'Kredensial tidak valid');
   if (user.status !== 'active') throw httpError(403, 'User tidak aktif');
-  return { token: signToken(user.id, secret), user };
+  return { token: signToken(user.id, env?.AUTH_SECRET), user };
 }
 
 function authenticate(currentState: AppState, authorization?: string, secret?: string): User {
@@ -249,10 +250,11 @@ const knownPasswordHashes: Record<string, string> = {
   mitrawahyubeef: '2862ae49e05e2b5c76d20d348bf41d4ac203b01dce9dca6ce6302272a6554832',
 };
 
-function verifyPassword(user: User, password: string) {
-  if (user.passwordHash?.startsWith('demo-hash:')) return user.passwordHash === hashPassword(password);
+function verifyPassword(user: User, password: string, env?: Env) {
+  const allowDemoLogin = env?.ALLOW_DEMO_LOGIN === 'true';
+  if (user.passwordHash?.startsWith('demo-hash:')) return allowDemoLogin && user.passwordHash === hashPassword(password);
   if (user.passwordHash) return knownPasswordHashes[password] === user.passwordHash;
-  const fallback = defaultPasswordForUser(user);
+  const fallback = allowDemoLogin ? defaultPasswordForUser(user) : undefined;
   return Boolean(fallback) && fallback === password;
 }
 
