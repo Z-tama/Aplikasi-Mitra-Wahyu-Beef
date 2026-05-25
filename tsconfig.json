@@ -16,9 +16,9 @@
     "isolatedModules": true,
     "noEmit": true,
     "jsx": "react-jsx",
-    "types": ["react", "react-dom"]
+    "types": ["react", "react-dom", "node"]
   },
-  "include": ["src"],
+  "include": ["src", "functions"],
   "exclude": ["src/**/*.test.ts", "src/server/**/*.ts"],
   "references": []
 }
