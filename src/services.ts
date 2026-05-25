@@ -1,5 +1,6 @@
-import { AppState } from './seed';
-import { AccountingEvent, CartItem, DeliveryNote, Invoice, Order, OrderItem, OrderStatus, Payment, User, canTransition, todayIso } from './domain';
+import type { AppState } from './seed.ts';
+import { canTransition, todayIso } from './domain.ts';
+import type { AccountingEvent, CartItem, DeliveryNote, Invoice, Order, OrderItem, OrderStatus, Payment, User } from './domain.ts';
 
 export function findPartnerForUser(state: AppState, user: User) {
   return state.partners.find((partner) => partner.userId === user.id);
@@ -40,20 +41,26 @@ export function calculateOrder(state: AppState, partnerId: string, cartItems: Ca
     if (cart.qty < product.minimumOrderQty) throw new Error(`${product.name} minimal order ${product.minimumOrderQty}`);
     const tierPrice = state.prices.find((item) => item.productId === product.id && item.tierId === partner.tierId && item.isActive);
     if (!tierPrice) throw new Error(`Harga tier untuk ${product.name} belum diatur`);
-    const lineTotal = cart.qty * tierPrice.price;
+    const packageWeightGram = cart.packageWeightGram;
+    const canUsePackaging = ['cat-daging-sapi', 'cat-tulang-sapi', 'cat-jerohan-sapi'].includes(product.categoryId);
+    const packageRatio = canUsePackaging && packageWeightGram === 250 ? 0.25 : canUsePackaging && packageWeightGram === 500 ? 0.5 : 1;
+    const packageLabel = canUsePackaging && packageWeightGram ? `${packageWeightGram} GR` : product.unit;
+    const unitPrice = Math.round(tierPrice.price * packageRatio);
+    const lineTotal = cart.qty * unitPrice;
     return {
       id: `draft-item-${index + 1}`,
       orderId: 'draft',
       productId: product.id,
       skuSnapshot: product.sku,
-      productNameSnapshot: product.name,
-      unitSnapshot: product.unit,
+      productNameSnapshot: canUsePackaging && packageWeightGram ? `${product.name} ${packageWeightGram} gr` : product.name,
+      unitSnapshot: packageLabel,
       tierIdSnapshot: tier.id,
       tierNameSnapshot: tier.name,
       qty: cart.qty,
-      unitPrice: tierPrice.price,
+      unitPrice,
       discountAmount: 0,
       lineTotal,
+      notes: cart.notes?.trim() || undefined,
     } satisfies OrderItem;
   });
 

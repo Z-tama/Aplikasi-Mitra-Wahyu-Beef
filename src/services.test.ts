@@ -16,12 +16,14 @@ test('tier pricing uses partner tier and snapshots totals', () => {
   assert.equal(calculated.items[0].productNameSnapshot, product.name);
 });
 
-test('checkout creates pending order and accounting event without recognizing revenue', () => {
+test('checkout creates pending order, preserves item notes, and accounting event without recognizing revenue', () => {
   const state = createSeedState();
   const user = state.users.find((item) => item.email === 'agen@mitra.local')!;
   const partner = findPartnerForUser(state, user)!;
-  const order = createOrder(state, user, partner.id, [{ productId: state.products[1].id, qty: 3 }], partner.address);
+  const itemNote = 'Tolong potong kecil dan pilih yang minim lemak';
+  const order = createOrder(state, user, partner.id, [{ productId: state.products[1].id, qty: 3, notes: `  ${itemNote}  ` }], partner.address);
   assert.equal(order.status, 'pending');
+  assert.equal(order.items[0].notes, itemNote);
   assert.equal(state.accountingEvents[0].eventType, 'ORDER_CREATED');
   assert.equal(state.accountingEvents[0].metadata.revenueRecognized, false);
 });

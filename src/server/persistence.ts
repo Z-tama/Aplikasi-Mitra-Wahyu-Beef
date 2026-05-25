@@ -1,7 +1,7 @@
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
-import type { AppState } from '../seed';
-import { createSeedState } from '../seed';
+import type { AppState } from '../seed.ts';
+import { createSeedState } from '../seed.ts';
 
 const DATA_PATH = resolve(process.cwd(), process.env.DATA_FILE ?? 'data/app-state.json');
 let state: AppState | null = null;

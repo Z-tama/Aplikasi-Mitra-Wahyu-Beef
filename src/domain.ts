@@ -22,6 +22,7 @@ export interface User {
   email: string;
   phone?: string;
   avatarUrl?: string;
+  passwordHash?: string;
   role: Role;
   status: UserStatus;
 }
@@ -96,6 +97,7 @@ export interface OrderItem {
   unitPrice: number;
   discountAmount: number;
   lineTotal: number;
+  notes?: string;
 }
 
 export interface Order {
@@ -198,6 +200,9 @@ export interface AccountingEvent {
 export interface CartItem {
   productId: string;
   qty: number;
+  packageWeightGram?: 250 | 500 | 1000;
+  packageLabel?: string;
+  notes?: string;
 }
 
 export const statusLabels: Record<OrderStatus, string> = {

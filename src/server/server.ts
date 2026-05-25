@@ -1,10 +1,10 @@
 import { createServer, IncomingMessage, ServerResponse } from 'node:http';
 import { readFile } from 'node:fs/promises';
 import { extname, join, normalize, resolve } from 'node:path';
-import { authenticate, httpError, login, requireRole } from './auth';
-import { loadState, mutateState } from './persistence';
-import { createDeliveryNote, createInvoice, createOrder, findPartnerForUser, recordPayment, updateOrderStatus } from '../services';
-import type { OrderStatus, Payment } from '../domain';
+import { authenticate, hashPassword, httpError, login, requireRole, verifyPassword } from './auth.ts';
+import { loadState, mutateState } from './persistence.ts';
+import { createDeliveryNote, createInvoice, createOrder, findPartnerForUser, recordPayment, updateOrderStatus } from '../services.ts';
+import type { OrderStatus, Payment } from '../domain.ts';
 
 const PORT = Number(process.env.PORT ?? 3000);
 const DIST_DIR = resolve(process.cwd(), 'dist');
@@ -32,11 +32,59 @@ const handleApi: Handler = async (req, res, url) => {
     return json(res, 200, login(state, body.identifier, body.password));
   }
 
+  if (method === 'POST' && path === '/partner-registrations') {
+    const body = await readJson<Record<string, string>>(req);
+    const result = await mutateState((draft) => {
+      const registration = buildPartnerRegistration(body);
+      draft.partnerRegistrations = [registration, ...(draft.partnerRegistrations ?? [])];
+      draft.auditLogs.unshift({
+        id: `audit-registration-${Date.now()}`,
+        actorUserId: 'public-registration',
+        action: 'PARTNER_REGISTRATION_SUBMITTED',
+        entityType: 'partnerRegistration',
+        entityId: registration.id,
+        newValue: registration,
+        timestamp: registration.submittedAt,
+      });
+      return registration;
+    });
+    return json(res, 201, result);
+  }
+
   const state = await loadState();
   const user = authenticate(state, req.headers.authorization);
 
   if (method === 'GET' && path === '/auth/me') return json(res, 200, { user });
   if (method === 'GET' && path === '/snapshot') return json(res, 200, filteredStateForUser(state, user.id));
+
+  if (method === 'PATCH' && path === '/profile/password') {
+    const body = await readJson<{ currentPassword?: string; newPassword?: string; confirmPassword?: string }>(req);
+    const result = await mutateState((draft) => {
+      const actor = authenticate(draft, req.headers.authorization);
+      if (actor.role !== 'partner') throw httpError(403, 'Hanya akun mitra yang bisa mengganti password di profil');
+      const userRecord = draft.users.find((item) => item.id === actor.id);
+      if (!userRecord) throw httpError(404, 'User tidak ditemukan');
+      const currentPassword = String(body.currentPassword ?? '');
+      const newPassword = String(body.newPassword ?? '');
+      const confirmPassword = String(body.confirmPassword ?? '');
+      if (!verifyPassword(userRecord, currentPassword)) throw httpError(400, 'Password saat ini tidak sesuai');
+      if (newPassword.length < 8) throw httpError(400, 'Password baru minimal 8 karakter');
+      if (newPassword !== confirmPassword) throw httpError(400, 'Konfirmasi password tidak sama');
+      if (verifyPassword(userRecord, newPassword)) throw httpError(400, 'Password baru tidak boleh sama dengan password saat ini');
+      userRecord.passwordHash = hashPassword(newPassword);
+      draft.auditLogs.unshift({
+        id: `audit-password-${Date.now()}`,
+        actorUserId: actor.id,
+        action: 'PARTNER_PASSWORD_UPDATED',
+        entityType: 'user',
+        entityId: actor.id,
+        newValue: { changedByPartner: true },
+        timestamp: new Date().toISOString(),
+      });
+      return { user: userRecord };
+    });
+    return json(res, 200, result);
+  }
 
   if (method === 'PATCH' && path === '/profile') {
     const body = await readJson<{ name?: string; address?: string; phone?: string; avatarUrl?: string }>(req);
@@ -130,6 +178,53 @@ const handleApi: Handler = async (req, res, url) => {
 
   throw httpError(404, 'Endpoint tidak ditemukan');
 };
+
+function buildPartnerRegistration(body: Record<string, string>) {
+  const required = ['businessName', 'ownerName', 'phone', 'province', 'city', 'address'];
+  for (const field of required) {
+    if (!String(body[field] ?? '').trim()) throw httpError(400, 'Data pendaftaran belum lengkap');
+  }
+  const submittedAt = new Date().toISOString();
+  const registration = {
+    id: `reg-${Date.now()}`,
+    businessName: clean(body.businessName),
+    ownerName: clean(body.ownerName),
+    phone: clean(body.phone),
+    email: clean(body.email),
+    province: clean(body.province),
+    city: clean(body.city),
+    address: clean(body.address),
+    businessType: clean(body.businessType),
+    salesChannel: clean(body.salesChannel),
+    currentSales: clean(body.currentSales),
+    interestedTier: clean(body.interestedTier),
+    notes: clean(body.notes),
+    status: 'new' as const,
+    submittedAt,
+    adminWhatsapp: '6282119000195',
+    whatsappMessage: '',
+  };
+  registration.whatsappMessage = [
+    'Pendaftaran Mitra Baru Wahyu Beef',
+    `Nama Usaha: ${registration.businessName}`,
+    `PIC: ${registration.ownerName}`,
+    `WA: ${registration.phone}`,
+    registration.email ? `Email: ${registration.email}` : '',
+    `Lokasi: ${registration.city}, ${registration.province}`,
+    `Alamat: ${registration.address}`,
+    `Jenis Usaha: ${registration.businessType}`,
+    registration.salesChannel ? `Channel: ${registration.salesChannel}` : '',
+    registration.currentSales ? `Estimasi: ${registration.currentSales}` : '',
+    `Minat Tier: ${registration.interestedTier}`,
+    registration.notes ? `Catatan: ${registration.notes}` : '',
+    `Waktu Submit: ${new Date(submittedAt).toLocaleString('id-ID')}`,
+  ].filter(Boolean).join('\n');
+  return registration;
+}
+
+function clean(value?: string) {
+  return String(value ?? '').replace(/\s+/g, ' ').trim();
+}
 
 function filteredStateForUser(state: Awaited<ReturnType<typeof loadState>>, userId: string) {
   const user = state.users.find((item) => item.id === userId)!;

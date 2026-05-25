@@ -32,8 +32,14 @@ export const api = {
   snapshot(token: string) {
     return request<AppState>('/snapshot', {}, token);
   },
+  submitPartnerRegistration(input: Record<string, string>) {
+    return request<{ whatsappMessage: string; adminWhatsapp: string }>('/partner-registrations', { method: 'POST', body: JSON.stringify(input) });
+  },
   updateProfile(token: string, input: { name: string; address: string; phone: string; avatarUrl?: string }) {
     return request<{ user: User; state: AppState }>('/profile', { method: 'PATCH', body: JSON.stringify(input) }, token);
+  },
+  updatePassword(token: string, input: { currentPassword: string; newPassword: string; confirmPassword: string }) {
+    return request<{ user: User }>('/profile/password', { method: 'PATCH', body: JSON.stringify(input) }, token);
   },
   createOrder(token: string, input: { partnerId?: string; shippingAddress: string; notes?: string; items: CartItem[] }) {
     return request('/orders', { method: 'POST', body: JSON.stringify(input) }, token);

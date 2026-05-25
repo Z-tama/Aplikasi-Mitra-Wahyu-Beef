@@ -1,14 +1,15 @@
-import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
-import type { AppState } from '../seed';
-import { demoPasswords } from '../seed';
-import type { Role, User } from '../domain';
+import { createHmac, createHash, randomBytes, timingSafeEqual } from 'node:crypto';
+import type { AppState } from '../seed.ts';
+import { demoPasswords } from '../seed.ts';
+import type { Role, User } from '../domain.ts';
 
 const SECRET = process.env.AUTH_SECRET ?? 'dev-secret-change-me';
 const sessions = new Map<string, string>();
 
 export function login(state: AppState, identifier: string, password: string) {
-  const user = state.users.find((item) => item.email === identifier || item.phone === identifier);
-  if (!user || demoPasswords[user.email] !== password) throw httpError(401, 'Kredensial tidak valid');
+  const normalizedIdentifier = normalizeIdentifier(identifier);
+  const user = state.users.find((item) => item.email.toLowerCase() === normalizedIdentifier || normalizePhone(item.phone) === normalizedIdentifier);
+  if (!user || !verifyPassword(user, password)) throw httpError(401, 'Kredensial tidak valid');
   if (user.status !== 'active') throw httpError(403, 'User tidak aktif');
   const token = signToken(user.id);
   sessions.set(token, user.id);
@@ -50,6 +51,33 @@ function verifyToken(token: string) {
   } catch {
     return false;
   }
+}
+
+export function hashPassword(password: string) {
+  return createHash('sha256').update(password).digest('hex');
+}
+
+export function verifyPassword(user: User, password: string) {
+  if (user.passwordHash) return user.passwordHash === hashPassword(password);
+  const fallback = defaultPasswordForUser(user);
+  return Boolean(fallback) && fallback === password;
+}
+
+function defaultPasswordForUser(user: User) {
+  if (user.email.endsWith('@mitra.wahyubeef.local')) return 'mitrawahyubeef';
+  return demoPasswords[user.email];
+}
+
+function normalizeIdentifier(value: string) {
+  const trimmed = value.trim().toLowerCase();
+  return trimmed.includes('@') ? trimmed : normalizePhone(trimmed);
+}
+
+function normalizePhone(value?: string) {
+  const digits = String(value ?? '').replace(/\D/g, '');
+  if (!digits) return '';
+  if (digits.startsWith('62')) return `0${digits.slice(2)}`;
+  return digits;
 }
 
 export function httpError(status: number, message: string) {

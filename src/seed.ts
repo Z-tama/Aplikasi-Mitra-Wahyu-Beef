@@ -1,5 +1,25 @@
 import type { AccountingEvent, AuditLog, DeliveryNote, Invoice, Order, OrderStatusHistory, Partner, PartnerTier, Payment, Product, ProductCategory, ProductTierPrice, User } from './domain';
 
+export interface PartnerRegistrationSubmission {
+  id: string;
+  businessName: string;
+  ownerName: string;
+  phone: string;
+  email?: string;
+  province: string;
+  city: string;
+  address: string;
+  businessType: string;
+  salesChannel?: string;
+  currentSales?: string;
+  interestedTier: string;
+  notes?: string;
+  status: 'new' | 'contacted' | 'approved' | 'rejected';
+  submittedAt: string;
+  adminWhatsapp: string;
+  whatsappMessage: string;
+}
+
 export interface AppState {
   users: User[];
   tiers: PartnerTier[];
@@ -14,6 +34,7 @@ export interface AppState {
   payments: Payment[];
   auditLogs: AuditLog[];
   accountingEvents: AccountingEvent[];
+  partnerRegistrations?: PartnerRegistrationSubmission[];
 }
 
 export const demoPasswords: Record<string, string> = {
@@ -34,13 +55,13 @@ export function createSeedState(): AppState {
   ];
 
   const users: User[] = [
-    { id: 'u-admin', name: 'Sari Owner', email: 'admin@frozen.local', role: 'super_admin', status: 'active' },
-    { id: 'u-sales', name: 'Raka Sales', email: 'sales@frozen.local', role: 'sales_admin', status: 'active' },
-    { id: 'u-finance', name: 'Maya Finance', email: 'finance@frozen.local', role: 'finance_admin', status: 'active' },
-    { id: 'u-warehouse', name: 'Dimas Warehouse', email: 'warehouse@frozen.local', role: 'warehouse', status: 'active' },
-    { id: 'u-distributor', name: 'Budi Distributor', email: 'distributor@mitra.local', role: 'partner', status: 'active' },
-    { id: 'u-agen', name: 'Nina Agen', email: 'agen@mitra.local', role: 'partner', status: 'active' },
-    { id: 'u-reseller', name: 'Tono Reseller', email: 'reseller@mitra.local', role: 'partner', status: 'active' },
+    { id: 'u-admin', name: 'Sari Owner', email: 'admin@frozen.local', phone: '0800000001', role: 'super_admin', status: 'active' },
+    { id: 'u-sales', name: 'Raka Sales', email: 'sales@frozen.local', phone: '0800000002', role: 'sales_admin', status: 'active' },
+    { id: 'u-finance', name: 'Maya Finance', email: 'finance@frozen.local', phone: '0800000003', role: 'finance_admin', status: 'active' },
+    { id: 'u-warehouse', name: 'Dimas Warehouse', email: 'warehouse@frozen.local', phone: '0800000004', role: 'warehouse', status: 'active' },
+    { id: 'u-distributor', name: 'Budi Distributor', email: 'distributor@mitra.local', phone: '0811111111', role: 'partner', status: 'active' },
+    { id: 'u-agen', name: 'Nina Agen', email: 'agen@mitra.local', phone: '0822222222', role: 'partner', status: 'active' },
+    { id: 'u-reseller', name: 'Tono Reseller', email: 'reseller@mitra.local', phone: '0833333333', role: 'partner', status: 'active' },
   ];
 
   const partners: Partner[] = [
@@ -163,13 +184,115 @@ export function createSeedState(): AppState {
     { id: 'prd-sfd-013', sku: 'WB-SFD-013', name: 'Tuna Fillet', categoryId: 'cat-seafood-series', size: '250 GR', distributor: 35000, agen: 42500, reseller: 47500 },
   ];
 
+
+  const productImageByName: Record<string, string> = {
+    'Saikoro': '/assets/products/foto-daging-sapi-1-saikoro-tenderloin-saikoro-2.webp',
+    'Tenderloin / Has Dalam': '/assets/products/foto-daging-sapi-1-saikoro-tenderloin-saikoro-1.webp',
+    'Sirloin / Has Luar': '/assets/products/foto-daging-sapi-1-saikoro-dsc07724.webp',
+    'Rib Eye / Cube Roll': '/assets/products/foto-daging-sapi-1-saikoro-dsc07786.webp',
+    'Rendang Cut': '/assets/products/foto-daging-sapi-15-sandung-lamur-dsc07884.webp',
+    'Dice Cut / Potong Dadu': '/assets/products/foto-daging-sapi-1-saikoro-dsc07702.webp',
+    'Beef Slice (Non Fat)': '/assets/products/foto-daging-sapi-16-daging-giling-non-fat-dscf8091.webp',
+    'Beef Slice (Fat)': '/assets/products/foto-daging-sapi-17-daging-giling-fat-15-dscf2998.webp',
+    'Eye Round / Gandik': '/assets/products/foto-daging-sapi-1-saikoro-dsc07664.webp',
+    'Knuckle / Kelapa': '/assets/products/foto-daging-sapi-1-saikoro-dsc07666.webp',
+    'Blade / Punuk': '/assets/products/foto-daging-sapi-1-saikoro-dsc07672.webp',
+    'Topside / Paha': '/assets/products/foto-daging-sapi-1-saikoro-dsc07701.webp',
+    'Chuck / Daging Leher': '/assets/products/foto-daging-sapi-14-sengkel-sengkel-feed-2.webp',
+    'Sengkel / Kisi': '/assets/products/foto-daging-sapi-14-sengkel-sengkel-feed-1.webp',
+    'Sandung Lamur': '/assets/products/foto-daging-sapi-15-sandung-lamur-dsc07883.webp',
+    'Daging Giling (Non Fat)': '/assets/products/foto-daging-sapi-16-daging-giling-non-fat-dsc06233.webp',
+    'Daging Giling (Fat 15%)': '/assets/products/foto-daging-sapi-17-daging-giling-fat-15-minced-beef-1.webp',
+    'Tetelan FQ 45': '/assets/products/foto-daging-sapi-15-sandung-lamur-dsc07841.webp',
+    'Tetelan FQ 65': '/assets/products/foto-daging-sapi-15-sandung-lamur-dsc07911.webp',
+    'Tetelan FQ 85': '/assets/products/foto-daging-sapi-15-sandung-lamur-sandung-lamur.webp',
+    'Buntut Super / Center Cut': '/assets/products/foto-daging-sapi-14-sengkel-sengkel-story-1.webp',
+    'Buntut Reg. / Oxtail': '/assets/products/foto-daging-sapi-14-sengkel-sengkel-feed-3.webp',
+    'Iga Super / Short Ribs': '/assets/products/foto-daging-sapi-15-sandung-lamur-dsc07884.webp',
+    'Iga Reguler / Spare Ribs': '/assets/products/foto-daging-sapi-15-sandung-lamur-dsc07841.webp',
+    'Tulang Muda / Cartilage': '/assets/products/foto-daging-sapi-14-sengkel-sengkel-feed-2.webp',
+    'Tulang Sapi / Beef Bone': '/assets/products/foto-daging-sapi-14-sengkel-sengkel-feed-1.webp',
+    'Tulang Leher / Neck Bone': '/assets/products/foto-daging-sapi-14-sengkel-sengkel-feed-2.webp',
+    'Punggung / Back Bone': '/assets/products/foto-daging-sapi-14-sengkel-sengkel-feed-3.webp',
+    'Rusuk / Back Ribs': '/assets/products/foto-daging-sapi-15-sandung-lamur-dsc07883.webp',
+    'Sum-sum / Bone Marrow': '/assets/products/foto-daging-sapi-14-sengkel-sengkel-story-1.webp',
+    'Serbuk Daging & Tulang': '/assets/products/foto-daging-sapi-16-daging-giling-non-fat-dsc06245.webp',
+    'Hati Sapi': '/assets/products/foto-daging-sapi-17-daging-giling-fat-15-dsc06718.webp',
+    'Lidah Sapi': '/assets/products/foto-daging-sapi-1-saikoro-dsc07664.webp',
+    'Lidah Slice': '/assets/products/foto-daging-sapi-1-saikoro-dsc07666.webp',
+    'Ginjal Sapi': '/assets/products/foto-daging-sapi-17-daging-giling-fat-15-dsc06735.webp',
+    'Jantung Sapi': '/assets/products/foto-daging-sapi-17-daging-giling-fat-15-dsc06749.webp',
+    'Babat Sapi': '/assets/products/foto-daging-sapi-15-sandung-lamur-dsc07884.webp',
+    'Kikil Sapi': '/assets/products/foto-daging-sapi-14-sengkel-sengkel-feed-3.webp',
+    'Paru Sapi': '/assets/products/foto-daging-sapi-15-sandung-lamur-dsc07841.webp',
+    'Paru Slice': '/assets/products/foto-daging-sapi-15-sandung-lamur-dsc07883.webp',
+    'Kulit Sapi': '/assets/products/foto-daging-sapi-14-sengkel-sengkel-story-1.webp',
+    'Usus Sapi': '/assets/products/foto-daging-sapi-14-sengkel-sengkel-feed-2.webp',
+    'Torpedo Sapi': '/assets/products/foto-daging-sapi-1-saikoro-dsc07701.webp',
+    'Cingur Sapi': '/assets/products/foto-daging-sapi-14-sengkel-sengkel-feed-1.webp',
+    'Otot / Urat': '/assets/products/foto-daging-sapi-14-sengkel-sengkel-feed-3.webp',
+    'Limpa Sapi': '/assets/products/foto-daging-sapi-17-daging-giling-fat-15-dsc06699.webp',
+    'Otak Sapi': '/assets/products/foto-daging-sapi-17-daging-giling-fat-15-dsc06706.webp',
+    'Lemak Sapi': '/assets/products/beef-tallow-dscf2192.webp',
+    'Ayam Kampung Bakar': '/assets/products/abon-bon-beef-bon-beef-abon-ayam.webp',
+    'Ayam Kampung Ungkep': '/assets/products/abon-bon-beef-bon-beef-abon-ayam.webp',
+    'Babat Sapi Ungkep': '/assets/products/foto-daging-sapi-15-sandung-lamur-dsc07841.webp',
+    'Bakso Sapi': '/assets/products/bakso-veggies-feed-1.webp',
+    'Empal Ungkep': '/assets/products/beef-patty-dsc02137.webp',
+    'Galantine Ayam': '/assets/products/abon-bon-beef-bon-beef-abon-ayam.webp',
+    'Galantine Sapi': '/assets/products/beef-patty-dsc02128.webp',
+    'Hati Ampela Ungkep': '/assets/products/foto-daging-sapi-15-sandung-lamur-dsc07841.webp',
+    'Hati Sapi Ungkep': '/assets/products/foto-daging-sapi-15-sandung-lamur-dsc07841.webp',
+    'Krengsengan Iga': '/assets/products/foto-daging-sapi-15-sandung-lamur-dsc07884.webp',
+    'Lidah Sapi Ungkep': '/assets/products/foto-daging-sapi-15-sandung-lamur-dsc07841.webp',
+    'Paru Sapi Ungkep': '/assets/products/foto-daging-sapi-15-sandung-lamur-dsc07841.webp',
+    'Sate Ayam': '/assets/products/abon-bon-beef-bon-beef-abon-ayam.webp',
+    'Sate Sapi': '/assets/products/beef-patty-dsc02137.webp',
+    'Usus Sapi Ungkep': '/assets/products/foto-daging-sapi-15-sandung-lamur-dsc07841.webp',
+    'Rolade Daging': '/assets/products/beef-patty-dsc02128.webp',
+    'Bakso Roemahan': '/assets/products/bakso-roemahan-mockup-bakso-roemahan-v2.webp',
+    'Marinated Beef Slice': '/assets/products/foto-daging-sapi-16-daging-giling-non-fat-dscf8086.webp',
+    'Marinated Tenderloin': '/assets/products/foto-daging-sapi-1-saikoro-tenderloin-saikoro-1.webp',
+    'Abon Sapi Premium': '/assets/products/abon-bon-beef-bon-beef-abon-sapi.webp',
+    'Abon Ayam Organik': '/assets/products/abon-bon-beef-bon-beef-abon-ayam.webp',
+    'Wahyu Beef Tallow': '/assets/products/beef-tallow-beef-tallow.webp',
+    'Bola Rendang': '/assets/products/beef-patty-dsc02137.webp',
+    'Dendeng Balado': '/assets/products/dendeng-balado-poster-wahyu-beef-dendeng-balado.webp',
+    'Bakso Veggies': '/assets/products/bakso-veggies-feed-bakso-veggies-2.webp',
+    'Paket Krawu': '/assets/products/beef-patty-dsc02137.webp',
+    'Sego Sambel Otot Ungkep': '/assets/products/beef-patty-dsc02137.webp',
+    'Sego Sambel Babat Ungkep': '/assets/products/foto-daging-sapi-15-sandung-lamur-dsc07841.webp',
+    'Sego Sambel Paru Ungkep': '/assets/products/foto-daging-sapi-15-sandung-lamur-dsc07841.webp',
+    'Sego Sambel Usus Ungkep': '/assets/products/foto-daging-sapi-15-sandung-lamur-dsc07841.webp',
+    'Paket Rolade Sapi': '/assets/products/beef-patty-dsc02128.webp',
+    'Paket Galantine Sapi': '/assets/products/beef-patty-dsc02128.webp',
+    'Paket Tenderloin Steak': '/assets/products/foto-daging-sapi-1-saikoro-tenderloin-saikoro-2.webp',
+    'Marinated Beef Slice Series': '/assets/products/foto-daging-sapi-16-daging-giling-non-fat-dscf8076.webp',
+    'Beef Patty': '/assets/products/beef-patty-dsc02131.webp',
+    'Sosis Sapi': '/assets/products/beef-patty-dsc02128.webp',
+    'Dori Fillet': '/assets/products/bakso-veggies-story-1.webp',
+    'Salmon Fillet': '/assets/products/bakso-veggies-story-1.webp',
+    'Tengiri Fillet': '/assets/products/bakso-veggies-story-1.webp',
+    'Tengiri Cut Steak': '/assets/products/bakso-veggies-story-1.webp',
+    'Tongkol Fillet': '/assets/products/bakso-veggies-story-1.webp',
+    'Kakap Merah Fillet': '/assets/products/bakso-veggies-story-1.webp',
+    'Ikan Kembung': '/assets/products/bakso-veggies-story-1.webp',
+    'Udang Vaname': '/assets/products/bakso-veggies-story-1.webp',
+    'Udang Kupas': '/assets/products/bakso-veggies-story-1.webp',
+    'Cumi Hitam': '/assets/products/bakso-veggies-story-1.webp',
+    'Cumi Tube Calamary': '/assets/products/bakso-veggies-story-1.webp',
+    'Baby Gurita': '/assets/products/bakso-veggies-story-1.webp',
+    'Tuna Fillet': '/assets/products/bakso-veggies-story-1.webp',
+  };
+
   const products: Product[] = wahyuProducts.map((item) => ({
     id: item.id,
     sku: item.sku,
     name: item.name,
     categoryId: item.categoryId,
-    description: `Wahyu Beef ${item.name} kemasan ${item.size}. Gambar produk menyusul.`,
+    description: `Wahyu Beef ${item.name} kemasan ${item.size}.`,
     unit: item.size,
+    imageUrl: productImageByName[item.name],
     minimumOrderQty: 1,
     baseCost: item.distributor,
     isActive: true,

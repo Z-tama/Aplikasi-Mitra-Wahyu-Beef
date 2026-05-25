@@ -9,56 +9,114 @@ import { findPartnerForUser, getCatalogForPartner, getLeaderboard } from './serv
 
 const stateSingleton = createSeedState();
 
-type View = 'dashboard' | 'catalog' | 'orders' | 'products' | 'partners' | 'pricing' | 'documents' | 'leaderboard' | 'areas' | 'profile' | 'reports' | 'audit' | 'accounting';
+type View = 'dashboard' | 'catalog' | 'checkout' | 'orders' | 'products' | 'partners' | 'pricing' | 'documents' | 'leaderboard' | 'areas' | 'profile' | 'reports' | 'audit' | 'accounting';
 
 function App() {
   const [state, setState] = useState<AppState>(stateSingleton);
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [token, setToken] = useState('');
   const [view, setView] = useState<View>('dashboard');
+  const [authPage, setAuthPage] = useState<'login' | 'register'>('login');
 
   async function refresh(nextToken = token) {
     const snapshot = await api.snapshot(nextToken);
     setState(snapshot);
   }
 
-  if (!currentUser) return <Login onLogin={async (session) => { setToken(session.token); setCurrentUser(session.user); setView(session.user.role === 'partner' ? 'catalog' : 'dashboard'); await refresh(session.token); }} state={state} />;
+  if (!currentUser) return authPage === 'register'
+    ? <PartnerRegistration onBack={() => setAuthPage('login')} />
+    : <Login onRegister={() => setAuthPage('register')} onLogin={async (session) => { setToken(session.token); setCurrentUser(session.user); setView(session.user.role === 'partner' ? 'catalog' : 'dashboard'); await refresh(session.token); }} state={state} />;
   return <Shell state={state} user={currentUser} setUser={setCurrentUser} token={token} view={view} setView={setView} setState={setState} refresh={refresh} onLogout={() => { setCurrentUser(null); setToken(''); }} />;
 }
 
-function Login({ state, onLogin }: { state: AppState; onLogin: (session: Session) => Promise<void> }) {
-  const [email, setEmail] = useState('admin@frozen.local');
+function Login({ state, onLogin, onRegister }: { state: AppState; onLogin: (session: Session) => Promise<void>; onRegister: () => void }) {
+  const demoUsers = state.users.filter((user) => demoPasswords[user.email]);
+  const phoneDemos = demoUsers.filter((user) => user.phone);
+  const emailDemos = demoUsers;
+  const [loginMode, setLoginMode] = useState<'phone' | 'email'>('phone');
+  const [identifier, setIdentifier] = useState(phoneDemos[0]?.phone ?? '0811111111');
   const [password, setPassword] = useState('password');
   const [error, setError] = useState('');
-  const demo = Object.keys(demoPasswords);
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     setError('');
     try {
-      const session = await api.login(email, password);
+      const session = await api.login(identifier, password);
       await onLogin(session);
     } catch (error) {
       setError(error instanceof Error ? error.message : 'Login gagal. Pastikan backend berjalan.');
     }
   }
+  function switchMode(nextMode: 'phone' | 'email') {
+    setLoginMode(nextMode);
+    setIdentifier(nextMode === 'phone' ? phoneDemos[0]?.phone ?? '0811111111' : emailDemos[0]?.email ?? 'admin@frozen.local');
+    setPassword('password');
+    setError('');
+  }
   return <main className="login-page">
     <section className="login-card">
-      <div className="hero-panel">
-        <span className="badge"><IceCreamBowl size={16} /> Mitra Wahyu Beef</span>
-        <h1>Portal mitra Wahyu Beef yang hangat dan rapi.</h1>
-        <p>Kelola order, invoice, surat jalan, harga tier, dan status mitra dalam satu dashboard yang mudah dipakai.</p>
-        <div className="notice" style={{ background: 'rgba(255,255,255,.14)', color: 'white', borderColor: 'rgba(255,255,255,.24)' }}>Tone baru mengikuti brand Wahyu Beef: hangat, premium, dan mudah dibaca di mobile.</div>
+      <div className="hero-panel wb-css-hero">
+        <img className="wb-css-logo" src="/assets/logo-wahyu-beef.png" alt="Logo Wahyu Beef" />
+        <p className="wb-script-title">Sukses Berjamaah</p>
+        <h1>Bersinergi Bersama</h1>
+        <p className="wb-social">@wahyubeef.id</p>
+        <span className="wb-join-button">Join Now!</span>
       </div>
-      <form className="login-form" onSubmit={submit}>
-        <div>
-          <h2>Masuk Demo</h2>
-          <p style={{ color: '#8a6a37' }}>Pilih role untuk mencoba flow admin atau mitra.</p>
-        </div>
-        <div className="field"><label>Email</label><input className="input" value={email} onChange={(e) => setEmail(e.target.value)} /></div>
+      <form className="login-form compact-login-form" onSubmit={submit}>
+        <div className="login-mode-toggle"><button className={loginMode === 'phone' ? 'active' : ''} type="button" onClick={() => switchMode('phone')}>Masuk dengan<br /><span>Nomor HP</span></button><button className={loginMode === 'email' ? 'active' : ''} type="button" onClick={() => switchMode('email')}>Masuk dengan<br /><span>Email</span></button></div>
+        <div className="field"><label>{loginMode === 'phone' ? 'Nomor HP / WhatsApp' : 'Email'}</label><input className="input" inputMode={loginMode === 'phone' ? 'tel' : 'email'} value={identifier} onChange={(e) => setIdentifier(e.target.value)} placeholder={loginMode === 'phone' ? '08xxxxxxxxxx' : 'nama@email.com'} /></div>
         <div className="field"><label>Password</label><input className="input" type="password" value={password} onChange={(e) => setPassword(e.target.value)} /></div>
         {error && <div className="notice warning">{error}</div>}
         <button className="btn primary" type="submit">Masuk</button>
-        <div className="demo-grid">{demo.map((item) => <button type="button" className="demo-account" key={item} onClick={() => { setEmail(item); setPassword('password'); }}><b>{item}</b><br />password</button>)}</div>
+        <button className="btn register-cta" type="button" onClick={onRegister}>Daftar Menjadi Mitra</button>
+        <div className="demo-grid">{loginMode === 'phone' ? phoneDemos.map((user) => <button type="button" className="demo-account" key={user.id} onClick={() => { setIdentifier(user.phone ?? ''); setPassword('password'); }}><b>{user.name}</b><br />{user.phone}</button>) : emailDemos.map((user) => <button type="button" className="demo-account" key={user.id} onClick={() => { setIdentifier(user.email); setPassword('password'); }}><b>{user.name}</b><br />{user.email}</button>)}</div>
+      </form>
+    </section>
+  </main>;
+}
+
+function PartnerRegistration({ onBack }: { onBack: () => void }) {
+  const [submitted, setSubmitted] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState('');
+  const [form, setForm] = useState({
+    businessName: '', ownerName: '', phone: '', email: '', province: '', city: '', address: '',
+    businessType: 'Reseller frozen food', salesChannel: '', currentSales: '', interestedTier: 'Reseller', notes: '',
+  });
+  function update(field: keyof typeof form, value: string) { setForm({ ...form, [field]: value }); }
+  async function submit(e: React.FormEvent) {
+    e.preventDefault();
+    setSubmitting(true);
+    setSubmitError('');
+    try {
+      const result = await api.submitPartnerRegistration(form);
+      const waUrl = `https://wa.me/${result.adminWhatsapp}?text=${encodeURIComponent(result.whatsappMessage)}`;
+      window.open(waUrl, '_blank', 'noopener,noreferrer');
+      setSubmitted(true);
+    } catch (error) {
+      setSubmitError(error instanceof Error ? error.message : 'Pendaftaran gagal dikirim.');
+    } finally {
+      setSubmitting(false);
+    }
+  }
+  if (submitted) return <main className="login-page registration-page"><section className="registration-shell success-shell"><div className="registration-hero"><span className="badge"><IceCreamBowl size={16} /> Pendaftaran Mitra</span><h1>Terima kasih, data pendaftaran sudah diterima.</h1><p>Tim Wahyu Beef akan menghubungi calon mitra untuk verifikasi data, area distribusi, dan tier harga yang sesuai.</p><button className="btn primary" type="button" onClick={onBack}>Kembali ke Login</button></div></section></main>;
+  return <main className="login-page registration-page">
+    <section className="registration-shell">
+      <div className="registration-hero wb-css-hero">
+        <img className="wb-css-logo" src="/assets/logo-wahyu-beef.png" alt="Logo Wahyu Beef" />
+        <p className="wb-script-title">Sukses Berjamaah</p>
+        <h1>Bersinergi Bersama</h1>
+        <p className="wb-social">@wahyubeef.id</p>
+        <span className="wb-join-button">Daftar Mitra</span>
+      </div>
+      <form className="registration-form" onSubmit={submit}>
+        <div className="registration-form-head compact"><button className="btn" type="button" onClick={onBack}>Kembali</button></div>
+        <div className="form-section"><h3>Identitas Usaha</h3><div className="grid cols-2"><div className="field"><label>Nama Usaha / Toko</label><input className="input" required value={form.businessName} onChange={(e) => update('businessName', e.target.value)} placeholder="Contoh: Toko Frozen Makmur" /></div><div className="field"><label>Nama Pemilik / PIC</label><input className="input" required value={form.ownerName} onChange={(e) => update('ownerName', e.target.value)} placeholder="Nama lengkap" /></div><div className="field"><label>Nomor WhatsApp</label><input className="input" required value={form.phone} onChange={(e) => update('phone', e.target.value)} placeholder="08xxxxxxxxxx" /></div><div className="field"><label>Email</label><input className="input" type="email" value={form.email} onChange={(e) => update('email', e.target.value)} placeholder="email@contoh.com" /></div></div></div>
+        <div className="form-section"><h3>Lokasi & Area</h3><div className="grid cols-2"><div className="field"><label>Provinsi</label><input className="input" required value={form.province} onChange={(e) => update('province', e.target.value)} placeholder="Jawa Barat" /></div><div className="field"><label>Kota / Kabupaten</label><input className="input" required value={form.city} onChange={(e) => update('city', e.target.value)} placeholder="Bandung" /></div><div className="field registration-wide"><label>Alamat Lengkap</label><textarea required value={form.address} onChange={(e) => update('address', e.target.value)} rows={3} placeholder="Alamat toko/gudang/pickup point" /></div></div></div>
+        <div className="form-section"><h3>Profil Penjualan</h3><div className="grid cols-2"><div className="field"><label>Jenis Usaha</label><select value={form.businessType} onChange={(e) => update('businessType', e.target.value)}><option>Reseller frozen food</option><option>Agen / distributor</option><option>Retail / minimarket</option><option>Horeca / restoran / katering</option><option>Komunitas / dropshipper</option></select></div><div className="field"><label>Channel Penjualan</label><input className="input" value={form.salesChannel} onChange={(e) => update('salesChannel', e.target.value)} placeholder="Offline, WhatsApp, marketplace, Instagram" /></div><div className="field"><label>Estimasi Penjualan per Bulan</label><select value={form.currentSales} onChange={(e) => update('currentSales', e.target.value)}><option value="">Pilih estimasi</option><option>&lt; 50 kg / bulan</option><option>50 - 200 kg / bulan</option><option>200 - 500 kg / bulan</option><option>&gt; 500 kg / bulan</option></select></div><div className="field"><label>Minat Level Mitra</label><select value={form.interestedTier} onChange={(e) => update('interestedTier', e.target.value)}><option>Reseller</option><option>Agen</option><option>Distributor</option><option>Belum tahu / minta rekomendasi</option></select></div><div className="field registration-wide"><label>Catatan Tambahan</label><textarea value={form.notes} onChange={(e) => update('notes', e.target.value)} rows={3} placeholder="Produk yang diminati, area target, kebutuhan khusus, dll." /></div></div></div>
+        <div className="notice">Dengan mengirim form ini, calon mitra setuju untuk dihubungi oleh tim Wahyu Beef untuk proses verifikasi dan onboarding.</div>
+        {submitError && <div className="notice warning">{submitError}</div>}
+        <button className="btn primary" type="submit" disabled={submitting}>{submitting ? 'Mengirim...' : 'Kirim Pendaftaran'}</button>
       </form>
     </section>
   </main>;
@@ -78,7 +136,7 @@ function Shell({ state, user, setUser, token, view, setView, setState, refresh, 
     <main className="main">
       <Topbar state={state} user={user} view={view} />
       {view === 'dashboard' && <Dashboard state={state} />}
-      {view === 'catalog' && <Catalog state={state} user={user} token={token} refresh={refresh} />}
+      {view === 'catalog' && <Catalog state={state} user={user} token={token} refresh={refresh} setView={setView} />}
       {view === 'orders' && <Orders state={state} user={user} token={token} refresh={refresh} />}
       {view === 'products' && <Products state={state} />}
       {view === 'partners' && <Partners state={state} />}
@@ -96,7 +154,7 @@ function Shell({ state, user, setUser, token, view, setView, setState, refresh, 
 
 function Topbar({ state, user, view }: { state: AppState; user: User; view: View }) {
   const partner = findPartnerForUser(state, user);
-  const title: Record<View, string> = { dashboard: 'Dashboard Operasional', catalog: 'Katalog Mitra', orders: user.role === 'partner' ? 'Order Saya' : 'Order Management', products: 'Product Catalog', partners: 'Mitra Management', pricing: 'Tier Pricing', documents: 'Invoice & Surat Jalan', leaderboard: 'Leaderboard Mitra', areas: 'Area Mitra', profile: 'Setting Profil', reports: 'Basic Reports', audit: 'Audit Trail', accounting: 'Accounting Event Log' };
+  const title: Record<View, string> = { dashboard: 'Dashboard Operasional', catalog: 'Katalog Mitra', checkout: 'Checkout Pesanan', orders: user.role === 'partner' ? 'Order Saya' : 'Order Management', products: 'Product Catalog', partners: 'Mitra Management', pricing: 'Tier Pricing', documents: 'Invoice & Surat Jalan', leaderboard: 'Leaderboard Mitra', areas: 'Area Mitra', profile: 'Setting Profil', reports: 'Basic Reports', audit: 'Audit Trail', accounting: 'Accounting Event Log' };
   return <header className="topbar"><div><h1>{title[view]}</h1><p>{partner ? `${partner.businessName} • ${tierName(state, partner.tierId)}` : 'Admin workspace Wahyu Beef'}</p></div><div className="badge" style={{ background: '#fff8e8', color: '#8f121b', border: '1px solid #ead7ae' }}>{roleLabel(user.role)}</div></header>;
 }
 
@@ -120,33 +178,118 @@ function Dashboard({ state }: { state: AppState }) {
 
 function Metric({ label, value }: { label: string; value: string }) { return <div className="card metric"><span className="label">{label}</span><span className="value">{value}</span></div>; }
 
-function Catalog({ state, user, token, refresh }: { state: AppState; user: User; token: string; refresh: () => Promise<void> }) {
+type CatalogProduct = ReturnType<typeof getCatalogForPartner>[number];
+type PackageOption = { weightGram: 250 | 500 | 1000; label: string; ratio: number };
+const packageOptions: PackageOption[] = [
+  { weightGram: 250, label: '250 gr', ratio: 0.25 },
+  { weightGram: 500, label: '500 gr', ratio: 0.5 },
+  { weightGram: 1000, label: '1000 gr', ratio: 1 },
+];
+const packagingCategoryIds = new Set(['cat-daging-sapi', 'cat-tulang-sapi', 'cat-jerohan-sapi']);
+
+function Catalog({ state, user, token, refresh, setView }: { state: AppState; user: User; token: string; refresh: () => Promise<void>; setView: (view: View) => void }) {
   const partner = findPartnerForUser(state, user);
   const [cart, setCart] = useState<Record<string, number>>({});
+  const [cartNotes, setCartNotes] = useState<Record<string, string>>({});
   const [message, setMessage] = useState('');
+  const [selectedProduct, setSelectedProduct] = useState<CatalogProduct | null>(null);
+  const [isCheckout, setIsCheckout] = useState(false);
   if (!partner) return <div className="notice warning">User ini tidak punya data mitra.</div>;
   const activePartner = partner;
   const catalog = getCatalogForPartner(state, activePartner.id);
-  const items: CartItem[] = Object.entries(cart).filter(([, qty]) => qty > 0).map(([productId, qty]) => ({ productId, qty }));
-  const total = items.reduce((sum, item) => sum + (catalog.find((p) => p.id === item.productId)?.price ?? 0) * item.qty, 0);
-  async function checkout() {
+  const items: CartItem[] = Object.entries(cart).filter(([, qty]) => qty > 0).map(([key, qty]) => ({ ...cartKeyToItem(key, qty), notes: cartNotes[key]?.trim() || undefined }));
+  const total = items.reduce((sum, item) => {
+    const product = catalog.find((p) => p.id === item.productId);
+    return sum + getPackagePrice(product?.price ?? 0, item.packageWeightGram) * item.qty;
+  }, 0);
+  const cartQty = items.reduce((sum, item) => sum + item.qty, 0);
+  function addToCart(product: CatalogProduct, qty = product.minimumOrderQty, option?: PackageOption) {
+    const key = cartKey(product.id, option?.weightGram);
+    setCart((current) => ({ ...current, [key]: (current[key] ?? 0) + Math.max(qty, product.minimumOrderQty) }));
+  }
+  function updateCartQty(key: string, qty: number) {
+    setCart((current) => {
+      const next = { ...current };
+      if (qty <= 0) {
+        delete next[key];
+        setCartNotes((currentNotes) => {
+          const nextNotes = { ...currentNotes };
+          delete nextNotes[key];
+          return nextNotes;
+        });
+      }
+      else next[key] = qty;
+      return next;
+    });
+  }
+  async function placeOrder() {
     try {
       await api.createOrder(token, { shippingAddress: activePartner.address, notes: 'Order dari portal mitra', items });
       await refresh();
-      setCart({}); setMessage('Order berhasil dibuat. Status awal: pending.');
+      setCart({});
+      setCartNotes({});
+      setMessage('Order berhasil dibuat. Status awal: pending.');
+      setView('orders');
     } catch (error) { setMessage(error instanceof Error ? error.message : 'Checkout gagal'); }
   }
+  if (isCheckout) return <CheckoutPage state={state} catalog={catalog} partnerAddress={activePartner.address} cart={cart} cartNotes={cartNotes} message={message} onBack={() => setIsCheckout(false)} onUpdateQty={updateCartQty} onUpdateNote={(key, note) => setCartNotes((current) => ({ ...current, [key]: note }))} onPlaceOrder={placeOrder} />;
   return <div className="grid">
-    <div className="card"><b>Tier aktif: {tierName(state, activePartner.tierId)}</b><p className="footer-note">Harga di bawah dihitung server-side berdasarkan tier mitra. Frontend tidak menjadi source of truth harga.</p></div>
+    <div className="card"><b>Tier aktif: {tierName(state, activePartner.tierId)}</b><p className="footer-note">Harga di bawah dihitung server-side berdasarkan tier mitra. Untuk daging sapi, tulang sapi, dan jeroan sapi, klik produk untuk memilih kemasan 250 gr, 500 gr, atau 1000 gr.</p></div>
     {message && <div className="notice">{message}</div>}
     <div className="catalog-toolbar"><div><b>{catalog.length} Produk</b><span>Harga {tierName(state, activePartner.tierId)}</span></div><div className="catalog-view-label">Tampilan <span className="grid-icon">▦</span></div></div>
-    <div className="catalog marketplace-catalog">{catalog.map((product) => <div className="product-card marketplace-card" key={product.id}>
-      <div className="product-visual marketplace-visual"><span className="discount-badge">Mitra</span><div className="placeholder-brand">Wahyu Beef</div><div className="placeholder-title">{product.name}</div><div className="placeholder-pack">{product.unit}</div></div>
-      <div className="product-info"><h3>{product.name}</h3><span className="product-meta">{product.sku} • MOQ {product.minimumOrderQty} {product.unit}</span><div className="price-row"><span className="voucher-tag">%</span><div className="price">{product.price ? formatIdr(product.price) : 'Belum ada harga'}</div></div><div className="deal-note">Harga khusus {tierName(state, activePartner.tierId)}</div><div className="rating-row"><span>★ 5.0</span><span>•</span><span>{Math.max(10, product.minimumOrderQty * 10)}+ terjual</span></div><div className="qty-row compact"><input className="input" type="number" min="0" placeholder="Qty" value={cart[product.id] ?? ''} onChange={(e) => setCart({ ...cart, [product.id]: Number(e.target.value) })} /><button className="btn small" onClick={() => setCart({ ...cart, [product.id]: (cart[product.id] ?? 0) + product.minimumOrderQty })}>Tambah</button></div></div>
-    </div>)}</div>
-    <div className="card" style={{ position: 'sticky', bottom: 16 }}><b>Keranjang:</b> {items.length} item • <b>{formatIdr(total)}</b> <button className="btn primary" style={{ marginLeft: 12 }} disabled={items.length === 0} onClick={checkout}>Checkout</button></div>
+    <div className="catalog marketplace-catalog">{catalog.map((product) => {
+      const hasPackageOptions = canChoosePackaging(product);
+      return <div className="product-card marketplace-card" key={product.id} onClick={() => hasPackageOptions && setSelectedProduct(product)} role={hasPackageOptions ? 'button' : undefined} tabIndex={hasPackageOptions ? 0 : undefined} onKeyDown={(event) => { if (hasPackageOptions && (event.key === 'Enter' || event.key === ' ')) setSelectedProduct(product); }}>
+        <div className={`product-visual marketplace-visual ${product.imageUrl ? 'has-photo' : ''}`}>{product.imageUrl && <img src={product.imageUrl} alt={product.name} loading="lazy" />}<span className="discount-badge">Mitra</span><div className="placeholder-brand">Wahyu Beef</div>{!product.imageUrl && <div className="placeholder-title">{product.name}</div>}<div className="placeholder-pack">{hasPackageOptions ? '250g • 500g • 1kg' : product.unit}</div></div>
+        <div className="product-info"><h3>{product.name}</h3><span className="product-meta">{product.sku} • {hasPackageOptions ? 'Pilih kemasan' : `MOQ ${product.minimumOrderQty} ${product.unit}`}</span><div className="price-row"><span className="voucher-tag">%</span><div className="price">{product.price ? formatIdr(product.price) : 'Belum ada harga'}</div></div><div className="deal-note">{hasPackageOptions ? 'Klik untuk pilih ukuran kemasan' : `Harga khusus ${tierName(state, activePartner.tierId)}`}</div><div className="rating-row"><span>★ 5.0</span><span>•</span><span>{Math.max(10, product.minimumOrderQty * 10)}+ terjual</span></div>{hasPackageOptions ? <button className="btn small product-pick-btn" onClick={(event) => { event.stopPropagation(); setSelectedProduct(product); }}>Pilih</button> : <div className="qty-row compact" onClick={(event) => event.stopPropagation()}><input className="input" type="number" min="0" placeholder="Qty" value={cart[cartKey(product.id)] ?? ''} onChange={(e) => setCart({ ...cart, [cartKey(product.id)]: Number(e.target.value) })} /><button className="btn small" onClick={() => addToCart(product)}>Tambah</button></div>}</div>
+      </div>;
+    })}</div>
+    <button className="floating-cart" type="button" disabled={items.length === 0} onClick={() => setIsCheckout(true)} aria-label={`Checkout ${cartQty} item dengan total ${formatIdr(total)}`}>
+      <span className="floating-cart-icon"><ShoppingCart size={23} strokeWidth={2.8} /><span className="floating-cart-badge">{cartQty > 99 ? '99+' : cartQty}</span></span>
+      <span className="floating-cart-copy"><span>Total Harga</span><b>{formatIdr(total)}</b></span>
+    </button>
+    <div className="card cart-sticky"><b>Keranjang:</b> {items.length} item • <b>{formatIdr(total)}</b> <button className="btn primary" style={{ marginLeft: 12 }} disabled={items.length === 0} onClick={() => setIsCheckout(true)}>Checkout</button></div>
+    {selectedProduct && <PackageModal product={selectedProduct} onClose={() => setSelectedProduct(null)} onAdd={(option, qty) => { addToCart(selectedProduct, qty, option); setSelectedProduct(null); }} />}
   </div>;
 }
+
+function CheckoutPage({ state, catalog, partnerAddress, cart, cartNotes, message, onBack, onUpdateQty, onUpdateNote, onPlaceOrder }: { state: AppState; catalog: CatalogProduct[]; partnerAddress: string; cart: Record<string, number>; cartNotes: Record<string, string>; message: string; onBack: () => void; onUpdateQty: (key: string, qty: number) => void; onUpdateNote: (key: string, note: string) => void; onPlaceOrder: () => Promise<void> }) {
+  const rows = Object.entries(cart).filter(([, qty]) => qty > 0).map(([key, qty]) => {
+    const item = cartKeyToItem(key, qty);
+    const product = catalog.find((p) => p.id === item.productId)!;
+    const unitPrice = getPackagePrice(product?.price ?? 0, item.packageWeightGram);
+    return { key, item, product, unitPrice, lineTotal: unitPrice * qty };
+  }).filter((row) => row.product);
+  const total = rows.reduce((sum, row) => sum + row.lineTotal, 0);
+  return <div className="grid checkout-page">
+    <div className="card checkout-head"><div><h3>Ringkasan Keranjang</h3><p className="footer-note">Cek ulang produk, kemasan, qty, dan catatan sebelum menekan tombol Selesaikan Pesanan.</p></div><button className="btn" onClick={onBack}>Kembali ke Katalog</button></div>
+    {message && <div className="notice">{message}</div>}
+    <div className="card checkout-card">
+      {rows.length === 0 ? <div className="notice warning">Keranjang masih kosong.</div> : <div className="checkout-items">{rows.map((row) => <div className="checkout-item" key={row.key}>
+        <div className={`checkout-thumb ${row.product.imageUrl ? 'has-photo' : ''}`}>{row.product.imageUrl ? <img src={row.product.imageUrl} alt={row.product.name} /> : <span>WB</span>}</div>
+        <div className="checkout-info"><b>{row.item.packageWeightGram ? `${row.product.name} ${row.item.packageWeightGram} gr` : row.product.name}</b><span>{row.product.sku} • {row.item.packageLabel ?? row.product.unit}</span><small>{formatIdr(row.unitPrice)} / item</small><label className="checkout-note"><span>Catatan</span><textarea value={cartNotes[row.key] ?? ''} onChange={(event) => onUpdateNote(row.key, event.target.value)} rows={2} placeholder="Contoh: potong kecil, kirim pagi, pilih yang minim lemak" /></label></div>
+        <div className="qty-stepper checkout-stepper"><button type="button" onClick={() => onUpdateQty(row.key, row.item.qty - 1)}>−</button><input className="input" type="number" min="0" value={row.item.qty} onChange={(event) => onUpdateQty(row.key, Number(event.target.value) || 0)} /><button type="button" onClick={() => onUpdateQty(row.key, row.item.qty + 1)}>+</button></div>
+        <div className="checkout-line-total"><b>{formatIdr(row.lineTotal)}</b><button className="btn small" onClick={() => onUpdateQty(row.key, 0)}>Hapus</button></div>
+      </div>)}</div>}
+    </div>
+    <div className="card checkout-summary"><div><b>Alamat Kirim</b><p>{partnerAddress}</p></div><div><span>Total Pesanan</span><strong>{formatIdr(total)}</strong></div><button className="btn primary" disabled={rows.length === 0} onClick={onPlaceOrder}>Selesaikan Pesanan</button></div>
+  </div>;
+}
+
+function PackageModal({ product, onClose, onAdd }: { product: CatalogProduct; onClose: () => void; onAdd: (option: PackageOption, qty: number) => void }) {
+  const [selected, setSelected] = useState<PackageOption>(packageOptions[2]);
+  const [qty, setQty] = useState(product.minimumOrderQty);
+  return <div className="modal-backdrop package-modal-backdrop" onClick={onClose}><div className="modal package-modal" onClick={(event) => event.stopPropagation()}><div className="topbar"><div><h2>{product.name}</h2><p>Pilih ukuran kemasan produk</p></div><button className="btn" onClick={onClose}>Tutup</button></div>
+    <div className={`package-modal-hero ${product.imageUrl ? 'has-photo' : ''}`}>{product.imageUrl && <img src={product.imageUrl} alt={product.name} />}<span>{product.name}</span></div>
+    <div className="package-option-grid">{packageOptions.map((option) => <button type="button" key={option.weightGram} className={`package-option ${selected.weightGram === option.weightGram ? 'active' : ''}`} onClick={() => setSelected(option)}><b>{product.name} {option.label}</b><span>{formatIdr(getPackagePrice(product.price ?? 0, option.weightGram))}</span></button>)}</div>
+    <div className="package-modal-footer"><div className="field"><label>Qty</label><div className="qty-stepper"><button type="button" onClick={() => setQty(Math.max(product.minimumOrderQty, qty - 1))}>−</button><input className="input" type="number" min={product.minimumOrderQty} value={qty} onChange={(event) => setQty(Math.max(product.minimumOrderQty, Number(event.target.value) || product.minimumOrderQty))} /><button type="button" onClick={() => setQty(qty + 1)}>+</button></div></div><button className="btn primary" onClick={() => onAdd(selected, Math.max(qty || product.minimumOrderQty, product.minimumOrderQty))}>Tambah {selected.label} • {formatIdr(getPackagePrice(product.price ?? 0, selected.weightGram) * Math.max(qty || product.minimumOrderQty, product.minimumOrderQty))}</button></div>
+  </div></div>;
+}
+
+function canChoosePackaging(product: CatalogProduct) { return packagingCategoryIds.has(product.categoryId); }
+function getPackagePrice(basePrice: number, weightGram?: number) { return Math.round(basePrice * (weightGram === 250 ? 0.25 : weightGram === 500 ? 0.5 : 1)); }
+function cartKey(productId: string, weightGram?: number) { return weightGram ? `${productId}__${weightGram}` : productId; }
+function cartKeyToItem(key: string, qty: number): CartItem { const [productId, weight] = key.split('__'); const packageWeightGram = Number(weight) as 250 | 500 | 1000; return weight ? { productId, qty, packageWeightGram, packageLabel: `${packageWeightGram} GR` } : { productId, qty }; }
 
 function Orders({ state, user, token, refresh }: { state: AppState; user: User; token: string; refresh: () => Promise<void> }) {
   const partner = findPartnerForUser(state, user);
@@ -241,6 +384,30 @@ function ProfileSettings({ state, user, token, setUser, setState }: { state: App
   const [avatarUrl, setAvatarUrl] = useState(user.avatarUrl ?? '');
   const [message, setMessage] = useState('');
   const [saving, setSaving] = useState(false);
+  const [currentPassword, setCurrentPassword] = useState('mitrawahyubeef');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [passwordMessage, setPasswordMessage] = useState('');
+  const [savingPassword, setSavingPassword] = useState(false);
+
+  function chooseProfilePhoto(file?: File) {
+    if (!file) return;
+    if (!file.type.startsWith('image/')) {
+      setMessage('File harus berupa gambar.');
+      return;
+    }
+    if (file.size > 1024 * 1024) {
+      setMessage('Ukuran foto maksimal 1 MB. Pilih foto yang lebih kecil.');
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      setAvatarUrl(String(reader.result));
+      setMessage('Foto siap disimpan. Tekan Simpan Profil untuk menyimpan perubahan.');
+    };
+    reader.onerror = () => setMessage('Foto gagal dibaca. Coba pilih file lain.');
+    reader.readAsDataURL(file);
+  }
 
   async function saveProfile() {
     setSaving(true);
@@ -257,6 +424,23 @@ function ProfileSettings({ state, user, token, setUser, setState }: { state: App
     }
   }
 
+  async function savePassword() {
+    setSavingPassword(true);
+    setPasswordMessage('');
+    try {
+      const result = await api.updatePassword(token, { currentPassword, newPassword, confirmPassword });
+      setUser(result.user);
+      setCurrentPassword('');
+      setNewPassword('');
+      setConfirmPassword('');
+      setPasswordMessage('Password berhasil diganti. Login berikutnya gunakan password baru.');
+    } catch (error) {
+      setPasswordMessage(error instanceof Error ? error.message : 'Password gagal diganti.');
+    } finally {
+      setSavingPassword(false);
+    }
+  }
+
   return <div className="profile-layout">
     <div className="card profile-card">
       <div className="profile-hero">
@@ -264,7 +448,7 @@ function ProfileSettings({ state, user, token, setUser, setState }: { state: App
         <div><h3>Profil Mitra</h3><p className="footer-note">Update identitas yang tampil di akun mitra dan dokumen operasional.</p></div>
       </div>
       <div className="grid cols-2">
-        <div className="field"><label>Foto Profil URL</label><input className="input" value={avatarUrl} onChange={(e) => setAvatarUrl(e.target.value)} placeholder="https://.../foto.jpg" /></div>
+        <div className="field profile-photo-field"><label>Foto Profil</label><label className="upload-box"><input type="file" accept="image/*" onChange={(e) => chooseProfilePhoto(e.target.files?.[0])} /><span>Pilih Foto dari Perangkat</span><small>JPG/PNG, maksimal 1 MB</small></label>{avatarUrl && <button type="button" className="btn small" onClick={() => setAvatarUrl('')}>Hapus Foto</button>}</div>
         <div className="field"><label>Nama</label><input className="input" value={name} onChange={(e) => setName(e.target.value)} /></div>
         <div className="field"><label>Nomor WA</label><input className="input" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="08xxxxxxxxxx" /></div>
         <div className="field"><label>Kode Mitra</label><input className="input" value={partner?.partnerCode ?? '-'} disabled /></div>
@@ -273,13 +457,23 @@ function ProfileSettings({ state, user, token, setUser, setState }: { state: App
       {message && <div className={`notice ${message.includes('berhasil') ? '' : 'warning'}`}>{message}</div>}
       <div className="actions"><button className="btn primary" disabled={saving} onClick={saveProfile}>{saving ? 'Menyimpan...' : 'Simpan Profil'}</button></div>
     </div>
+    <div className="card profile-card password-card">
+      <div><h3>Ganti Password</h3><p className="footer-note">Gunakan fitur ini setelah login pertama agar password default tidak dipakai terus.</p></div>
+      <div className="grid cols-2">
+        <div className="field"><label>Password Saat Ini</label><input className="input" type="password" value={currentPassword} onChange={(e) => setCurrentPassword(e.target.value)} placeholder="Password lama/default" /></div>
+        <div className="field"><label>Password Baru</label><input className="input" type="password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} placeholder="Minimal 8 karakter" /></div>
+        <div className="field"><label>Ulangi Password Baru</label><input className="input" type="password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} placeholder="Ketik ulang password baru" /></div>
+      </div>
+      {passwordMessage && <div className={`notice ${passwordMessage.includes('berhasil') ? '' : 'warning'}`}>{passwordMessage}</div>}
+      <div className="actions"><button className="btn primary" disabled={savingPassword || !currentPassword || !newPassword || !confirmPassword} onClick={savePassword}>{savingPassword ? 'Menyimpan...' : 'Ganti Password'}</button></div>
+    </div>
     <div className="card profile-summary"><h3>Ringkasan Akun</h3><p><b>{partner?.businessName ?? name}</b><br />{partner ? tierName(state, partner.tierId) : 'Mitra'}</p><p>WA: {phone || '-'}</p><p>{address || '-'}</p></div>
   </div>;
 }
 
 function initials(name: string) { return name.split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part[0]?.toUpperCase()).join('') || 'M'; }
 
-function Products({ state }: { state: AppState }) { return <div className="card mobile-card-table"><h3>Produk Frozen Food</h3><div className="table-wrap responsive-table"><table><thead><tr><th>SKU</th><th>Produk</th><th>Kategori</th><th>MOQ</th><th>Status</th></tr></thead><tbody>{state.products.map((p) => <tr key={p.id}><td data-label="SKU"><b>{p.sku}</b></td><td data-label="Produk">{p.name}<br /><small>{p.description}</small></td><td data-label="Kategori">{state.categories.find((c) => c.id === p.categoryId)?.name}</td><td data-label="MOQ">{p.minimumOrderQty} {p.unit}</td><td data-label="Status"><span className="status delivered">Aktif</span></td></tr>)}</tbody></table></div></div>; }
+function Products({ state }: { state: AppState }) { return <div className="card products-catalog-card"><div className="products-catalog-head"><div><h3>Produk Frozen Food</h3><p className="footer-note">Katalog produk aktif dalam tampilan grid agar lebih enak dibaca di mobile.</p></div><span className="area-pill">{state.products.length} Produk</span></div><div className="admin-product-grid">{state.products.map((p) => <article className="admin-product-card" key={p.id}><div className={`admin-product-visual ${p.imageUrl ? 'has-photo' : ''}`}>{p.imageUrl ? <img src={p.imageUrl} alt={p.name} loading="lazy" /> : <span>WB</span>}</div><div className="admin-product-body"><div className="admin-product-kicker">{p.sku}</div><h4>{p.name}</h4><p>{p.description}</p><div className="admin-product-meta"><span>{state.categories.find((c) => c.id === p.categoryId)?.name}</span><span>MOQ {p.minimumOrderQty} {p.unit}</span></div><span className="status delivered">Aktif</span></div></article>)}</div></div>; }
 function Partners({ state }: { state: AppState }) { return <div className="card mobile-card-table"><h3>Data Mitra</h3><div className="table-wrap responsive-table"><table><thead><tr><th>Kode</th><th>Nama Bisnis</th><th>Tier</th><th>Kontak</th><th>Termin</th><th>Status</th></tr></thead><tbody>{state.partners.map((p) => <tr key={p.id}><td data-label="Kode">{p.partnerCode}</td><td data-label="Nama Bisnis"><b>{p.businessName}</b><br /><small>{p.address}</small></td><td data-label="Tier">{tierName(state, p.tierId)}</td><td data-label="Kontak">{p.contactPerson}<br /><small>{p.phone}</small></td><td data-label="Termin">{p.paymentTermDays} hari</td><td data-label="Status"><span className={`status ${p.status === 'active' ? 'delivered' : 'cancelled'}`}>{p.status}</span></td></tr>)}</tbody></table></div></div>; }
 function Pricing({ state }: { state: AppState }) { return <div className="card mobile-card-table"><h3>Harga Produk per Tier</h3><div className="table-wrap responsive-table"><table><thead><tr><th>Produk</th>{state.tiers.map((t) => <th key={t.id}>{t.name}</th>)}</tr></thead><tbody>{state.products.map((p) => <tr key={p.id}><td data-label="Produk"><b>{p.name}</b><br /><small>{p.sku}</small></td>{state.tiers.map((t) => <td data-label={t.name} key={t.id}>{formatIdr(state.prices.find((price) => price.productId === p.id && price.tierId === t.id)?.price ?? 0)}</td>)}</tr>)}</tbody></table></div></div>; }
 
@@ -295,7 +489,7 @@ function DocumentModal({ state, doc, onClose }: { state: AppState; doc: { type: 
 function DocumentOrder({ state, order }: { state: AppState; order: Order }) { return <div className="document"><div className="doc-head"><div><h2>Detail Order</h2><b>{order.orderNumber}</b></div><div><span className={`status ${order.status}`}>{statusLabels[order.status]}</span></div></div><div className="kv"><b>Mitra</b><span>{partnerName(state, order.partnerId)}</span><b>Alamat</b><span>{order.shippingAddress}</span><b>Tanggal</b><span>{new Date(order.orderDate).toLocaleString('id-ID')}</span></div><LineItems order={order} /></div>; }
 function InvoiceDocument({ state, invoice, order }: { state: AppState; invoice: Invoice; order: Order }) { return <div className="document"><div className="doc-head"><div><h2>INVOICE</h2><b>{invoice.invoiceNumber}</b></div><div><b>{partnerName(state, invoice.partnerId)}</b><br />Tanggal: {invoice.invoiceDate}<br />Jatuh tempo: {invoice.dueDate}</div></div><LineItems order={order} /><div className="kv"><b>Total</b><span>{formatIdr(invoice.grandTotal)}</span><b>Dibayar</b><span>{formatIdr(invoice.amountPaid)}</span><b>Sisa</b><span>{formatIdr(invoice.amountDue)}</span><b>Status</b><span>{invoice.status}</span></div><p className="footer-note">Invoice berasal dari snapshot order; invoice issued tidak diedit langsung tanpa void/revisi.</p></div>; }
 function DeliveryDocument({ state, deliveryNote, order }: { state: AppState; deliveryNote: DeliveryNote; order: Order }) { return <div className="document"><div className="doc-head"><div><h2>SURAT JALAN</h2><b>{deliveryNote.deliveryNoteNumber}</b></div><div><b>{partnerName(state, order.partnerId)}</b><br />Tanggal: {deliveryNote.deliveryDate}<br />Driver: {deliveryNote.driverName ?? '-'}</div></div><LineItems order={order} showPrice={false} /><div className="grid cols-2" style={{ marginTop: 28 }}><div>Pengirim<br /><br /><br />(................)</div><div>Penerima<br /><br /><br />(................)</div></div></div>; }
-function LineItems({ order, showPrice = true }: { order: Order; showPrice?: boolean }) { return <div className="table-wrap" style={{ marginTop: 18 }}><table><thead><tr><th>SKU</th><th>Produk</th><th>Qty</th>{showPrice && <><th>Harga</th><th>Total</th></>}</tr></thead><tbody>{order.items.map((item) => <tr key={item.id}><td>{item.skuSnapshot}</td><td>{item.productNameSnapshot}<br /><small>{item.tierNameSnapshot}</small></td><td>{item.qty} {item.unitSnapshot}</td>{showPrice && <><td>{formatIdr(item.unitPrice)}</td><td>{formatIdr(item.lineTotal)}</td></>}</tr>)}</tbody></table></div>; }
+function LineItems({ order, showPrice = true }: { order: Order; showPrice?: boolean }) { return <div className="table-wrap" style={{ marginTop: 18 }}><table><thead><tr><th>SKU</th><th>Produk</th><th>Qty</th>{showPrice && <><th>Harga</th><th>Total</th></>}</tr></thead><tbody>{order.items.map((item) => <tr key={item.id}><td>{item.skuSnapshot}</td><td>{item.productNameSnapshot}<br /><small>{item.tierNameSnapshot}</small>{item.notes && <div className="line-item-note"><b>Catatan:</b> {item.notes}</div>}</td><td>{item.qty} {item.unitSnapshot}</td>{showPrice && <><td>{formatIdr(item.unitPrice)}</td><td>{formatIdr(item.lineTotal)}</td></>}</tr>)}</tbody></table></div>; }
 
 function Leaderboard({ state }: { state: AppState }) { return <div className="card mobile-card-table"><h3>Leaderboard Bulan Berjalan</h3><div className="table-wrap responsive-table"><table><thead><tr><th>Rank</th><th>Mitra</th><th>Tier</th><th>Delivered GMV</th><th>Total Qty</th><th>Order</th><th>Poin</th></tr></thead><tbody>{getLeaderboard(state).map((row) => <tr key={row.partnerId}><td data-label="Rank"><b>#{row.rank}</b></td><td data-label="Mitra">{row.partnerName}</td><td data-label="Tier">{row.tier}</td><td data-label="Delivered GMV">{formatIdr(row.totalOrderValue)}</td><td data-label="Total Qty">{row.totalOrderQty}</td><td data-label="Order">{row.totalOrders}</td><td data-label="Poin"><b>{row.points}</b></td></tr>)}</tbody></table></div><p className="footer-note">Hanya order delivered yang dihitung agar ranking tidak dimanipulasi dari pending/cancelled.</p></div>; }
 function Reports({ state }: { state: AppState }) { const topProducts = state.products.map((p) => ({ p, qty: state.orders.flatMap((o) => o.items).filter((i) => i.productId === p.id).reduce((s, i) => s + i.qty, 0) })).sort((a, b) => b.qty - a.qty).slice(0, 5); return <div className="grid cols-2"><div className="card"><h3>Sales Summary</h3><StatusSummary orders={state.orders} /></div><div className="card"><h3>Top Products</h3>{topProducts.map((row) => <p key={row.p.id}><b>{row.p.name}</b><br />{row.qty} pack terjual/order</p>)}</div><div className="card"><h3>Invoice Aging</h3>{state.invoices.map((i) => <p key={i.id}><b>{i.invoiceNumber}</b> • {partnerName(state, i.partnerId)}<br />Outstanding {formatIdr(i.amountDue)} • due {i.dueDate}</p>)}</div><div className="card"><h3>Export Ready</h3><div className="notice">Data report sudah dipisah untuk sales, produk, aging invoice, audit, dan accounting event export.</div></div></div>; }

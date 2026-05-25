@@ -36,4 +36,7 @@ Thumbs.db
 
 # Runtime state
 data/*.json
+.pm2/
+server-runtime/
+tmp/
 core.*
