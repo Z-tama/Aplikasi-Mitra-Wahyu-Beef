@@ -1,4 +1,4 @@
-import React, { useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { BarChart3, ClipboardList, Eye, EyeOff, FileText, IceCreamBowl, LayoutDashboard, LogOut, MapPinned, Medal, Package, ReceiptText, ShieldCheck, ShoppingCart, Truck, UserCog, Users } from 'lucide-react';
 import './styles.css';
@@ -8,6 +8,8 @@ import { api, type Session } from './apiClient';
 import { findPartnerForUser, getCatalogForPartner, getLeaderboard } from './services';
 
 const stateSingleton = createSeedState();
+const sessionStorageKey = 'wahyu-beef-session-v1';
+const sessionTtlMs = 30 * 60 * 1000;
 
 type View = 'dashboard' | 'catalog' | 'checkout' | 'orders' | 'products' | 'partners' | 'pricing' | 'documents' | 'leaderboard' | 'areas' | 'profile' | 'reports' | 'audit' | 'accounting';
 
@@ -17,16 +19,43 @@ function App() {
   const [token, setToken] = useState('');
   const [view, setView] = useState<View>('dashboard');
   const [authPage, setAuthPage] = useState<'login' | 'register'>('login');
+  const [restoringSession, setRestoringSession] = useState(true);
 
   async function refresh(nextToken = token) {
     const snapshot = await api.snapshot(nextToken);
     setState(snapshot);
   }
 
+  function clearSavedSession() {
+    localStorage.removeItem(sessionStorageKey);
+  }
+
+  async function activateSession(session: Session, remember = true) {
+    setToken(session.token);
+    setCurrentUser(session.user);
+    setView(session.user.role === 'partner' ? 'catalog' : 'dashboard');
+    if (remember) localStorage.setItem(sessionStorageKey, JSON.stringify({ token: session.token, user: session.user, expiresAt: session.expiresAt ?? Date.now() + sessionTtlMs }));
+    await refresh(session.token);
+  }
+
+  useEffect(() => {
+    const saved = localStorage.getItem(sessionStorageKey);
+    if (!saved) { setRestoringSession(false); return; }
+    try {
+      const session = JSON.parse(saved) as Session & { expiresAt?: number };
+      if (!session.token || !session.user || Number(session.expiresAt ?? 0) <= Date.now()) throw new Error('expired');
+      api.me(session.token).then(() => activateSession(session, true)).catch(() => clearSavedSession()).finally(() => setRestoringSession(false));
+    } catch {
+      clearSavedSession();
+      setRestoringSession(false);
+    }
+  }, []);
+
+  if (restoringSession) return <div className="login-page"><div className="login-card"><div className="login-form"><h2>Memuat session...</h2><p>Jarvis sedang mengecek login terakhir.</p></div></div></div>;
   if (!currentUser) return authPage === 'register'
     ? <PartnerRegistration onBack={() => setAuthPage('login')} />
-    : <Login onRegister={() => setAuthPage('register')} onLogin={async (session) => { setToken(session.token); setCurrentUser(session.user); setView(session.user.role === 'partner' ? 'catalog' : 'dashboard'); await refresh(session.token); }} state={state} />;
-  return <Shell state={state} user={currentUser} setUser={setCurrentUser} token={token} view={view} setView={setView} setState={setState} refresh={refresh} onLogout={() => { setCurrentUser(null); setToken(''); }} />;
+    : <Login onRegister={() => setAuthPage('register')} onLogin={(session) => activateSession(session)} state={state} />;
+  return <Shell state={state} user={currentUser} setUser={setCurrentUser} token={token} view={view} setView={setView} setState={setState} refresh={refresh} onLogout={() => { clearSavedSession(); setCurrentUser(null); setToken(''); }} />;
 }
 
 function Login({ state, onLogin, onRegister }: { state: AppState; onLogin: (session: Session) => Promise<void>; onRegister: () => void }) {

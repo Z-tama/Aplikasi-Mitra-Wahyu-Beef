@@ -4,22 +4,29 @@ import { demoPasswords } from '../seed.ts';
 import type { Role, User } from '../domain.ts';
 
 const SECRET = process.env.AUTH_SECRET ?? 'dev-secret-change-me';
-const sessions = new Map<string, string>();
+const SESSION_TTL_MS = Number(process.env.SESSION_TTL_MS ?? 30 * 60 * 1000);
+const sessions = new Map<string, { userId: string; expiresAt: number }>();
 
 export function login(state: AppState, identifier: string, password: string) {
   const normalizedIdentifier = normalizeIdentifier(identifier);
   const user = state.users.find((item) => item.email.toLowerCase() === normalizedIdentifier || normalizePhone(item.phone) === normalizedIdentifier);
   if (!user || !verifyPassword(user, password)) throw httpError(401, 'Kredensial tidak valid');
   if (user.status !== 'active') throw httpError(403, 'User tidak aktif');
-  const token = signToken(user.id);
-  sessions.set(token, user.id);
-  return { token, user };
+  const expiresAt = Date.now() + SESSION_TTL_MS;
+  const token = signToken(user.id, expiresAt);
+  sessions.set(token, { userId: user.id, expiresAt });
+  return { token, user, expiresAt };
 }
 
 export function authenticate(state: AppState, authorization?: string): User {
   const token = authorization?.startsWith('Bearer ') ? authorization.slice(7) : '';
   if (!token || !verifyToken(token)) throw httpError(401, 'Token tidak valid');
-  const userId = sessions.get(token) ?? token.split('.')[0];
+  const session = sessions.get(token);
+  if (session && session.expiresAt <= Date.now()) {
+    sessions.delete(token);
+    throw httpError(401, 'Session kedaluwarsa');
+  }
+  const userId = session?.userId ?? token.split('.')[0];
   const user = state.users.find((item) => item.id === userId);
   if (!user || user.status !== 'active') throw httpError(401, 'Session tidak valid');
   return user;
@@ -33,9 +40,9 @@ export function canSeePartner(user: User, partnerUserId: string) {
   return user.role !== 'partner' || user.id === partnerUserId;
 }
 
-function signToken(userId: string) {
+function signToken(userId: string, expiresAt: number) {
   const nonce = randomBytes(12).toString('hex');
-  const payload = `${userId}.${Date.now()}.${nonce}`;
+  const payload = `${userId}.${expiresAt}.${nonce}`;
   const signature = createHmac('sha256', SECRET).update(payload).digest('hex');
   return `${payload}.${signature}`;
 }
@@ -44,6 +51,8 @@ function verifyToken(token: string) {
   const parts = token.split('.');
   if (parts.length !== 4) return false;
   const payload = parts.slice(0, 3).join('.');
+  const expiresAt = Number(parts[1]);
+  if (!Number.isFinite(expiresAt) || expiresAt <= Date.now()) return false;
   const expected = createHmac('sha256', SECRET).update(payload).digest('hex');
   const actual = parts[3];
   try {

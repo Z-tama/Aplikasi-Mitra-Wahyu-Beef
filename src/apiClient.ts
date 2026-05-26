@@ -4,6 +4,7 @@ import type { CartItem, OrderStatus, Payment, User } from './domain';
 export interface Session {
   token: string;
   user: User;
+  expiresAt?: number;
 }
 
 const API_BASE = '/api/v1';
