@@ -70,8 +70,8 @@ function Login({ state, onLogin, onRegister }: { state: AppState; onLogin: (sess
     try {
       const session = await api.login(identifier, password);
       await onLogin(session);
-    } catch (error) {
-      setError(error instanceof Error ? error.message : 'Login gagal. Pastikan backend berjalan.');
+    } catch {
+      setError(loginMode === 'phone' ? 'Nomor HP atau password salah.' : 'Email atau password salah.');
     }
   }
   function switchMode(nextMode: 'phone' | 'email') {
