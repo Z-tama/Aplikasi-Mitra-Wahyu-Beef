@@ -3,6 +3,7 @@ import { readFile } from 'node:fs/promises';
 import { extname, join, normalize, resolve } from 'node:path';
 import { authenticate, hashPassword, httpError, login, requireRole, verifyPassword } from './auth.ts';
 import { loadState, mutateState } from './persistence.ts';
+import { storeUpload } from './storage.ts';
 import { createDeliveryNote, createInvoice, createOrder, findPartnerForUser, recordPayment, updateOrderShipping, updateOrderStatus } from '../services.ts';
 import type { OrderStatus, Payment } from '../domain.ts';
 
@@ -56,6 +57,39 @@ const handleApi: Handler = async (req, res, url) => {
 
   if (method === 'GET' && path === '/auth/me') return json(res, 200, { user });
   if (method === 'GET' && path === '/snapshot') return json(res, 200, filteredStateForUser(state, user.id));
+
+  if (method === 'POST' && path === '/uploads/tracking-receipts') {
+    requireRole(user, ['super_admin', 'sales_admin', 'warehouse']);
+    const contentType = String(req.headers['content-type'] ?? 'application/octet-stream');
+    const file = await readRaw(req);
+    const stored = await storeUpload('tracking-receipts', user.id, contentType, file);
+    return json(res, 201, { trackingReceiptUrl: stored.url, key: stored.key });
+  }
+
+  if (method === 'POST' && path === '/profile/photo') {
+    if (user.role !== 'partner') throw httpError(403, 'Hanya akun mitra yang bisa upload foto profil');
+    const contentType = String(req.headers['content-type'] ?? 'application/octet-stream');
+    const file = await readRaw(req);
+    const stored = await storeUpload('profile-photos', user.id, contentType, file);
+    const result = await mutateState((draft) => {
+      const actor = authenticate(draft, req.headers.authorization);
+      if (actor.role !== 'partner') throw httpError(403, 'Hanya akun mitra yang bisa upload foto profil');
+      const userRecord = draft.users.find((item) => item.id === actor.id);
+      if (!userRecord) throw httpError(404, 'User tidak ditemukan');
+      userRecord.avatarUrl = stored.url;
+      draft.auditLogs.unshift({
+        id: `audit-profile-photo-${Date.now()}`,
+        actorUserId: actor.id,
+        action: 'PARTNER_PROFILE_PHOTO_UPLOADED',
+        entityType: 'user',
+        entityId: actor.id,
+        newValue: { storageKey: stored.key },
+        timestamp: new Date().toISOString(),
+      });
+      return { avatarUrl: stored.url, user: userRecord, state: filteredStateForUser(draft, actor.id) };
+    });
+    return json(res, 201, result);
+  }
 
   if (method === 'PATCH' && path === '/profile/password') {
     const body = await readJson<{ currentPassword?: string; newPassword?: string; confirmPassword?: string }>(req);
@@ -256,6 +290,13 @@ function filteredStateForUser(state: Awaited<ReturnType<typeof loadState>>, user
     auditLogs: [],
     accountingEvents: [],
   };
+}
+
+
+async function readRaw(req: IncomingMessage): Promise<Buffer> {
+  const chunks: Buffer[] = [];
+  for await (const chunk of req) chunks.push(Buffer.from(chunk));
+  return Buffer.concat(chunks);
 }
 
 async function readJson<T>(req: IncomingMessage): Promise<T> {

@@ -61,13 +61,15 @@ export const api = {
   updateOrderShipping(token: string, orderId: string, input: { shippingCost?: number; packingFee?: number; packingType?: 'none' | 'small_styrofoam' | 'medium_styrofoam' | 'large_styrofoam'; packingQuantity?: number; trackingNumber?: string; trackingReceiptUrl?: string }) {
     return request(`/orders/${orderId}/shipping`, { method: 'PATCH', body: JSON.stringify(input) }, token);
   },
-  uploadTrackingReceipt(_token: string, file: File) {
-    return new Promise<{ trackingReceiptUrl: string }>((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onerror = () => reject(new Error('File resi gagal dibaca.'));
-      reader.onload = () => resolve({ trackingReceiptUrl: String(reader.result) });
-      reader.readAsDataURL(file);
+  async uploadTrackingReceipt(token: string, file: File) {
+    const response = await fetch(`${API_BASE}/uploads/tracking-receipts`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': file.type || 'application/octet-stream' },
+      body: file,
     });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(payload.error ?? `API error ${response.status}`);
+    return payload as { trackingReceiptUrl: string; key?: string };
   },
   createInvoice(token: string, orderId: string) {
     return request(`/orders/${orderId}/invoices`, { method: 'POST', body: JSON.stringify({}) }, token);

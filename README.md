@@ -65,9 +65,34 @@ npm audit --audit-level=high
 - `GET /api/v1/snapshot`
 - `POST /api/v1/orders`
 - `PATCH /api/v1/orders/:id/status`
+- `PATCH /api/v1/orders/:id/shipping`
+- `POST /api/v1/uploads/tracking-receipts`
+- `POST /api/v1/profile/photo`
 - `POST /api/v1/orders/:id/invoices`
 - `POST /api/v1/orders/:id/delivery-notes`
 - `POST /api/v1/invoices/:id/payments`
+
+## Cloudflare R2 Storage
+
+Upload foto resi dan foto profil sudah melalui backend upload endpoint. Jika credential R2 tersedia, file disimpan ke Cloudflare R2; jika belum, mode non-production masih fallback ke data URL untuk demo/UAT.
+
+Environment production yang perlu diisi:
+
+```bash
+R2_ACCOUNT_ID="..."
+R2_ACCESS_KEY_ID="..."
+R2_SECRET_ACCESS_KEY="..."
+R2_BUCKET="wahyu-beef-uploads"
+R2_PUBLIC_BASE_URL="https://cdn-or-public-domain.example.com" # opsional tapi direkomendasikan
+R2_REQUIRED="true" # opsional; paksa error jika R2 belum lengkap di production
+```
+
+Catatan:
+
+- Tracking receipt menerima JPG, PNG, WEBP, PDF.
+- Foto profil menerima JPG, PNG, WEBP.
+- Batas upload default 2 MB.
+- Order/profil hanya menyimpan URL/path file, bukan isi file besar, ketika R2 aktif.
 
 ## Implemented Guardrails
 
