@@ -510,8 +510,10 @@ th { background: #fff3d8; color: #7b5b2f; font-size: 12px; text-transform: upper
 .tier-accordion { order: -1; }
 .tier-accordion .footer-note { margin: 0; }
 .tier-accordion-item { border-radius: 16px; overflow: hidden; border: 1px solid #ead7ae; background: #fffaf0; }
-.tier-accordion-item .tier-summary-row { width: 100%; border: 0; border-radius: 0; background: transparent; cursor: pointer; }
-.tier-accordion-item .tier-summary-row i { width: 26px; height: 26px; border-radius: 999px; display: inline-grid; place-items: center; background: #fff3d8; color: #8f121b; font-style: normal; font-weight: 950; }
+.tier-accordion-item .tier-summary-row { width: 100%; border: 0; border-radius: 0; background: transparent; cursor: pointer; display: grid; grid-template-columns: minmax(0, 1fr) minmax(52px, auto) 32px; gap: 12px; }
+.tier-accordion-item .tier-summary-row span { min-width: 0; }
+.tier-accordion-item .tier-summary-row b { justify-self: end; min-width: 52px; text-align: right; line-height: 1; }
+.tier-accordion-item .tier-summary-row i { justify-self: end; width: 26px; height: 26px; border-radius: 999px; display: inline-grid; place-items: center; background: #fff3d8; color: #8f121b; font-style: normal; font-weight: 950; }
 .tier-accordion-item.tier-distributor { border-left: 5px solid #b51d2b; }
 .tier-accordion-item.tier-agen { border-left: 5px solid #c88c2f; }
 .tier-accordion-item.tier-reseller { border-left: 5px solid #7f8d58; }
