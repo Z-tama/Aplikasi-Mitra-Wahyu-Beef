@@ -445,26 +445,26 @@ function OrderModal({ state, order, user, token, refresh, onClose }: { state: Ap
 type AreaPoint = { id: string; label: string; province: string; island: string; x: number; y: number; note: string; cities?: string[] };
 
 const areaPoints: AreaPoint[] = [
-  { id: 'aceh', label: 'Aceh', province: 'Aceh', island: 'Sumatera', x: 7, y: 18, note: 'Sebaran mitra Aceh dan wilayah barat Indonesia.', cities: ['Banda Aceh'] },
-  { id: 'sumatera-utara', label: 'Sumut', province: 'Sumatera Utara', island: 'Sumatera', x: 13, y: 30, note: 'Mitra Sumatera bagian utara.', cities: ['Medan'] },
-  { id: 'riau', label: 'Riau', province: 'Riau', island: 'Sumatera', x: 20, y: 43, note: 'Mitra koridor Riau dan sekitarnya.', cities: ['Pekanbaru', 'Tampan'] },
-  { id: 'sumatera-barat', label: 'Sumbar', province: 'Sumatera Barat', island: 'Sumatera', x: 18, y: 49, note: 'Mitra Sumatera Barat dan sekitarnya.', cities: ['Bukittinggi'] },
-  { id: 'jambi', label: 'Jambi', province: 'Jambi', island: 'Sumatera', x: 24, y: 52, note: 'Mitra Jambi dan area Sumatera tengah.', cities: ['Jambi'] },
-  { id: 'sumatera-selatan', label: 'Sumsel', province: 'Sumatera Selatan', island: 'Sumatera', x: 26, y: 61, note: 'Mitra Sumatera bagian selatan.', cities: ['Palembang'] },
-  { id: 'lampung', label: 'Lampung', province: 'Lampung', island: 'Sumatera', x: 31, y: 68, note: 'Mitra pintu masuk Sumatera-Jawa.', cities: ['Bandar Lampung'] },
-  { id: 'bangka-belitung', label: 'Babel', province: 'Kepulauan Bangka Belitung', island: 'Sumatera', x: 35, y: 56, note: 'Mitra Kepulauan Bangka Belitung.', cities: ['Pangkalpinang'] },
-  { id: 'dki-jakarta', label: 'Jakarta', province: 'DKI Jakarta', island: 'Jawa', x: 38, y: 70, note: 'Mitra Jabodetabek dan pusat distribusi kota.', cities: ['Gading Arcadia', 'Jakarta Selatan', 'Jakarta Timur', 'Jakarta Utara', 'Jaksel', 'Kelapa Gading', 'Pesanggrahan', 'Ulujami'] },
-  { id: 'jawa-barat', label: 'Jawa Barat', province: 'Jawa Barat', island: 'Jawa', x: 42, y: 74, note: 'Bandung, Bekasi, Bogor, Depok, dan koridor Jawa Barat.', cities: ['Bekasi Timur', 'Bekasi Utara', 'Harapan Jaya', 'Bogor', 'Bogor Barat', 'Cimahi', 'Depok', 'Sukmajaya', 'Indramayu', 'Kabupaten Bandung', 'Kota Bandung', 'Karawang', 'Cikampek', 'Jatisari'] },
-  { id: 'banten', label: 'Banten', province: 'Banten', island: 'Jawa', x: 36, y: 70, note: 'Tangerang, Cilegon, BSD, dan area penyangga Jabodetabek.', cities: ['BSD', 'Cilegon', 'Tangerang', 'Tangerang Selatan'] },
-  { id: 'jawa-tengah', label: 'Jawa Tengah', province: 'Jawa Tengah', island: 'Jawa', x: 51, y: 78, note: 'Semarang, Solo, Banjarnegara, dan area Jawa Tengah.', cities: ['Banjarnegara', 'Blora', 'Semarang', 'Solo', 'Ungaran', 'Ungaran Barat'] },
-  { id: 'diy', label: 'DIY', province: 'DIY', island: 'Jawa', x: 56, y: 82, note: 'Mitra Yogyakarta dan sekitarnya.', cities: ['Banguntapan', 'Bantul', 'Jogja', 'Yogyakarta'] },
-  { id: 'jawa-timur', label: 'Jawa Timur', province: 'Jawa Timur', island: 'Jawa', x: 66, y: 78, note: 'Surabaya, Sidoarjo, Malang, Gresik, Jember, dan Mojokerto.', cities: ['Buduran', 'Darmo', 'Darmo Permai', 'Gresik', 'Jember', 'Malang', 'Mojokerto', 'Sidoarjo', 'Surabaya', 'Surabaya Barat', 'Surabaya Selatan'] },
-  { id: 'bali', label: 'Bali', province: 'Bali', island: 'Bali-Nusa Tenggara', x: 73, y: 83, note: 'Mitra Bali dan area horeca/retail sehat.', cities: ['Denpasar Bali', 'Kuta Bali'] },
-  { id: 'ntb', label: 'NTB', province: 'Nusa Tenggara Barat', island: 'Bali-Nusa Tenggara', x: 79, y: 84, note: 'Mitra Nusa Tenggara Barat.', cities: ['Mataram'] },
-  { id: 'kalimantan-timur', label: 'Kaltim', province: 'Kalimantan Timur', island: 'Kalimantan', x: 58, y: 38, note: 'Balikpapan, Samarinda, Kutai Kartanegara, dan IKN.', cities: ['Balikpapan', 'Kutai Kartanegara', 'Samarinda'] },
-  { id: 'kalimantan-selatan', label: 'Kalsel', province: 'Kalimantan Selatan', island: 'Kalimantan', x: 52, y: 56, note: 'Mitra Kalimantan Selatan.', cities: ['Banjarmasin'] },
-  { id: 'sulawesi-selatan', label: 'Sulsel', province: 'Sulawesi Selatan', island: 'Sulawesi', x: 75, y: 62, note: 'Mitra Indonesia timur via Makassar.', cities: ['Makassar'] },
-  { id: 'area-belum-diisi', label: 'Belum Diisi', province: 'Area belum diisi', island: 'Data perlu dilengkapi', x: 88, y: 22, note: 'Mitra asli yang data kota/provinsinya belum lengkap. Lengkapi profil agar marker pindah ke wilayah sebenarnya.' },
+  { id: 'aceh', label: 'Aceh', province: 'Aceh', island: 'Sumatera', x: 8.5, y: 25, note: 'Sebaran mitra Aceh dan wilayah barat Indonesia.', cities: ['Banda Aceh'] },
+  { id: 'sumatera-utara', label: 'Sumut', province: 'Sumatera Utara', island: 'Sumatera', x: 14, y: 34, note: 'Mitra Sumatera bagian utara.', cities: ['Medan'] },
+  { id: 'riau', label: 'Riau', province: 'Riau', island: 'Sumatera', x: 21.5, y: 47, note: 'Mitra koridor Riau dan sekitarnya.', cities: ['Pekanbaru', 'Tampan'] },
+  { id: 'sumatera-barat', label: 'Sumbar', province: 'Sumatera Barat', island: 'Sumatera', x: 19, y: 52, note: 'Mitra Sumatera Barat dan sekitarnya.', cities: ['Bukittinggi'] },
+  { id: 'jambi', label: 'Jambi', province: 'Jambi', island: 'Sumatera', x: 25, y: 57, note: 'Mitra Jambi dan area Sumatera tengah.', cities: ['Jambi'] },
+  { id: 'sumatera-selatan', label: 'Sumsel', province: 'Sumatera Selatan', island: 'Sumatera', x: 29, y: 64, note: 'Mitra Sumatera bagian selatan.', cities: ['Palembang'] },
+  { id: 'lampung', label: 'Lampung', province: 'Lampung', island: 'Sumatera', x: 34, y: 71, note: 'Mitra pintu masuk Sumatera-Jawa.', cities: ['Bandar Lampung'] },
+  { id: 'bangka-belitung', label: 'Babel', province: 'Kepulauan Bangka Belitung', island: 'Sumatera', x: 37, y: 58, note: 'Mitra Kepulauan Bangka Belitung.', cities: ['Pangkalpinang'] },
+  { id: 'dki-jakarta', label: 'Jakarta', province: 'DKI Jakarta', island: 'Jawa', x: 40.5, y: 75, note: 'Mitra Jabodetabek dan pusat distribusi kota.', cities: ['Gading Arcadia', 'Jakarta Selatan', 'Jakarta Timur', 'Jakarta Utara', 'Jaksel', 'Kelapa Gading', 'Pesanggrahan', 'Ulujami'] },
+  { id: 'jawa-barat', label: 'Jawa Barat', province: 'Jawa Barat', island: 'Jawa', x: 45, y: 77, note: 'Bandung, Bekasi, Bogor, Depok, dan koridor Jawa Barat.', cities: ['Bekasi Timur', 'Bekasi Utara', 'Harapan Jaya', 'Bogor', 'Bogor Barat', 'Cimahi', 'Depok', 'Sukmajaya', 'Indramayu', 'Kabupaten Bandung', 'Kota Bandung', 'Karawang', 'Cikampek', 'Jatisari'] },
+  { id: 'banten', label: 'Banten', province: 'Banten', island: 'Jawa', x: 38, y: 75, note: 'Tangerang, Cilegon, BSD, dan area penyangga Jabodetabek.', cities: ['BSD', 'Cilegon', 'Tangerang', 'Tangerang Selatan'] },
+  { id: 'jawa-tengah', label: 'Jawa Tengah', province: 'Jawa Tengah', island: 'Jawa', x: 53, y: 78, note: 'Semarang, Solo, Banjarnegara, dan area Jawa Tengah.', cities: ['Banjarnegara', 'Blora', 'Semarang', 'Solo', 'Ungaran', 'Ungaran Barat'] },
+  { id: 'diy', label: 'DIY', province: 'DIY', island: 'Jawa', x: 56.5, y: 80.5, note: 'Mitra Yogyakarta dan sekitarnya.', cities: ['Banguntapan', 'Bantul', 'Jogja', 'Yogyakarta'] },
+  { id: 'jawa-timur', label: 'Jawa Timur', province: 'Jawa Timur', island: 'Jawa', x: 64, y: 78, note: 'Surabaya, Sidoarjo, Malang, Gresik, Jember, dan Mojokerto.', cities: ['Buduran', 'Darmo', 'Darmo Permai', 'Gresik', 'Jember', 'Malang', 'Mojokerto', 'Sidoarjo', 'Surabaya', 'Surabaya Barat', 'Surabaya Selatan'] },
+  { id: 'bali', label: 'Bali', province: 'Bali', island: 'Bali-Nusa Tenggara', x: 70.5, y: 81, note: 'Mitra Bali dan area horeca/retail sehat.', cities: ['Denpasar Bali', 'Kuta Bali'] },
+  { id: 'ntb', label: 'NTB', province: 'Nusa Tenggara Barat', island: 'Bali-Nusa Tenggara', x: 75.5, y: 82, note: 'Mitra Nusa Tenggara Barat.', cities: ['Mataram'] },
+  { id: 'kalimantan-timur', label: 'Kaltim', province: 'Kalimantan Timur', island: 'Kalimantan', x: 56.5, y: 43, note: 'Balikpapan, Samarinda, Kutai Kartanegara, dan IKN.', cities: ['Balikpapan', 'Kutai Kartanegara', 'Samarinda'] },
+  { id: 'kalimantan-selatan', label: 'Kalsel', province: 'Kalimantan Selatan', island: 'Kalimantan', x: 52, y: 59, note: 'Mitra Kalimantan Selatan.', cities: ['Banjarmasin'] },
+  { id: 'sulawesi-selatan', label: 'Sulsel', province: 'Sulawesi Selatan', island: 'Sulawesi', x: 72, y: 65, note: 'Mitra Indonesia timur via Makassar.', cities: ['Makassar'] },
+  { id: 'area-belum-diisi', label: 'Belum Diisi', province: 'Area belum diisi', island: 'Data perlu dilengkapi', x: 82, y: 28, note: 'Mitra asli yang data kota/provinsinya belum lengkap. Lengkapi profil agar marker pindah ke wilayah sebenarnya.' },
 ];
 
 function isRealPartner(partner: AppState['partners'][number]) {
@@ -504,7 +504,7 @@ function PartnerAreas({ state, user }: { state: AppState; user: User }) {
     const partners = visiblePartners.filter((partner) => areaForPartner(partner).id === point.id && partner.tierId === tier.id);
     return { point, tier, partners, tierCode: tier.code.toLowerCase() };
   })).filter((group) => group.partners.length > 0);
-  const offsetForTier = (code: string) => code === 'DISTRIBUTOR' ? { x: -1.2, y: -1.8 } : code === 'AGEN' ? { x: 1.2, y: -1.8 } : { x: 0, y: 1.8 };
+  const offsetForTier = (code: string) => code === 'DISTRIBUTOR' ? { x: -0.75, y: -0.95 } : code === 'AGEN' ? { x: 0.75, y: -0.95 } : { x: 0, y: 0.95 };
 
   return <div className="area-layout">
     <div className="card area-map-card">
