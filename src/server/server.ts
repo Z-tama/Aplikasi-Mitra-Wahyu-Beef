@@ -3,6 +3,7 @@ import { readFile } from 'node:fs/promises';
 import { extname, join, normalize, resolve } from 'node:path';
 import { authenticate, hashPassword, httpError, login, requireRole, verifyPassword } from './auth.ts';
 import { loadState, mutateState } from './persistence.ts';
+import { backupStatus, runBackup, startBackupScheduler } from './backup.ts';
 import { storeUpload } from './storage.ts';
 import { createDeliveryNote, createInvoice, createOrder, findPartnerForUser, recordPayment, updateOrderShipping, updateOrderStatus } from '../services.ts';
 import type { OrderStatus, Payment } from '../domain.ts';
@@ -57,6 +58,14 @@ const handleApi: Handler = async (req, res, url) => {
 
   if (method === 'GET' && path === '/auth/me') return json(res, 200, { user });
   if (method === 'GET' && path === '/snapshot') return json(res, 200, filteredStateForUser(state, user.id));
+  if (method === 'GET' && path === '/backup/status') {
+    requireRole(user, ['super_admin']);
+    return json(res, 200, backupStatus());
+  }
+  if (method === 'POST' && path === '/backup/run') {
+    requireRole(user, ['super_admin']);
+    return json(res, 201, await runBackup('manual'));
+  }
 
   if (method === 'POST' && path === '/uploads/tracking-receipts') {
     requireRole(user, ['super_admin', 'sales_admin', 'warehouse']);
@@ -344,6 +353,7 @@ function contentType(filePath: string) {
 }
 
 if (process.env.NODE_ENV !== 'test') {
+  startBackupScheduler();
   server.listen(PORT, '0.0.0.0', () => console.log(`Frozen Membership App listening on http://0.0.0.0:${PORT}`));
 }
 

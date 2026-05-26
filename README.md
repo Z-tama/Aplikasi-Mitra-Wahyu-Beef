@@ -83,7 +83,7 @@ R2_ACCOUNT_ID="..."
 R2_ACCESS_KEY_ID="..."
 R2_SECRET_ACCESS_KEY="..."
 R2_BUCKET="wahyu-beef-uploads"
-R2_PUBLIC_BASE_URL="https://cdn-or-public-domain.example.com" # opsional tapi direkomendasikan
+R2_PUBLIC_BASE_URL="https://uploads.wahyubeef.id"
 R2_REQUIRED="true" # opsional; paksa error jika R2 belum lengkap di production
 ```
 
@@ -93,6 +93,26 @@ Catatan:
 - Foto profil menerima JPG, PNG, WEBP.
 - Batas upload default 2 MB.
 - Order/profil hanya menyimpan URL/path file, bukan isi file besar, ketika R2 aktif.
+
+## Backup Otomatis
+
+Backup production bisa dijalankan otomatis ke folder lokal `backups/` dan Cloudflare R2 path `backups/app-state/`.
+
+Environment:
+
+```bash
+BACKUP_ENABLED="true"
+BACKUP_INTERVAL_MS="86400000" # harian
+BACKUP_RETENTION_DAYS="30"
+BACKUP_DIR="backups"
+```
+
+Endpoint admin-only:
+
+- `GET /api/v1/backup/status`
+- `POST /api/v1/backup/run`
+
+Rekomendasi: jalankan backup manual sebelum import data besar, perubahan harga massal, atau deployment sensitif.
 
 ## Implemented Guardrails
 

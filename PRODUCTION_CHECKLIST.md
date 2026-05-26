@@ -201,8 +201,8 @@ Lakukan UAT 1–3 hari dengan data nyata terbatas.
 | Invoice/SJ PDF | ✅ Siap |
 | Area mitra/peta | ✅ Siap |
 | Session login 30 menit | ✅ Siap |
-| Backup otomatis | ⚠️ Perlu finalisasi |
-| Storage upload production | ⚠️ Perlu finalisasi |
+| Backup otomatis | ✅ Siap |
+| Storage upload production | ✅ Siap |
 | Monitoring/log SOP | ⚠️ Perlu finalisasi |
 | UAT final | ⚠️ Perlu dijalankan |
 
@@ -214,8 +214,8 @@ Aplikasi bisa disebut:
 
 Belum disarankan disebut 100% final production sampai checklist berikut selesai:
 
-1. Backup otomatis + restore test.
-2. Storage upload production untuk resi/foto.
+1. Restore test dari backup production.
+2. Rotate/generate ulang R2 token karena credential awal pernah terlihat di chat/screenshot.
 3. Finalisasi akun/password real.
 4. UAT 1–3 hari dengan pengguna nyata.
 5. SOP monitoring, restart, dan rollback.

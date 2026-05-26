@@ -1,6 +1,7 @@
 import { createHmac } from 'node:crypto';
 
 export type UploadKind = 'tracking-receipts' | 'profile-photos';
+export type StorageKind = UploadKind | 'backups';
 
 export interface StoredObject {
   key: string;
@@ -32,8 +33,14 @@ export async function storeUpload(kind: UploadKind, userId: string, contentType:
   assertUpload(kind, contentType, data.length);
   const cleanType = normalizeContentType(contentType);
   const key = `${kind}/${new Date().toISOString().slice(0, 10)}/${safePart(userId)}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${extensions[cleanType] ?? 'bin'}`;
-  if (isR2Configured()) return uploadToR2(key, cleanType, data);
+  return storeObject(key, cleanType, data, { allowInlineFallback: true });
+}
+
+export async function storeObject(key: string, contentType: string, data: Buffer, options: { allowInlineFallback?: boolean } = {}): Promise<StoredObject> {
+  if (isR2Configured()) return uploadToR2(key, normalizeContentType(contentType), data);
   if (process.env.NODE_ENV === 'production' && process.env.R2_REQUIRED === 'true') throw httpStorageError(503, 'Storage R2 belum dikonfigurasi. Hubungi admin.');
+  if (!options.allowInlineFallback) throw httpStorageError(503, 'Storage R2 belum dikonfigurasi untuk backup.');
+  const cleanType = normalizeContentType(contentType);
   return { key: `inline://${key}`, url: `data:${cleanType};base64,${data.toString('base64')}` };
 }
 
