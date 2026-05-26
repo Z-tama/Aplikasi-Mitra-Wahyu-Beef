@@ -495,3 +495,14 @@ th { background: #fff3d8; color: #7b5b2f; font-size: 12px; text-transform: upper
   .category-section-head h3 { font-size: 17px; }
   .category-section-head b { font-size: 11px; padding: 6px 9px; }
 }
+
+.catalog-filter-bar { display: grid; grid-template-columns: minmax(180px, 260px) minmax(260px, 1fr) auto; gap: 12px; align-items: end; padding: 14px; border: 1px solid #ead7ae; border-radius: 18px; background: #fff8e8; }
+.catalog-filter-bar .field { margin: 0; }
+.catalog-search-field .input { width: 100%; }
+.catalog-filter-summary { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 10px 14px; border-radius: 14px; background: #fffaf0; border: 1px dashed #ead7ae; color: #5f4631; }
+.catalog-filter-summary b { color: #8f121b; }
+.catalog-filter-summary span { color: #7c6754; font-weight: 800; font-size: 13px; }
+@media (max-width: 760px) {
+  .catalog-filter-bar { grid-template-columns: minmax(0, 1fr); }
+  .catalog-filter-summary { align-items: flex-start; flex-direction: column; }
+}
