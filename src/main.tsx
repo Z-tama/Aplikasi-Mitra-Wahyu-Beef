@@ -235,10 +235,19 @@ function Catalog({ state, user, token, refresh, setView }: { state: AppState; us
   const [message, setMessage] = useState('');
   const [selectedProduct, setSelectedProduct] = useState<CatalogProduct | null>(null);
   const [isCheckout, setIsCheckout] = useState(false);
+  const [categoryFilter, setCategoryFilter] = useState('all');
+  const [searchQuery, setSearchQuery] = useState('');
   if (!partner) return <div className="notice warning">User ini tidak punya data mitra.</div>;
   const activePartner = partner;
   const catalog = getCatalogForPartner(state, activePartner.id);
-  const catalogGroups = productsByCategory(state, catalog);
+  const normalizedSearch = searchQuery.trim().toLowerCase();
+  const filteredCatalog = catalog.filter((product) => {
+    const matchesCategory = categoryFilter === 'all' || product.categoryId === categoryFilter;
+    const haystack = `${product.name} ${product.sku} ${product.description ?? ''} ${categoryName(state, product.categoryId)}`.toLowerCase();
+    return matchesCategory && (!normalizedSearch || haystack.includes(normalizedSearch));
+  });
+  const catalogGroups = productsByCategory(state, filteredCatalog);
+  const activeCategoryName = categoryFilter === 'all' ? 'Semua Kategori' : categoryName(state, categoryFilter);
   const items: CartItem[] = Object.entries(cart).filter(([, qty]) => qty > 0).map(([key, qty]) => ({ ...cartKeyToItem(key, qty), notes: cartNotes[key]?.trim() || undefined }));
   const total = items.reduce((sum, item) => {
     const product = catalog.find((p) => p.id === item.productId);
@@ -278,8 +287,9 @@ function Catalog({ state, user, token, refresh, setView }: { state: AppState; us
   return <div className="grid">
     <div className="card"><b>Tier aktif: {tierName(state, activePartner.tierId)}</b><p className="footer-note">Harga di bawah dihitung server-side berdasarkan tier mitra. Untuk daging sapi, tulang sapi, dan jeroan sapi, klik produk untuk memilih kemasan 250 gr, 500 gr, atau 1000 gr.</p></div>
     {message && <div className="notice">{message}</div>}
-    <div className="catalog-toolbar"><div><b>{catalog.length} Produk</b><span>Harga {tierName(state, activePartner.tierId)}</span></div><div className="catalog-view-label">Tampilan <span className="grid-icon">▦</span></div></div>
-    <div className="catalog-category-stack">{catalogGroups.map(({ category, products }) => <section className="catalog-category-section" key={category.id}>
+    <div className="catalog-filter-bar marketplace-filter-bar"><div className="field"><label>Filter Kategori</label><select value={categoryFilter} onChange={(event) => setCategoryFilter(event.target.value)}><option value="all">Semua Kategori</option>{orderedCategories(state).map((category) => <option key={category.id} value={category.id}>{category.name}</option>)}</select></div><div className="field catalog-search-field"><label>Cari Produk</label><input className="input" value={searchQuery} onChange={(event) => setSearchQuery(event.target.value)} placeholder="Cari nama produk, SKU, deskripsi..." /></div>{(categoryFilter !== 'all' || searchQuery) && <button type="button" className="btn small" onClick={() => { setCategoryFilter('all'); setSearchQuery(''); }}>Reset Filter</button>}</div>
+    <div className="catalog-toolbar"><div><b>{filteredCatalog.length} / {catalog.length} Produk</b><span>Harga {tierName(state, activePartner.tierId)} • {activeCategoryName}{normalizedSearch ? ` • “${searchQuery.trim()}”` : ''}</span></div><div className="catalog-view-label">Tampilan <span className="grid-icon">▦</span></div></div>
+    {catalogGroups.length ? <div className="catalog-category-stack">{catalogGroups.map(({ category, products }) => <section className="catalog-category-section" key={category.id}>
       <div className="category-section-head"><div><span>Kategori</span><h3>{category.name}</h3></div><b>{products.length} Produk</b></div>
       <div className="catalog marketplace-catalog">{products.map((product) => {
         const hasPackageOptions = canChoosePackaging(product);
@@ -288,7 +298,7 @@ function Catalog({ state, user, token, refresh, setView }: { state: AppState; us
           <div className="product-info"><h3>{product.name}</h3><span className="product-meta">{product.sku} • {hasPackageOptions ? 'Pilih kemasan' : `MOQ ${product.minimumOrderQty} ${product.unit}`}</span><div className="price-row"><span className="voucher-tag">%</span><div className="price">{product.price ? formatIdr(product.price) : 'Belum ada harga'}</div></div><div className="deal-note">{hasPackageOptions ? 'Klik untuk pilih ukuran kemasan' : `Harga khusus ${tierName(state, activePartner.tierId)}`}</div><div className="rating-row"><span>★ 5.0</span><span>•</span><span>{Math.max(10, product.minimumOrderQty * 10)}+ terjual</span></div>{hasPackageOptions ? <button className="btn small product-pick-btn" onClick={(event) => { event.stopPropagation(); setSelectedProduct(product); }}>Pilih</button> : <div className="qty-row compact" onClick={(event) => event.stopPropagation()}><input className="input" type="number" min="0" placeholder="Qty" value={cart[cartKey(product.id)] ?? ''} onChange={(e) => setCart({ ...cart, [cartKey(product.id)]: Number(e.target.value) })} /><button className="btn small" onClick={() => addToCart(product)}>Tambah</button></div>}</div>
         </div>;
       })}</div>
-    </section>)}</div>
+    </section>)}</div> : <div className="notice warning">Produk tidak ditemukan. Coba ubah kategori atau kata kunci pencarian.</div>}
     <button className="floating-cart" type="button" disabled={items.length === 0} onClick={() => setIsCheckout(true)} aria-label={`Checkout ${cartQty} item dengan total ${formatIdr(total)}`}>
       <span className="floating-cart-icon"><ShoppingCart size={23} strokeWidth={2.8} /><span className="floating-cart-badge">{cartQty > 99 ? '99+' : cartQty}</span></span>
       <span className="floating-cart-copy"><span>Total Harga</span><b>{formatIdr(total)}</b></span>
