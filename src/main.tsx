@@ -433,28 +433,29 @@ function OrderModal({ state, order, user, token, refresh, onClose }: { state: Ap
 
 
 
-type AreaPoint = { id: string; label: string; province: string; island: string; x: number; y: number; note: string };
+type AreaPoint = { id: string; label: string; province: string; island: string; x: number; y: number; note: string; cities?: string[] };
 
 const areaPoints: AreaPoint[] = [
-  { id: 'aceh', label: 'Aceh', province: 'Aceh', island: 'Sumatera', x: 8, y: 20, note: 'Sebaran mitra Aceh dan wilayah barat Indonesia.' },
-  { id: 'sumatera-utara', label: 'Sumut', province: 'Sumatera Utara', island: 'Sumatera', x: 12, y: 30, note: 'Mitra Sumatera bagian utara.' },
-  { id: 'riau', label: 'Riau', province: 'Riau', island: 'Sumatera', x: 19, y: 42, note: 'Mitra koridor Riau dan sekitarnya.' },
-  { id: 'jambi', label: 'Jambi', province: 'Jambi', island: 'Sumatera', x: 23, y: 51, note: 'Mitra Jambi dan area Sumatera tengah.' },
-  { id: 'sumatera-selatan', label: 'Sumsel', province: 'Sumatera Selatan', island: 'Sumatera', x: 25, y: 58, note: 'Mitra Sumatera bagian selatan.' },
-  { id: 'lampung', label: 'Lampung', province: 'Lampung', island: 'Sumatera', x: 30, y: 66, note: 'Mitra pintu masuk Sumatera-Jawa.' },
-  { id: 'bangka-belitung', label: 'Babel', province: 'Kepulauan Bangka Belitung', island: 'Sumatera', x: 33, y: 55, note: 'Mitra Kepulauan Bangka Belitung.' },
-  { id: 'dki-jakarta', label: 'Jakarta', province: 'DKI Jakarta', island: 'Jawa', x: 38, y: 70, note: 'Mitra Jabodetabek dan pusat distribusi kota.' },
-  { id: 'jawa-barat', label: 'Jawa Barat', province: 'Jawa Barat', island: 'Jawa', x: 42, y: 74, note: 'Bandung, Bekasi, Bogor, Depok, dan koridor Jawa Barat.' },
-  { id: 'banten', label: 'Banten', province: 'Banten', island: 'Jawa', x: 35, y: 70, note: 'Tangerang, Cilegon, BSD, dan area penyangga Jabodetabek.' },
-  { id: 'jawa-tengah', label: 'Jawa Tengah', province: 'Jawa Tengah', island: 'Jawa', x: 51, y: 77, note: 'Semarang, Solo, Banjarnegara, dan area Jawa Tengah.' },
-  { id: 'diy', label: 'DIY', province: 'DIY', island: 'Jawa', x: 56, y: 82, note: 'Mitra Yogyakarta dan sekitarnya.' },
-  { id: 'jawa-timur', label: 'Jawa Timur', province: 'Jawa Timur', island: 'Jawa', x: 66, y: 78, note: 'Surabaya, Sidoarjo, Malang, Gresik, Jember, dan Mojokerto.' },
-  { id: 'bali', label: 'Bali', province: 'Bali', island: 'Bali-Nusa Tenggara', x: 73, y: 82, note: 'Mitra Bali dan area horeca/retail sehat.' },
-  { id: 'ntb', label: 'NTB', province: 'Nusa Tenggara Barat', island: 'Bali-Nusa Tenggara', x: 78, y: 83, note: 'Mitra Nusa Tenggara Barat.' },
-  { id: 'kalimantan-timur', label: 'Kaltim', province: 'Kalimantan Timur', island: 'Kalimantan', x: 55, y: 38, note: 'Balikpapan, Samarinda, Kutai Kartanegara, dan IKN.' },
-  { id: 'kalimantan-selatan', label: 'Kalsel', province: 'Kalimantan Selatan', island: 'Kalimantan', x: 51, y: 55, note: 'Mitra Kalimantan Selatan.' },
-  { id: 'sulawesi-selatan', label: 'Sulsel', province: 'Sulawesi Selatan', island: 'Sulawesi', x: 74, y: 60, note: 'Mitra Indonesia timur via Makassar.' },
-  { id: 'area-belum-diisi', label: 'Belum Diisi', province: 'Area belum diisi', island: 'Data perlu dilengkapi', x: 86, y: 27, note: 'Mitra asli yang data kota/provinsinya belum lengkap. Lengkapi profil agar marker pindah ke wilayah sebenarnya.' },
+  { id: 'aceh', label: 'Aceh', province: 'Aceh', island: 'Sumatera', x: 7, y: 18, note: 'Sebaran mitra Aceh dan wilayah barat Indonesia.', cities: ['Banda Aceh'] },
+  { id: 'sumatera-utara', label: 'Sumut', province: 'Sumatera Utara', island: 'Sumatera', x: 13, y: 30, note: 'Mitra Sumatera bagian utara.', cities: ['Medan'] },
+  { id: 'riau', label: 'Riau', province: 'Riau', island: 'Sumatera', x: 20, y: 43, note: 'Mitra koridor Riau dan sekitarnya.', cities: ['Pekanbaru', 'Tampan'] },
+  { id: 'sumatera-barat', label: 'Sumbar', province: 'Sumatera Barat', island: 'Sumatera', x: 18, y: 49, note: 'Mitra Sumatera Barat dan sekitarnya.', cities: ['Bukittinggi'] },
+  { id: 'jambi', label: 'Jambi', province: 'Jambi', island: 'Sumatera', x: 24, y: 52, note: 'Mitra Jambi dan area Sumatera tengah.', cities: ['Jambi'] },
+  { id: 'sumatera-selatan', label: 'Sumsel', province: 'Sumatera Selatan', island: 'Sumatera', x: 26, y: 61, note: 'Mitra Sumatera bagian selatan.', cities: ['Palembang'] },
+  { id: 'lampung', label: 'Lampung', province: 'Lampung', island: 'Sumatera', x: 31, y: 68, note: 'Mitra pintu masuk Sumatera-Jawa.', cities: ['Bandar Lampung'] },
+  { id: 'bangka-belitung', label: 'Babel', province: 'Kepulauan Bangka Belitung', island: 'Sumatera', x: 35, y: 56, note: 'Mitra Kepulauan Bangka Belitung.', cities: ['Pangkalpinang'] },
+  { id: 'dki-jakarta', label: 'Jakarta', province: 'DKI Jakarta', island: 'Jawa', x: 38, y: 70, note: 'Mitra Jabodetabek dan pusat distribusi kota.', cities: ['Gading Arcadia', 'Jakarta Selatan', 'Jakarta Timur', 'Jakarta Utara', 'Jaksel', 'Kelapa Gading', 'Pesanggrahan', 'Ulujami'] },
+  { id: 'jawa-barat', label: 'Jawa Barat', province: 'Jawa Barat', island: 'Jawa', x: 42, y: 74, note: 'Bandung, Bekasi, Bogor, Depok, dan koridor Jawa Barat.', cities: ['Bekasi Timur', 'Bekasi Utara', 'Harapan Jaya', 'Bogor', 'Bogor Barat', 'Cimahi', 'Depok', 'Sukmajaya', 'Indramayu', 'Kabupaten Bandung', 'Kota Bandung', 'Karawang', 'Cikampek', 'Jatisari'] },
+  { id: 'banten', label: 'Banten', province: 'Banten', island: 'Jawa', x: 36, y: 70, note: 'Tangerang, Cilegon, BSD, dan area penyangga Jabodetabek.', cities: ['BSD', 'Cilegon', 'Tangerang', 'Tangerang Selatan'] },
+  { id: 'jawa-tengah', label: 'Jawa Tengah', province: 'Jawa Tengah', island: 'Jawa', x: 51, y: 78, note: 'Semarang, Solo, Banjarnegara, dan area Jawa Tengah.', cities: ['Banjarnegara', 'Blora', 'Semarang', 'Solo', 'Ungaran', 'Ungaran Barat'] },
+  { id: 'diy', label: 'DIY', province: 'DIY', island: 'Jawa', x: 56, y: 82, note: 'Mitra Yogyakarta dan sekitarnya.', cities: ['Banguntapan', 'Bantul', 'Jogja', 'Yogyakarta'] },
+  { id: 'jawa-timur', label: 'Jawa Timur', province: 'Jawa Timur', island: 'Jawa', x: 66, y: 78, note: 'Surabaya, Sidoarjo, Malang, Gresik, Jember, dan Mojokerto.', cities: ['Buduran', 'Darmo', 'Darmo Permai', 'Gresik', 'Jember', 'Malang', 'Mojokerto', 'Sidoarjo', 'Surabaya', 'Surabaya Barat', 'Surabaya Selatan'] },
+  { id: 'bali', label: 'Bali', province: 'Bali', island: 'Bali-Nusa Tenggara', x: 73, y: 83, note: 'Mitra Bali dan area horeca/retail sehat.', cities: ['Denpasar Bali', 'Kuta Bali'] },
+  { id: 'ntb', label: 'NTB', province: 'Nusa Tenggara Barat', island: 'Bali-Nusa Tenggara', x: 79, y: 84, note: 'Mitra Nusa Tenggara Barat.', cities: ['Mataram'] },
+  { id: 'kalimantan-timur', label: 'Kaltim', province: 'Kalimantan Timur', island: 'Kalimantan', x: 58, y: 38, note: 'Balikpapan, Samarinda, Kutai Kartanegara, dan IKN.', cities: ['Balikpapan', 'Kutai Kartanegara', 'Samarinda'] },
+  { id: 'kalimantan-selatan', label: 'Kalsel', province: 'Kalimantan Selatan', island: 'Kalimantan', x: 52, y: 56, note: 'Mitra Kalimantan Selatan.', cities: ['Banjarmasin'] },
+  { id: 'sulawesi-selatan', label: 'Sulsel', province: 'Sulawesi Selatan', island: 'Sulawesi', x: 75, y: 62, note: 'Mitra Indonesia timur via Makassar.', cities: ['Makassar'] },
+  { id: 'area-belum-diisi', label: 'Belum Diisi', province: 'Area belum diisi', island: 'Data perlu dilengkapi', x: 88, y: 22, note: 'Mitra asli yang data kota/provinsinya belum lengkap. Lengkapi profil agar marker pindah ke wilayah sebenarnya.' },
 ];
 
 function isRealPartner(partner: AppState['partners'][number]) {
@@ -467,7 +468,16 @@ function tierSummary(state: AppState, partners: AppState['partners']) {
   return state.tiers.map((tier) => ({ tier, count: partners.filter((partner) => partner.tierId === tier.id).length }));
 }
 function areaForPartner(partner: AppState['partners'][number]) {
-  return areaPoints.find((point) => point.province === partner.province) ?? areaPoints.find((point) => point.id === 'area-belum-diisi')!;
+  const city = normalizeAreaName(partner.city);
+  const province = normalizeAreaName(partner.province);
+  const address = normalizeAreaName(partner.address);
+  return areaPoints.find((point) => point.cities?.some((item) => address.includes(normalizeAreaName(item))))
+    ?? areaPoints.find((point) => point.cities?.some((item) => normalizeAreaName(item) === city))
+    ?? areaPoints.find((point) => normalizeAreaName(point.province) === province)
+    ?? areaPoints.find((point) => point.id === 'area-belum-diisi')!;
+}
+function normalizeAreaName(value?: string) {
+  return String(value ?? '').trim().toLowerCase().replace(/\s+/g, ' ');
 }
 
 function PartnerAreas({ state, user }: { state: AppState; user: User }) {
@@ -480,25 +490,22 @@ function PartnerAreas({ state, user }: { state: AppState; user: User }) {
   const activePartners = visiblePartners.filter((partner) => partner.status === 'active').length;
   const coveredAreas = new Set(visiblePartners.map((partner) => areaForPartner(partner).province).filter((province) => province !== 'Area belum diisi')).size;
   const summary = tierSummary(state, visiblePartners);
-  const tierClassForArea = (point: AreaPoint) => {
-    const partners = visiblePartners.filter((partner) => areaForPartner(partner).id === point.id);
-    if (!partners.length) return 'tier-empty';
-    if (partners.some((partner) => tierCode(state, partner.tierId) === 'DISTRIBUTOR')) return 'tier-distributor';
-    if (partners.some((partner) => tierCode(state, partner.tierId) === 'AGEN')) return 'tier-agen';
-    return 'tier-reseller';
-  };
+  const tierMarkerGroups = areaPoints.flatMap((point) => state.tiers.map((tier) => {
+    const partners = visiblePartners.filter((partner) => areaForPartner(partner).id === point.id && partner.tierId === tier.id);
+    return { point, tier, partners, tierCode: tier.code.toLowerCase() };
+  })).filter((group) => group.partners.length > 0);
+  const offsetForTier = (code: string) => code === 'DISTRIBUTOR' ? { x: -1.2, y: -1.8 } : code === 'AGEN' ? { x: 1.2, y: -1.8 } : { x: 0, y: 1.8 };
 
   return <div className="area-layout">
     <div className="card area-map-card">
       <div className="area-head"><div><h3>Peta Sebaran Wilayah</h3><p>Data diambil dari database mitra asli Wahyu Beef. Mitra dummy tidak ditampilkan.</p></div><span className="area-pill">{visiblePartners.length} Mitra</span></div>
       <div className={`indonesia-map map-focus-${selected.id}`} aria-label="Peta sebaran mitra Indonesia">
         <img className="map-image" src="/assets/peta-indonesia-wb.png" alt="Peta Indonesia Wahyu Beef" />
-        {areaPoints.map((point) => {
-          const count = visiblePartners.filter((partner) => areaForPartner(partner).id === point.id).length;
-          const tierClass = tierClassForArea(point);
-          return <button key={point.id} className={`map-marker ${selected.id === point.id ? 'active' : ''} ${count ? 'has-partners' : 'empty'} ${tierClass}`} style={{ left: `${point.x}%`, top: `${point.y}%` }} onClick={() => setSelectedId(point.id)} title={`${point.label}: ${count} mitra`}>
+        {tierMarkerGroups.map(({ point, tier, partners, tierCode: code }) => {
+          const offset = offsetForTier(tier.code);
+          return <button key={`${point.id}-${tier.id}`} className={`map-marker ${selected.id === point.id ? 'active' : ''} has-partners tier-${code}`} style={{ left: `${point.x + offset.x}%`, top: `${point.y + offset.y}%` }} onClick={() => setSelectedId(point.id)} title={`${point.label} • ${tier.name}: ${partners.length} mitra`}>
             <span className="pin-dot" />
-            <span className="pin-count">{count}</span>
+            <span className="pin-count">{partners.length}</span>
           </button>;
         })}
       </div>
