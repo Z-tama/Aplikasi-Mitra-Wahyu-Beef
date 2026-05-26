@@ -223,3 +223,23 @@ Belum disarankan disebut 100% final production sampai checklist berikut selesai:
 Setelah lima poin itu selesai, status bisa dinaikkan menjadi:
 
 > **Production Stable v1.0**
+
+## 5. R2 Upload Storage Status
+
+- [x] Backend upload endpoint tersedia untuk foto resi: `POST /api/v1/uploads/tracking-receipts`.
+- [x] Backend upload endpoint tersedia untuk foto profil: `POST /api/v1/profile/photo`.
+- [x] Cloudflare R2 credential sudah terpasang di PM2 runtime.
+- [x] Bucket aktif: `wahyu-beef-uploads`.
+- [x] Test write object ke R2 berhasil via endpoint aplikasi.
+- [x] Test HEAD object via R2 S3 API berhasil.
+- [ ] Custom/public domain `uploads.wahyubeef.id` masih perlu dihubungkan/diaktifkan di Cloudflare R2 agar URL file bisa dibuka publik dari browser.
+- [ ] Setelah custom domain aktif, rotate/generate ulang R2 token karena credential awal pernah terlihat di chat/screenshot.
+
+Rekomendasi Cloudflare:
+
+1. Masuk ke R2 Object Storage.
+2. Buka bucket `wahyu-beef-uploads`.
+3. Buka Settings → Custom Domains.
+4. Connect domain `uploads.wahyubeef.id`.
+5. Tunggu DNS/SSL aktif.
+6. Test file URL `https://uploads.wahyubeef.id/<object-key>`.
