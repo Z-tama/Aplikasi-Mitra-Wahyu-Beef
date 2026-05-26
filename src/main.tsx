@@ -494,6 +494,7 @@ function PartnerAreas({ state, user }: { state: AppState; user: User }) {
   const visiblePartners = user.role === 'partner' ? realPartners.filter((partner) => partner.userId === user.id) : realPartners;
   const firstArea = visiblePartners[0] ? areaForPartner(visiblePartners[0]).id : 'jawa-barat';
   const [selectedId, setSelectedId] = useState(firstArea);
+  const [expandedTierId, setExpandedTierId] = useState<string | null>(null);
   const selected = areaPoints.find((point) => point.id === selectedId) ?? areaPoints[0];
   const partnersInArea = visiblePartners.filter((partner) => areaForPartner(partner).id === selected.id);
   const activePartners = visiblePartners.filter((partner) => partner.status === 'active').length;
@@ -526,6 +527,11 @@ function PartnerAreas({ state, user }: { state: AppState; user: User }) {
         <Metric label="Area Tercover" value={String(coveredAreas)} />
         <Metric label="Area Dipilih" value={String(partnersInArea.length)} />
       </div>
+      <div className="card tier-summary tier-accordion"><h3>Rekap Jumlah Mitra</h3><p className="footer-note">Klik tier untuk membuka rincian nama mitra.</p>{summary.map(({ tier, count }) => {
+        const tierPartners = visiblePartners.filter((partner) => partner.tierId === tier.id).sort((a, b) => a.businessName.localeCompare(b.businessName));
+        const isOpen = expandedTierId === tier.id;
+        return <div key={tier.id} className={`tier-accordion-item tier-${tier.code.toLowerCase()} ${isOpen ? 'open' : ''}`}><button className="tier-summary-row" onClick={() => setExpandedTierId(isOpen ? null : tier.id)}><span>{tier.name}</span><b>{count}</b><i>{isOpen ? '−' : '+'}</i></button>{isOpen && <div className="tier-partner-dropdown">{tierPartners.map((partner) => <button key={partner.id} className="tier-partner-row" onClick={() => setSelectedId(areaForPartner(partner).id)}><span><b>{partner.businessName}</b><small>{partner.partnerCode} • {areaForPartner(partner).label}</small></span><em>{partner.city || '-'}</em></button>)}</div>}</div>;
+      })}<p className="footer-note">Total dihitung dari database mitra asli yang aktif di app.</p></div>
       <div className="card selected-area-card">
         <div className="area-title"><div><span className="area-kicker">{selected.island}</span><h3>{selected.label}</h3><p>{selected.note}</p></div><span className="area-pill strong">{partnersInArea.length} mitra</span></div>
         {partnersInArea.length ? <div className="partner-area-list">{partnersInArea.map((partner) => <div className="partner-area-item" key={partner.id}>
@@ -533,7 +539,6 @@ function PartnerAreas({ state, user }: { state: AppState; user: User }) {
           <div><span className={`status ${partner.status === 'active' ? 'delivered' : 'cancelled'}`}>{partner.status}</span><br /><small>{partner.city} • {partner.phone}</small></div>
         </div>)}</div> : <div className="notice warning">Belum ada mitra asli di area ini.</div>}
       </div>
-      <div className="card tier-summary"><h3>Rekap Jumlah Mitra</h3>{summary.map(({ tier, count }) => <button key={tier.id} className={`tier-summary-row tier-${tier.code.toLowerCase()}`} onClick={() => { const first = visiblePartners.find((partner) => partner.tierId === tier.id); if (first) setSelectedId(areaForPartner(first).id); }}><span>{tier.name}</span><b>{count}</b></button>)}<p className="footer-note">Total dihitung dari database mitra asli yang aktif di app.</p></div>
     </div>
   </div>;
 }
