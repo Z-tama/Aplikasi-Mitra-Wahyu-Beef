@@ -185,24 +185,44 @@ function Topbar({ state, user, view }: { state: AppState; user: User; view: View
 }
 
 function Dashboard({ state }: { state: AppState }) {
+  const now = new Date();
+  const monthKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
   const deliveredGmv = state.orders.filter((o) => o.status === 'delivered').reduce((s, o) => s + o.grandTotal, 0);
+  const monthlyRevenue = state.invoices.filter((invoice) => invoice.invoiceDate.startsWith(monthKey) && invoice.status !== 'void').reduce((sum, invoice) => sum + invoice.amountPaid, 0);
+  const totalPaid = state.invoices.filter((invoice) => invoice.status !== 'void').reduce((sum, invoice) => sum + invoice.amountPaid, 0);
+  const totalDue = state.invoices.filter((invoice) => invoice.status !== 'void').reduce((sum, invoice) => sum + invoice.amountDue, 0);
+  const invoiceTotal = totalPaid + totalDue;
   const activeOrders = state.orders.filter((o) => !['delivered', 'cancelled'].includes(o.status)).length;
   return <div className="grid">
     <div className="grid cols-4">
       <Metric label="GMV Delivered" value={formatIdr(deliveredGmv)} />
       <Metric label="Order Aktif" value={String(activeOrders)} />
       <Metric label="Mitra Aktif" value={String(state.partners.filter((p) => p.status === 'active').length)} />
-      <Metric label="Invoice Outstanding" value={formatIdr(state.invoices.reduce((s, i) => s + i.amountDue, 0))} />
+      <Metric label="Invoice Outstanding" value={formatIdr(totalDue)} />
     </div>
     <div className="grid cols-2">
       <div className="card"><h3>Order by Status</h3><StatusSummary orders={state.orders} /></div>
-      <div className="card"><h3>PSAK-oriented Reminder</h3><div className="notice warning">Order dibuat belum otomatis menjadi revenue. Sistem mencatat accounting_events agar finance bisa mapping jurnal saat invoice, pengiriman, penerimaan barang, dan pembayaran.</div></div>
+      <FinanceChartCard monthlyRevenue={monthlyRevenue} paid={totalPaid} due={totalDue} total={invoiceTotal} monthLabel={now.toLocaleDateString('id-ID', { month: 'long', year: 'numeric' })} />
     </div>
     <OrdersTable state={state} orders={state.orders.slice(0, 5)} compact />
   </div>;
 }
 
 function Metric({ label, value }: { label: string; value: string }) { return <div className="card metric"><span className="label">{label}</span><span className="value">{value}</span></div>; }
+
+function FinanceChartCard({ monthlyRevenue, paid, due, total, monthLabel }: { monthlyRevenue: number; paid: number; due: number; total: number; monthLabel: string }) {
+  const paidPct = total > 0 ? Math.round((paid / total) * 100) : 0;
+  const duePct = total > 0 ? Math.round((due / total) * 100) : 0;
+  const maxValue = Math.max(monthlyRevenue, paid, due, 1);
+  const revenueHeight = Math.max(8, Math.round((monthlyRevenue / maxValue) * 100));
+  const paidHeight = Math.max(8, Math.round((paid / maxValue) * 100));
+  const dueHeight = Math.max(8, Math.round((due / maxValue) * 100));
+  return <div className="card finance-chart-card"><div className="chart-head"><div><h3>Grafik Keuangan</h3><p>Total omzet bulan ini & status tagihan</p></div><span className="area-pill">{monthLabel}</span></div><div className="revenue-highlight"><span>Total Omzet Bulan Ini</span><b>{formatIdr(monthlyRevenue)}</b></div><div className="mini-bar-chart" aria-label="Grafik omzet dan tagihan"><ChartBar label="Omzet" value={monthlyRevenue} height={revenueHeight} tone="revenue" /><ChartBar label="Terbayar" value={paid} height={paidHeight} tone="paid" /><ChartBar label="Belum" value={due} height={dueHeight} tone="due" /></div><div className="invoice-split"><div className="split-track"><span className="paid" style={{ width: `${paidPct}%` }} /><span className="due" style={{ width: `${duePct}%` }} /></div><div className="split-grid"><div><span className="legend-dot paid-dot" />Sudah terbayar<b>{formatIdr(paid)}</b><small>{paidPct}%</small></div><div><span className="legend-dot due-dot" />Belum terbayar<b>{formatIdr(due)}</b><small>{duePct}%</small></div></div></div></div>;
+}
+
+function ChartBar({ label, value, height, tone }: { label: string; value: number; height: number; tone: 'revenue' | 'paid' | 'due' }) {
+  return <div className={`chart-bar ${tone}`}><div className="bar-shell"><span style={{ height: `${height}%` }} /></div><b>{formatIdr(value)}</b><small>{label}</small></div>;
+}
 
 type CatalogProduct = ReturnType<typeof getCatalogForPartner>[number];
 
