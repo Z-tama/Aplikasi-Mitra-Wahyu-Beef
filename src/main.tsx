@@ -152,8 +152,8 @@ function Shell({ state, user, setUser, token, view, setView, setState, refresh, 
   const isPartner = user.role === 'partner';
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const nav = isPartner
-    ? [['catalog', 'Katalog', ShoppingCart], ['orders', 'Order Saya', ClipboardList], ['documents', 'Dokumen', FileText], ['leaderboard', 'Leaderboard', Medal], ['areas', 'Area Mitra', MapPinned], ['profile', 'Profil', UserCog]] as const
-    : [['dashboard', 'Dashboard', LayoutDashboard], ['orders', 'Order', ClipboardList], ['products', 'Produk', Package], ['partners', 'Mitra', Users], ['areas', 'Area Mitra', MapPinned], ['pricing', 'Harga Tier', ReceiptText], ['documents', 'Invoice & SJ', FileText], ['leaderboard', 'Leaderboard', Medal], ['reports', 'Reports', BarChart3], ['accounting', 'Accounting Events', ShieldCheck], ['audit', 'Audit Trail', ShieldCheck]] as const;
+    ? [['catalog', 'Katalog', ShoppingCart], ['orders', 'Order Saya', ClipboardList], ['documents', 'Dokumen', FileText], ['leaderboard', 'Peringkat', Medal], ['areas', 'Area Mitra', MapPinned], ['profile', 'Profil', UserCog]] as const
+    : [['dashboard', 'Dashboard', LayoutDashboard], ['orders', 'Order', ClipboardList], ['products', 'Produk', Package], ['partners', 'Mitra', Users], ['areas', 'Area Mitra', MapPinned], ['pricing', 'Harga Tier', ReceiptText], ['documents', 'Invoice & SJ', FileText], ['leaderboard', 'Peringkat', Medal], ['reports', 'Reports', BarChart3], ['accounting', 'Accounting Events', ShieldCheck], ['audit', 'Audit Trail', ShieldCheck]] as const;
   const bottomNav = isPartner
     ? nav.filter(([key]) => ['catalog', 'orders', 'documents', 'leaderboard', 'profile'].includes(key))
     : nav.filter(([key]) => ['dashboard', 'orders', 'products', 'partners', 'documents'].includes(key));
@@ -192,7 +192,7 @@ function Shell({ state, user, setUser, token, view, setView, setState, refresh, 
 
 function MobileAppBar({ state, user, view, onMenu }: { state: AppState; user: User; view: View; onMenu: () => void }) {
   const [open, setOpen] = useState(false);
-  const title: Record<View, string> = { dashboard: 'Dashboard', catalog: 'Katalog', checkout: 'Checkout', orders: user.role === 'partner' ? 'Order Saya' : 'Order', products: 'Produk', partners: 'Mitra', pricing: 'Harga Tier', documents: 'Invoice & SJ', leaderboard: 'Leaderboard', areas: 'Area Mitra', profile: 'Profil', reports: 'Reports', audit: 'Audit Trail', accounting: 'Accounting' };
+  const title: Record<View, string> = { dashboard: 'Dashboard', catalog: 'Katalog', checkout: 'Checkout', orders: user.role === 'partner' ? 'Order Saya' : 'Order', products: 'Produk', partners: 'Mitra', pricing: 'Harga Tier', documents: 'Invoice & SJ', leaderboard: 'Peringkat', areas: 'Area Mitra', profile: 'Profil', reports: 'Reports', audit: 'Audit Trail', accounting: 'Accounting' };
   const visibleOrders = user.role === 'partner' ? state.orders.filter((order) => order.createdBy === user.id || findPartnerForUser(state, user)?.id === order.partnerId) : state.orders;
   const activeOrders = visibleOrders.filter((order) => !['delivered', 'cancelled'].includes(order.status));
   const recentInvoices = state.invoices.filter((invoice) => invoice.status !== 'void' && (user.role !== 'partner' || visibleOrders.some((order) => order.id === invoice.orderId))).slice(0, 2);
