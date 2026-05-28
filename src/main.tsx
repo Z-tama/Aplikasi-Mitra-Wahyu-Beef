@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
-import { BarChart3, ClipboardList, Eye, EyeOff, FileText, IceCreamBowl, LayoutDashboard, LogOut, MapPinned, Medal, Package, ReceiptText, ShieldCheck, ShoppingCart, Truck, UserCog, Users } from 'lucide-react';
+import { BarChart3, Bell, ClipboardList, Eye, EyeOff, FileText, IceCreamBowl, LayoutDashboard, LogOut, MapPinned, Medal, Menu, Package, ReceiptText, ShieldCheck, ShoppingCart, Truck, UserCog, Users, X } from 'lucide-react';
 import './styles.css';
 import { AccountingEvent, CartItem, DeliveryNote, Invoice, Order, OrderStatus, Role, User, formatIdr, statusLabels, validTransitions } from './domain';
 import { AppState, createSeedState } from './seed';
@@ -150,16 +150,27 @@ function PartnerRegistration({ onBack }: { onBack: () => void }) {
 
 function Shell({ state, user, setUser, token, view, setView, setState, refresh, onLogout }: { state: AppState; user: User; setUser: (user: User) => void; token: string; view: View; setView: (view: View) => void; setState: (state: AppState) => void; refresh: () => Promise<void>; onLogout: () => void }) {
   const isPartner = user.role === 'partner';
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const nav = isPartner
     ? [['catalog', 'Katalog', ShoppingCart], ['orders', 'Order Saya', ClipboardList], ['documents', 'Dokumen', FileText], ['leaderboard', 'Leaderboard', Medal], ['areas', 'Area Mitra', MapPinned], ['profile', 'Profil', UserCog]] as const
     : [['dashboard', 'Dashboard', LayoutDashboard], ['orders', 'Order', ClipboardList], ['products', 'Produk', Package], ['partners', 'Mitra', Users], ['areas', 'Area Mitra', MapPinned], ['pricing', 'Harga Tier', ReceiptText], ['documents', 'Invoice & SJ', FileText], ['leaderboard', 'Leaderboard', Medal], ['reports', 'Reports', BarChart3], ['accounting', 'Accounting Events', ShieldCheck], ['audit', 'Audit Trail', ShieldCheck]] as const;
-  return <div className="app-shell layout">
-    <aside className="sidebar">
-      <div className="brand"><div className="logo">WB</div><div><h2>Wahyu Beef</h2><span>Mitra App</span></div></div>
-      <nav className="nav">{nav.map(([key, label, Icon]) => <button key={key} className={view === key ? 'active' : ''} onClick={() => setView(key)}><Icon size={18} /> {label}</button>)}</nav>
+  const bottomNav = isPartner
+    ? nav.filter(([key]) => ['catalog', 'orders', 'documents', 'leaderboard', 'profile'].includes(key))
+    : nav.filter(([key]) => ['dashboard', 'orders', 'products', 'partners', 'documents'].includes(key));
+  function go(nextView: View) {
+    setView(nextView);
+    setIsMobileMenuOpen(false);
+  }
+  return <div className={`app-shell layout ${isMobileMenuOpen ? 'mobile-menu-open' : ''}`}>
+    <button className="mobile-menu-scrim" aria-label="Tutup menu" onClick={() => setIsMobileMenuOpen(false)} />
+    <aside className={`sidebar ${isMobileMenuOpen ? 'open' : ''}`}>
+      <div className="mobile-sidebar-head"><div className="brand"><div className="logo">WB</div><div><h2>Wahyu Beef</h2><span>Mitra App</span></div></div><button className="mobile-close-btn" aria-label="Tutup menu" onClick={() => setIsMobileMenuOpen(false)}><X size={20} /></button></div>
+      <nav className="nav">{nav.map(([key, label, Icon]) => <button key={key} className={view === key ? 'active' : ''} onClick={() => go(key)}><Icon size={18} /> {label}</button>)}</nav>
       <div className="user-box"><b>{user.name}</b><br /><span>{roleLabel(user.role)}</span><br /><br /><button className="btn small" onClick={onLogout}><LogOut size={14} /> Keluar</button></div>
+      <p className="app-version-note">Versi Aplikasi 1.0.0</p>
     </aside>
     <main className="main">
+      <MobileAppBar state={state} user={user} view={view} onMenu={() => setIsMobileMenuOpen(true)} />
       <Topbar state={state} user={user} view={view} />
       {view === 'dashboard' && <Dashboard state={state} />}
       {view === 'catalog' && <Catalog state={state} user={user} token={token} refresh={refresh} setView={setView} />}
@@ -175,7 +186,14 @@ function Shell({ state, user, setUser, token, view, setView, setState, refresh, 
       {view === 'audit' && <Audit state={state} />}
       {view === 'accounting' && <Accounting state={state} />}
     </main>
+    <nav className="mobile-bottom-nav" aria-label="Menu utama mobile">{bottomNav.map(([key, label, Icon]) => <button key={key} className={view === key ? 'active' : ''} onClick={() => go(key)}><span><Icon size={21} /></span><b>{label}</b></button>)}</nav>
   </div>;
+}
+
+function MobileAppBar({ state, user, view, onMenu }: { state: AppState; user: User; view: View; onMenu: () => void }) {
+  const title: Record<View, string> = { dashboard: 'Dashboard', catalog: 'Katalog', checkout: 'Checkout', orders: user.role === 'partner' ? 'Order Saya' : 'Order', products: 'Produk', partners: 'Mitra', pricing: 'Harga Tier', documents: 'Invoice & SJ', leaderboard: 'Leaderboard', areas: 'Area Mitra', profile: 'Profil', reports: 'Reports', audit: 'Audit Trail', accounting: 'Accounting' };
+  const activeOrders = state.orders.filter((order) => !['delivered', 'cancelled'].includes(order.status)).length;
+  return <header className="mobile-appbar"><button type="button" aria-label="Buka menu" onClick={onMenu}><Menu size={25} /></button><h1>{title[view]}</h1><div className="mobile-bell" aria-label={`${activeOrders} order aktif`}><Bell size={22} />{activeOrders > 0 && <span>{Math.min(activeOrders, 9)}</span>}</div></header>;
 }
 
 function Topbar({ state, user, view }: { state: AppState; user: User; view: View }) {
