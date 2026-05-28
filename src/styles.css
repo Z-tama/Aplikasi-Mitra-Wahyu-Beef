@@ -118,6 +118,8 @@ th { background: #fff3d8; color: #7b5b2f; font-size: 12px; text-transform: upper
 .modal { position: relative; width: min(900px, 100%); max-height: 90vh; overflow: auto; background: #fffaf0; border-radius: 26px; padding: 24px; box-shadow: 0 28px 90px rgba(0,0,0,.25); }
 .modal-x { position: sticky; top: 0; z-index: 5; float: right; width: 42px; height: 42px; margin: -10px -10px 8px 10px; border-radius: 999px; display: inline-flex; align-items: center; justify-content: center; background: #fff3d8; color: #8f121b; border: 1px solid #ead7ae; box-shadow: 0 10px 22px rgba(45,33,24,.12); }
 .modal-x:hover, .modal-x:focus { background: #f4dfad; outline: none; box-shadow: 0 0 0 3px rgba(179,145,64,.18); }
+.mobile-print-actions { display: none; margin: 14px 0; }
+.desktop-modal-actions { align-items: center; justify-content: flex-end; }
 .document { background: #fffaf0; color: #111827; padding: 28px; border: 1px solid #ead7ae; border-radius: 14px; }
 .document h2 { margin-top: 0; }
 .doc-head { display: flex; justify-content: space-between; gap: 20px; border-bottom: 2px solid #8f121b; padding-bottom: 14px; margin-bottom: 18px; }
@@ -269,6 +271,9 @@ th { background: #fff3d8; color: #7b5b2f; font-size: 12px; text-transform: upper
   .modal { max-height: calc(100dvh - 206px - env(safe-area-inset-top) - env(safe-area-inset-bottom)); border-radius: 22px; padding: 18px; }
   .modal-x { width: 40px; height: 40px; margin: -6px -6px 8px 8px; }
   .desktop-modal-close { display: none !important; }
+  .desktop-modal-actions { display: none !important; }
+  .mobile-print-actions { display: flex; }
+  .mobile-print-actions .btn { width: 100%; justify-content: center; }
   .doc-head { flex-direction: column; }
   .kv { grid-template-columns: minmax(0, 1fr); }
 }
@@ -453,6 +458,7 @@ th { background: #fff3d8; color: #7b5b2f; font-size: 12px; text-transform: upper
 .checkout-note textarea { width: 100%; resize: vertical; min-height: 54px; border: 1px solid #ead7ae; border-radius: 14px; padding: 10px 12px; background: #fffaf0; color: #2d2118; font: inherit; font-size: 14px; line-height: 1.35; }
 .checkout-note textarea:focus { outline: 3px solid rgba(179,145,64,.22); border-color: #b39140; }
 .line-item-note { margin-top: 8px; padding: 8px 10px; border-radius: 12px; background: #fff3d8; color: #6f4e12; font-size: 12px; line-height: 1.4; }
+.line-item-notes-cell { min-width: 130px; color: #4f3c2d; line-height: 1.45; }
 .checkout-stepper { max-width: 170px; }
 .checkout-line-total { display: grid; gap: 8px; justify-items: end; }
 .checkout-summary { display: flex; justify-content: space-between; align-items: center; gap: 16px; }
