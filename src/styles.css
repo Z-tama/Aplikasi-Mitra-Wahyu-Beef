@@ -197,7 +197,7 @@ th { background: #fff3d8; color: #7b5b2f; font-size: 12px; text-transform: upper
   .mobile-appbar > button { width: 44px; height: 44px; border-radius: 15px; display: inline-flex; align-items: center; justify-content: center; background: rgba(255,248,232,.12); color: #fff8e8; }
   .mobile-appbar h1 { margin: 0; font-size: 22px; line-height: 1.1; font-weight: 950; letter-spacing: -.03em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .mobile-notification-wrap { position: relative; display: grid; place-items: center; }
-  .mobile-bell { position: relative; width: 44px; height: 44px; border-radius: 15px; display: inline-flex; align-items: center; justify-content: center; background: rgba(255,248,232,.12); }
+  .mobile-bell { position: relative; width: 44px; height: 44px; border-radius: 15px; display: inline-flex; align-items: center; justify-content: center; background: rgba(255,248,232,.12); color: #fff8e8; }
   .mobile-bell span { position: absolute; right: 5px; top: 3px; min-width: 18px; height: 18px; padding: 0 4px; border-radius: 999px; background: #f4dfad; color: #8f121b; border: 1px solid rgba(255,248,232,.8); display: grid; place-items: center; font-size: 10px; font-weight: 950; }
   .notification-panel { position: absolute; top: calc(100% + 12px); right: 0; width: min(330px, calc(100vw - 28px)); max-height: min(430px, calc(100dvh - 112px)); overflow: auto; border-radius: 22px; background: #fffaf0; color: #2d2118; border: 1px solid #ead7ae; box-shadow: 0 22px 58px rgba(45,33,24,.28); padding: 14px; }
   .notification-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding-bottom: 10px; border-bottom: 1px solid #ead7ae; }
