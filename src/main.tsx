@@ -170,7 +170,7 @@ function Shell({ state, user, setUser, token, view, setView, setState, refresh, 
       <p className="app-version-note">Versi Aplikasi 1.0.0</p>
     </aside>
     <main className="main">
-      <MobileAppBar state={state} user={user} view={view} onMenu={() => setIsMobileMenuOpen(true)} />
+      <MobileAppBar state={state} user={user} view={view} onMenu={() => setIsMobileMenuOpen(true)} onNavigate={go} />
       <Topbar state={state} user={user} view={view} />
       {view === 'dashboard' && <Dashboard state={state} />}
       {view === 'catalog' && <Catalog state={state} user={user} token={token} refresh={refresh} setView={setView} />}
@@ -190,17 +190,17 @@ function Shell({ state, user, setUser, token, view, setView, setState, refresh, 
   </div>;
 }
 
-function MobileAppBar({ state, user, view, onMenu }: { state: AppState; user: User; view: View; onMenu: () => void }) {
+function MobileAppBar({ state, user, view, onMenu, onNavigate }: { state: AppState; user: User; view: View; onMenu: () => void; onNavigate: (view: View) => void }) {
   const [open, setOpen] = useState(false);
   const title: Record<View, string> = { dashboard: 'Dashboard', catalog: 'Katalog', checkout: 'Checkout', orders: user.role === 'partner' ? 'Order Saya' : 'Order', products: 'Produk', partners: 'Mitra', pricing: 'Harga Tier', documents: 'Invoice & SJ', leaderboard: 'Peringkat', areas: 'Area Mitra', profile: 'Profil', reports: 'Reports', audit: 'Audit Trail', accounting: 'Accounting' };
   const visibleOrders = user.role === 'partner' ? state.orders.filter((order) => order.createdBy === user.id || findPartnerForUser(state, user)?.id === order.partnerId) : state.orders;
   const activeOrders = visibleOrders.filter((order) => !['delivered', 'cancelled'].includes(order.status));
   const recentInvoices = state.invoices.filter((invoice) => invoice.status !== 'void' && (user.role !== 'partner' || visibleOrders.some((order) => order.id === invoice.orderId))).slice(0, 2);
   const notifications = [
-    ...activeOrders.slice(0, 4).map((order) => ({ id: `order-${order.id}`, title: statusLabels[order.status], body: `${order.orderNumber} • ${partnerName(state, order.partnerId)}`, meta: new Date(order.orderDate).toLocaleDateString('id-ID') })),
-    ...recentInvoices.map((invoice) => ({ id: `invoice-${invoice.id}`, title: invoice.amountDue > 0 ? 'Invoice belum lunas' : 'Invoice lunas', body: `${invoice.invoiceNumber} • ${formatIdr(invoice.amountDue > 0 ? invoice.amountDue : invoice.grandTotal)}`, meta: invoice.invoiceDate })),
+    ...activeOrders.slice(0, 4).map((order) => ({ id: `order-${order.id}`, targetView: 'orders' as View, title: statusLabels[order.status], body: `${order.orderNumber} • ${partnerName(state, order.partnerId)}`, meta: new Date(order.orderDate).toLocaleDateString('id-ID') })),
+    ...recentInvoices.map((invoice) => ({ id: `invoice-${invoice.id}`, targetView: 'documents' as View, title: invoice.amountDue > 0 ? 'Invoice belum lunas' : 'Invoice lunas', body: `${invoice.invoiceNumber} • ${formatIdr(invoice.amountDue > 0 ? invoice.amountDue : invoice.grandTotal)}`, meta: invoice.invoiceDate })),
   ];
-  return <header className="mobile-appbar"><button type="button" aria-label="Buka menu" onClick={onMenu}><Menu size={25} /></button><h1>{title[view]}</h1><div className="mobile-notification-wrap"><button type="button" className="mobile-bell" aria-expanded={open} aria-label="Buka notifikasi" onClick={() => setOpen((value) => !value)}><Bell size={22} />{notifications.length > 0 && <span>{Math.min(notifications.length, 9)}</span>}</button>{open && <div className="notification-panel"><div className="notification-head"><b>Notifikasi</b><small>{notifications.length} update</small></div>{notifications.length ? <div className="notification-list">{notifications.map((item) => <div className="notification-item" key={item.id}><span className="notification-dot" /><div><b>{item.title}</b><p>{item.body}</p><small>{item.meta}</small></div></div>)}</div> : <div className="notification-empty">Belum ada notifikasi baru.</div>}<button className="notification-close" type="button" onClick={() => setOpen(false)}>Tutup</button></div>}</div></header>;
+  return <header className="mobile-appbar"><button type="button" aria-label="Buka menu" onClick={onMenu}><Menu size={25} /></button><h1>{title[view]}</h1><div className="mobile-notification-wrap"><button type="button" className="mobile-bell" aria-expanded={open} aria-label="Buka notifikasi" onClick={() => setOpen((value) => !value)}><Bell size={22} />{notifications.length > 0 && <span>{Math.min(notifications.length, 9)}</span>}</button>{open && <div className="notification-panel"><div className="notification-head"><b>Notifikasi</b><small>{notifications.length} update</small></div>{notifications.length ? <div className="notification-list">{notifications.map((item) => <button type="button" className="notification-item" key={item.id} onClick={() => { onNavigate(item.targetView); setOpen(false); }}><span className="notification-dot" /><div><b>{item.title}</b><p>{item.body}</p><small>{item.meta}</small></div></button>)}</div> : <div className="notification-empty">Belum ada notifikasi baru.</div>}<button className="notification-close" type="button" onClick={() => setOpen(false)}>Tutup</button></div>}</div></header>;
 }
 
 function Topbar({ state, user, view }: { state: AppState; user: User; view: View }) {
