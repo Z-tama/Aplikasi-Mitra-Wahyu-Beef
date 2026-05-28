@@ -75,7 +75,9 @@ button { cursor: pointer; border: 0; }
 .mobile-appbar, .mobile-bottom-nav, .mobile-menu-scrim, .mobile-close-btn, .app-version-note { display: none; }
 .mobile-sidebar-head { display: block; }
 .brand { display: flex; gap: 12px; align-items: center; margin-bottom: 22px; }
-.logo { width: 44px; height: 44px; border-radius: 16px; background: linear-gradient(135deg, #8f121b, #bd1d2d); color: white; display: grid; place-items: center; font-weight: 900; }
+.logo { width: 44px; height: 44px; border-radius: 16px; background: linear-gradient(135deg, #8f121b, #bd1d2d); color: white; display: grid; place-items: center; font-weight: 900; overflow: hidden; }
+.logo.logo-image { background: #fff8e8; padding: 4px; }
+.logo.logo-image img { width: 100%; height: 100%; object-fit: contain; display: block; }
 .brand h2 { margin: 0; font-size: 18px; letter-spacing: -.02em; }
 .brand span { color: #8a6a37; font-size: 12px; font-weight: 700; }
 .nav { display: flex; flex-direction: column; gap: 8px; }
@@ -214,6 +216,7 @@ th { background: #fff3d8; color: #7b5b2f; font-size: 12px; text-transform: upper
   .mobile-sidebar-head .brand { margin: 0; color: inherit; }
   .mobile-sidebar-head .brand span { color: rgba(255,248,232,.85); }
   .mobile-sidebar-head .logo { background: #fff8e8; color: #8f121b; box-shadow: 0 10px 22px rgba(45,33,24,.16); }
+  .mobile-sidebar-head .logo.logo-image { padding: 5px; }
   .mobile-close-btn { display: inline-flex; flex: 0 0 38px; width: 38px; height: 38px; align-items: center; justify-content: center; border-radius: 14px; background: rgba(255,248,232,.13); color: #fff8e8; }
   .brand { margin-bottom: 14px; }
   .nav { display: flex; grid-template-columns: none; gap: 8px; }
