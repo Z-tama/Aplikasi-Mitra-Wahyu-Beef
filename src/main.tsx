@@ -9,9 +9,29 @@ import { findPartnerForUser, getCatalogForPartner, getLeaderboard } from './serv
 
 const stateSingleton = createSeedState();
 const sessionStorageKey = 'wahyu-beef-session-v1';
+const demoOrdersStorageKey = 'wahyu-beef-demo-orders-v1';
 const sessionTtlMs = 30 * 60 * 1000;
 
 type View = 'dashboard' | 'catalog' | 'checkout' | 'orders' | 'products' | 'partners' | 'pricing' | 'documents' | 'leaderboard' | 'areas' | 'profile' | 'reports' | 'audit' | 'accounting';
+
+function readDemoOrders() {
+  try { return JSON.parse(localStorage.getItem(demoOrdersStorageKey) || '[]') as Order[]; } catch { return []; }
+}
+
+function rememberDemoOrder(order: Order) {
+  if (typeof localStorage === 'undefined') return;
+  const orders = readDemoOrders().filter((item) => item.id !== order.id && item.orderNumber !== order.orderNumber);
+  localStorage.setItem(demoOrdersStorageKey, JSON.stringify([order, ...orders].slice(0, 30)));
+}
+
+function mergeDemoOrders(snapshot: AppState): AppState {
+  if (typeof localStorage === 'undefined') return snapshot;
+  const demoOrders = readDemoOrders().filter((order) => snapshot.partners.some((partner) => partner.id === order.partnerId));
+  if (!demoOrders.length) return snapshot;
+  const existing = new Set(snapshot.orders.map((order) => order.id));
+  const missing = demoOrders.filter((order) => !existing.has(order.id));
+  return missing.length ? { ...snapshot, orders: [...missing, ...snapshot.orders] } : snapshot;
+}
 
 function App() {
   const [state, setState] = useState<AppState>(stateSingleton);
@@ -23,7 +43,7 @@ function App() {
 
   async function refresh(nextToken = token) {
     const snapshot = await api.snapshot(nextToken);
-    setState(snapshot);
+    setState(mergeDemoOrders(snapshot));
   }
 
   function clearSavedSession() {
@@ -50,6 +70,8 @@ function App() {
       setRestoringSession(false);
     }
   }, []);
+
+  useEffect(() => setState((current) => mergeDemoOrders(current)), []);
 
   if (restoringSession) return <div className="login-page"><div className="login-card"><div className="login-form"><h2>Memuat session...</h2><p>Jarvis sedang mengecek login terakhir.</p></div></div></div>;
   if (!currentUser) return authPage === 'register'
@@ -351,7 +373,8 @@ function Catalog({ state, user, token, refresh, setView }: { state: AppState; us
   }
   async function placeOrder(requestedDeliveryDate?: string) {
     try {
-      await api.createOrder(token, { shippingAddress: activePartner.address, requestedDeliveryDate, notes: 'Order dari portal mitra', items });
+      const createdOrder = await api.createOrder(token, { shippingAddress: activePartner.address, requestedDeliveryDate, notes: 'Order dari portal mitra', items });
+      rememberDemoOrder(createdOrder as Order);
       await refresh();
       setCart({});
       setCartNotes({});
