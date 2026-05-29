@@ -155,12 +155,12 @@ export const onRequest = async ({ request, env }: PagesHandlerContext) => {
     }
 
     if (method === 'POST' && path === '/orders') {
-      const body = await readJson<{ partnerId?: string; shippingAddress: string; notes?: string; items: { productId: string; qty: number; packageWeightGram?: 250 | 500 | 1000; packageLabel?: string; notes?: string }[] }>(request);
+      const body = await readJson<{ partnerId?: string; shippingAddress: string; requestedDeliveryDate?: string; notes?: string; items: { productId: string; qty: number; packageWeightGram?: 250 | 500 | 1000; packageLabel?: string; notes?: string }[] }>(request);
       const result = await mutateState((draft) => {
         const actorPartner = findPartnerForUser(draft, actor);
         const partnerId = actor.role === 'partner' ? actorPartner?.id : body.partnerId;
         if (!partnerId) throw httpError(400, 'partnerId wajib untuk admin atau user mitra harus punya partner');
-        return createOrder(draft, actor, partnerId, body.items, body.shippingAddress, body.notes);
+        return createOrder(draft, actor, partnerId, body.items, body.shippingAddress, body.notes, body.requestedDeliveryDate);
       }, env);
       return respond(result, 201);
     }
