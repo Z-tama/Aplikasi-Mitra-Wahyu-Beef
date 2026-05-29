@@ -88,6 +88,13 @@ button { cursor: pointer; border: 0; }
 .topbar { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; margin-bottom: 24px; }
 .topbar h1 { margin: 0; font-size: clamp(26px, 4vw, 42px); letter-spacing: -.04em; }
 .topbar p { margin: 8px 0 0; color: #8a6a37; }
+.desktop-topbar-actions { display: flex; align-items: center; gap: 12px; }
+.desktop-notification-wrap { position: relative; display: grid; place-items: center; }
+.desktop-bell { position: relative; width: 44px; height: 44px; border-radius: 16px; display: inline-flex; align-items: center; justify-content: center; background: #fff8e8; color: #8f121b; border: 1px solid #ead7ae; box-shadow: 0 10px 22px rgba(45,33,24,.08); }
+.desktop-bell:hover, .desktop-bell:focus { background: #fff3d8; outline: none; box-shadow: 0 0 0 3px rgba(179,145,64,.18); }
+.desktop-bell span { position: absolute; right: -5px; top: -6px; min-width: 20px; height: 20px; padding: 0 5px; border-radius: 999px; background: #bd1d2d; color: #fff8e8; border: 2px solid #fff8e8; display: grid; place-items: center; font-size: 10px; font-weight: 950; }
+.desktop-notification-wrap .notification-panel { top: calc(100% + 10px); right: 0; z-index: 80; }
+
 .grid { display: grid; gap: 16px; }
 .grid.cols-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .grid.cols-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
@@ -200,6 +207,7 @@ th { background: #fff3d8; color: #7b5b2f; font-size: 12px; text-transform: upper
   .mobile-appbar { position: fixed; top: 0; left: 0; right: 0; z-index: 65; display: grid; grid-template-columns: 44px minmax(0, 1fr) 44px; align-items: center; gap: 10px; margin: 0; padding: calc(14px + env(safe-area-inset-top)) 18px 14px; min-height: 76px; background: linear-gradient(135deg, #8f121b, #bd1d2d 68%, #b39140); color: #fff8e8; box-shadow: 0 14px 32px rgba(105,34,28,.18); }
   .mobile-appbar > button { width: 44px; height: 44px; border-radius: 15px; display: inline-flex; align-items: center; justify-content: center; background: rgba(255,248,232,.12); color: #fff8e8; }
   .mobile-appbar h1 { margin: 0; font-size: 22px; line-height: 1.1; font-weight: 950; letter-spacing: -.03em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
   .mobile-notification-wrap { position: relative; display: grid; place-items: center; }
   .mobile-bell { position: relative; width: 44px; height: 44px; border-radius: 15px; display: inline-flex; align-items: center; justify-content: center; background: rgba(255,248,232,.12); color: #fff8e8; }
   .mobile-bell span { position: absolute; right: 5px; top: 3px; min-width: 18px; height: 18px; padding: 0 4px; border-radius: 999px; background: #f4dfad; color: #8f121b; border: 1px solid rgba(255,248,232,.8); display: grid; place-items: center; font-size: 10px; font-weight: 950; }

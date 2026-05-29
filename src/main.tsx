@@ -171,7 +171,7 @@ function Shell({ state, user, setUser, token, view, setView, setState, refresh, 
     </aside>
     <main className="main">
       <MobileAppBar state={state} user={user} view={view} onMenu={() => setIsMobileMenuOpen(true)} onNavigate={go} />
-      <Topbar state={state} user={user} view={view} />
+      <Topbar state={state} user={user} view={view} onNavigate={go} />
       {view === 'dashboard' && <Dashboard state={state} />}
       {view === 'catalog' && <Catalog state={state} user={user} token={token} refresh={refresh} setView={setView} />}
       {view === 'orders' && <Orders state={state} user={user} token={token} refresh={refresh} />}
@@ -190,20 +190,23 @@ function Shell({ state, user, setUser, token, view, setView, setState, refresh, 
   </div>;
 }
 
-function MobileAppBar({ state, user, view, onMenu, onNavigate }: { state: AppState; user: User; view: View; onMenu: () => void; onNavigate: (view: View) => void }) {
-  const [open, setOpen] = useState(false);
-  const readStorageKey = `wahyu-beef-read-notifications-${user.id}`;
-  const [readNotificationIds, setReadNotificationIds] = useState<string[]>(() => {
-    try { return JSON.parse(localStorage.getItem(readStorageKey) || '[]') as string[]; } catch { return []; }
-  });
-  const title: Record<View, string> = { dashboard: 'Dashboard', catalog: 'Katalog', checkout: 'Checkout', orders: user.role === 'partner' ? 'Order Saya' : 'Order', products: 'Produk', partners: 'Mitra', pricing: 'Harga Tier', documents: 'Invoice & SJ', leaderboard: 'Peringkat', areas: 'Area Mitra', profile: 'Profil', reports: 'Reports', audit: 'Audit Trail', accounting: 'Accounting' };
+type AppNotification = { id: string; targetView: View; title: string; body: string; meta: string };
+
+function getAppNotifications(state: AppState, user: User): AppNotification[] {
   const visibleOrders = user.role === 'partner' ? state.orders.filter((order) => order.createdBy === user.id || findPartnerForUser(state, user)?.id === order.partnerId) : state.orders;
   const activeOrders = visibleOrders.filter((order) => !['delivered', 'cancelled'].includes(order.status));
   const recentInvoices = state.invoices.filter((invoice) => invoice.status !== 'void' && (user.role !== 'partner' || visibleOrders.some((order) => order.id === invoice.orderId))).slice(0, 2);
-  const notifications = [
+  return [
     ...activeOrders.slice(0, 4).map((order) => ({ id: `order-${order.id}`, targetView: 'orders' as View, title: statusLabels[order.status], body: `${order.orderNumber} • ${partnerName(state, order.partnerId)}`, meta: new Date(order.orderDate).toLocaleDateString('id-ID') })),
     ...recentInvoices.map((invoice) => ({ id: `invoice-${invoice.id}`, targetView: 'documents' as View, title: invoice.amountDue > 0 ? 'Invoice belum lunas' : 'Invoice lunas', body: `${invoice.invoiceNumber} • ${formatIdr(invoice.amountDue > 0 ? invoice.amountDue : invoice.grandTotal)}`, meta: invoice.invoiceDate })),
   ];
+}
+
+function useNotificationReadState(userId: string, notifications: AppNotification[]) {
+  const readStorageKey = `wahyu-beef-read-notifications-${userId}`;
+  const [readNotificationIds, setReadNotificationIds] = useState<string[]>(() => {
+    try { return JSON.parse(localStorage.getItem(readStorageKey) || '[]') as string[]; } catch { return []; }
+  });
   const visibleReadNotificationIds = readNotificationIds.filter((id) => notifications.some((item) => item.id === id));
   const unreadCount = notifications.filter((item) => !visibleReadNotificationIds.includes(item.id)).length;
   function markNotificationAsRead(id: string) {
@@ -213,13 +216,28 @@ function MobileAppBar({ state, user, view, onMenu, onNavigate }: { state: AppSta
       return next;
     });
   }
-  return <header className="mobile-appbar"><button type="button" aria-label="Buka menu" onClick={onMenu}><Menu size={25} /></button><h1>{title[view]}</h1><div className="mobile-notification-wrap"><button type="button" className="mobile-bell" aria-expanded={open} aria-label="Buka notifikasi" onClick={() => setOpen((value) => !value)}><Bell size={22} />{unreadCount > 0 && <span>{Math.min(unreadCount, 9)}</span>}</button>{open && <div className="notification-panel"><div className="notification-head"><div><b>Notifikasi</b><small>{unreadCount} belum dibaca</small></div><button className="notification-x" type="button" aria-label="Tutup notifikasi" onClick={() => setOpen(false)}><X size={18} /></button></div>{notifications.length ? <div className="notification-list">{notifications.map((item) => { const isRead = visibleReadNotificationIds.includes(item.id); return <button type="button" className={`notification-item ${isRead ? 'read' : 'unread'}`} key={item.id} onClick={() => markNotificationAsRead(item.id)} onDoubleClick={() => onNavigate(item.targetView)}><span className="notification-dot" /><div><b>{item.title}</b><p>{item.body}</p><small>{isRead ? 'Sudah dibaca' : item.meta}</small></div></button>; })}</div> : <div className="notification-empty">Belum ada notifikasi baru.</div>}<button className="notification-close" type="button" onClick={() => setOpen(false)}>Tutup</button></div>}</div></header>;
+  return { visibleReadNotificationIds, unreadCount, markNotificationAsRead };
 }
 
-function Topbar({ state, user, view }: { state: AppState; user: User; view: View }) {
+function NotificationDropdown({ notifications, unreadCount, readIds, onRead, onNavigate, onClose }: { notifications: AppNotification[]; unreadCount: number; readIds: string[]; onRead: (id: string) => void; onNavigate: (view: View) => void; onClose: () => void }) {
+  return <div className="notification-panel"><div className="notification-head"><div><b>Notifikasi</b><small>{unreadCount} belum dibaca</small></div><button className="notification-x" type="button" aria-label="Tutup notifikasi" onClick={onClose}><X size={18} /></button></div>{notifications.length ? <div className="notification-list">{notifications.map((item) => { const isRead = readIds.includes(item.id); return <button type="button" className={`notification-item ${isRead ? 'read' : 'unread'}`} key={item.id} onClick={() => onRead(item.id)} onDoubleClick={() => onNavigate(item.targetView)}><span className="notification-dot" /><div><b>{item.title}</b><p>{item.body}</p><small>{isRead ? 'Sudah dibaca' : item.meta}</small></div></button>; })}</div> : <div className="notification-empty">Belum ada notifikasi baru.</div>}<button className="notification-close" type="button" onClick={onClose}>Tutup</button></div>;
+}
+
+function MobileAppBar({ state, user, view, onMenu, onNavigate }: { state: AppState; user: User; view: View; onMenu: () => void; onNavigate: (view: View) => void }) {
+  const [open, setOpen] = useState(false);
+  const title: Record<View, string> = { dashboard: 'Dashboard', catalog: 'Katalog', checkout: 'Checkout', orders: user.role === 'partner' ? 'Order Saya' : 'Order', products: 'Produk', partners: 'Mitra', pricing: 'Harga Tier', documents: 'Invoice & SJ', leaderboard: 'Peringkat', areas: 'Area Mitra', profile: 'Profil', reports: 'Reports', audit: 'Audit Trail', accounting: 'Accounting' };
+  const notifications = getAppNotifications(state, user);
+  const { visibleReadNotificationIds, unreadCount, markNotificationAsRead } = useNotificationReadState(user.id, notifications);
+  return <header className="mobile-appbar"><button type="button" aria-label="Buka menu" onClick={onMenu}><Menu size={25} /></button><h1>{title[view]}</h1><div className="mobile-notification-wrap"><button type="button" className="mobile-bell" aria-expanded={open} aria-label="Buka notifikasi" onClick={() => setOpen((value) => !value)}><Bell size={22} />{unreadCount > 0 && <span>{Math.min(unreadCount, 9)}</span>}</button>{open && <NotificationDropdown notifications={notifications} unreadCount={unreadCount} readIds={visibleReadNotificationIds} onRead={markNotificationAsRead} onNavigate={onNavigate} onClose={() => setOpen(false)} />}</div></header>;
+}
+
+function Topbar({ state, user, view, onNavigate }: { state: AppState; user: User; view: View; onNavigate: (view: View) => void }) {
+  const [open, setOpen] = useState(false);
   const partner = findPartnerForUser(state, user);
   const title: Record<View, string> = { dashboard: 'Dashboard Operasional', catalog: 'Katalog Mitra', checkout: 'Checkout Pesanan', orders: user.role === 'partner' ? 'Order Saya' : 'Order Management', products: 'Product Catalog', partners: 'Mitra Management', pricing: 'Tier Pricing', documents: 'Invoice & Surat Jalan', leaderboard: 'Leaderboard Mitra', areas: 'Area Mitra', profile: 'Setting Profil', reports: 'Basic Reports', audit: 'Audit Trail', accounting: 'Accounting Event Log' };
-  return <header className="topbar"><div><h1>{title[view]}</h1><p>{partner ? `${partner.businessName} • ${tierName(state, partner.tierId)}` : 'Admin workspace Wahyu Beef'}</p></div><div className="badge" style={{ background: '#fff8e8', color: '#8f121b', border: '1px solid #ead7ae' }}>{roleLabel(user.role)}</div></header>;
+  const notifications = getAppNotifications(state, user);
+  const { visibleReadNotificationIds, unreadCount, markNotificationAsRead } = useNotificationReadState(user.id, notifications);
+  return <header className="topbar"><div><h1>{title[view]}</h1><p>{partner ? `${partner.businessName} • ${tierName(state, partner.tierId)}` : 'Admin workspace Wahyu Beef'}</p></div><div className="desktop-topbar-actions"><div className="desktop-notification-wrap"><button type="button" className="desktop-bell" aria-expanded={open} aria-label="Buka notifikasi" onClick={() => setOpen((value) => !value)}><Bell size={21} />{unreadCount > 0 && <span>{Math.min(unreadCount, 99)}</span>}</button>{open && <NotificationDropdown notifications={notifications} unreadCount={unreadCount} readIds={visibleReadNotificationIds} onRead={markNotificationAsRead} onNavigate={onNavigate} onClose={() => setOpen(false)} />}</div><div className="badge" style={{ background: '#fff8e8', color: '#8f121b', border: '1px solid #ead7ae' }}>{roleLabel(user.role)}</div></div></header>;
 }
 
 function Dashboard({ state }: { state: AppState }) {
