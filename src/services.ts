@@ -1,6 +1,6 @@
 import type { AppState } from './seed.ts';
 import { canTransition, todayIso } from './domain.ts';
-import type { AccountingEvent, CartItem, DeliveryNote, Invoice, Order, OrderItem, OrderStatus, Payment, User } from './domain.ts';
+import type { AccountingEvent, CartItem, Invoice, Order, OrderItem, OrderStatus, Payment, User } from './domain.ts';
 
 export function findPartnerForUser(state: AppState, user: User) {
   return state.partners.find((partner) => partner.userId === user.id);
@@ -132,29 +132,6 @@ export function updateOrderStatus(state: AppState, actor: User, orderId: string,
   if (targetStatus === 'delivered') accounting(state, 'GOODS_DELIVERED', 'order', orderId, order.partnerId, order.grandTotal, { psak72: 'Eligible revenue recognition jika kontrol berpindah sesuai kebijakan' }, actor.id);
   if (targetStatus === 'cancelled') accounting(state, 'ORDER_CANCELLED', 'order', orderId, order.partnerId, order.grandTotal, { note }, actor.id);
   return order;
-}
-
-export function createDeliveryNote(state: AppState, actor: User, orderId: string, driverName?: string, vehicleNumber?: string): DeliveryNote {
-  const order = state.orders.find((item) => item.id === orderId);
-  if (!order) throw new Error('Order tidak ditemukan');
-  if (order.status === 'cancelled' || order.status === 'pending') throw new Error('Surat jalan hanya untuk order valid yang sudah dikonfirmasi');
-  const existing = state.deliveryNotes.find((item) => item.orderId === orderId && item.status !== 'void');
-  if (existing) return existing;
-  const deliveryNote: DeliveryNote = {
-    id: `dn-${Date.now()}`,
-    deliveryNoteNumber: `SJ-${new Date().toISOString().slice(0, 7).replace('-', '')}-${String(state.deliveryNotes.length + 1).padStart(4, '0')}`,
-    orderId,
-    deliveryDate: todayIso(),
-    driverName,
-    vehicleNumber,
-    status: 'issued',
-    issuedBy: actor.id,
-    issuedAt: new Date().toISOString(),
-  };
-  state.deliveryNotes.unshift(deliveryNote);
-  audit(state, actor.id, 'DELIVERY_NOTE_CREATED', 'delivery_note', deliveryNote.id, undefined, deliveryNote);
-  accounting(state, 'DELIVERY_NOTE_CREATED', 'delivery_note', deliveryNote.id, order.partnerId, order.grandTotal, { orderId }, actor.id);
-  return deliveryNote;
 }
 
 export function createInvoice(state: AppState, actor: User, orderId: string): Invoice {

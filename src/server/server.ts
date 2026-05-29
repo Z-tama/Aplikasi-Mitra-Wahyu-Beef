@@ -5,7 +5,7 @@ import { authenticate, hashPassword, httpError, login, requireRole, verifyPasswo
 import { loadState, mutateState } from './persistence.ts';
 import { backupStatus, runBackup, startBackupScheduler } from './backup.ts';
 import { storeUpload } from './storage.ts';
-import { createDeliveryNote, createInvoice, createOrder, findPartnerForUser, recordPayment, updateOrderShipping, updateOrderStatus } from '../services.ts';
+import { createInvoice, createOrder, findPartnerForUser, getLeaderboard, recordPayment, updateOrderShipping, updateOrderStatus } from '../services.ts';
 import type { OrderStatus, Payment } from '../domain.ts';
 
 const PORT = Number(process.env.PORT ?? 3000);
@@ -208,17 +208,6 @@ const handleApi: Handler = async (req, res, url) => {
     return json(res, 201, result);
   }
 
-  const deliveryMatch = path.match(/^\/orders\/([^/]+)\/delivery-notes$/);
-  if (method === 'POST' && deliveryMatch) {
-    const body = await readJson<{ driverName?: string; vehicleNumber?: string }>(req);
-    const result = await mutateState((draft) => {
-      const actor = authenticate(draft, req.headers.authorization);
-      requireRole(actor, ['super_admin', 'sales_admin', 'warehouse']);
-      return createDeliveryNote(draft, actor, deliveryMatch[1], body.driverName, body.vehicleNumber);
-    });
-    return json(res, 201, result);
-  }
-
   const paymentMatch = path.match(/^\/invoices\/([^/]+)\/payments$/);
   if (method === 'POST' && paymentMatch) {
     const body = await readJson<Pick<Payment, 'amount' | 'method' | 'referenceNumber'>>(req);
@@ -291,6 +280,7 @@ function filteredStateForUser(state: Awaited<ReturnType<typeof loadState>>, user
     ...state,
     users: [user],
     partners: [partner],
+    leaderboardRows: getLeaderboard(state).slice(0, 10),
     orders: state.orders.filter((item) => item.partnerId === partner.id),
     statusHistories: state.statusHistories.filter((item) => orderIds.has(item.orderId)),
     invoices: state.invoices.filter((item) => item.partnerId === partner.id),

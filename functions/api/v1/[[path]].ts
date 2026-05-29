@@ -1,5 +1,5 @@
 import { createSeedState, type AppState } from '../../../src/seed';
-import { createDeliveryNote, createInvoice, createOrder, findPartnerForUser, recordPayment, updateOrderShipping, updateOrderStatus } from '../../../src/services';
+import { createInvoice, createOrder, findPartnerForUser, getLeaderboard, recordPayment, updateOrderShipping, updateOrderStatus } from '../../../src/services';
 import type { OrderStatus, Payment, Role, User } from '../../../src/domain';
 
 interface Env {
@@ -190,16 +190,6 @@ export const onRequest = async ({ request, env }: PagesHandlerContext) => {
       const result = await mutateState((draft) => {
         requireRole(actor, ['super_admin', 'finance_admin', 'sales_admin']);
         return createInvoice(draft, actor, invoiceMatch[1]);
-      }, env);
-      return respond(result, 201);
-    }
-
-    const deliveryMatch = path.match(/^\/orders\/([^/]+)\/delivery-notes$/);
-    if (method === 'POST' && deliveryMatch) {
-      const body = await readJson<{ driverName?: string; vehicleNumber?: string }>(request);
-      const result = await mutateState((draft) => {
-        requireRole(actor, ['super_admin', 'sales_admin', 'warehouse']);
-        return createDeliveryNote(draft, actor, deliveryMatch[1], body.driverName, body.vehicleNumber);
       }, env);
       return respond(result, 201);
     }
@@ -408,6 +398,7 @@ function filteredStateForUser(currentState: AppState, userId: string) {
     ...currentState,
     users: [user],
     partners: [partner],
+    leaderboardRows: getLeaderboard(currentState).slice(0, 10),
     orders: currentState.orders.filter((item) => item.partnerId === partner.id),
     statusHistories: currentState.statusHistories.filter((item) => orderIds.has(item.orderId)),
     invoices: currentState.invoices.filter((item) => item.partnerId === partner.id),

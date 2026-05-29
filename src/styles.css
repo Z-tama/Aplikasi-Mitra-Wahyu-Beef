@@ -132,6 +132,10 @@ th { background: #fff3d8; color: #7b5b2f; font-size: 12px; text-transform: upper
 .status.cancelled, .status.void { background: #f8d7d7; color: #8f121b; }
 .status.pending, .status.partial { background: #fff0bd; color: #8a5a00; }
 .actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.rank-badge { display: inline-flex; align-items: center; gap: 6px; font-size: 15px; line-height: 1; }
+.rank-1 { color: #9a6a00; }
+.rank-2 { color: #6f7480; }
+.rank-3 { color: #9a5b24; }
 .catalog { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 16px; }
 .product-card { display: flex; flex-direction: column; gap: 10px; }
 .product-visual { height: 118px; border-radius: 18px; background: linear-gradient(135deg, #fff0bd, #ead7ae); display: grid; place-items: center; font-size: 42px; }

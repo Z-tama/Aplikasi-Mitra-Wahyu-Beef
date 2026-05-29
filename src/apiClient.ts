@@ -74,9 +74,6 @@ export const api = {
   createInvoice(token: string, orderId: string) {
     return request(`/orders/${orderId}/invoices`, { method: 'POST', body: JSON.stringify({}) }, token);
   },
-  createDeliveryNote(token: string, orderId: string, input: { driverName?: string; vehicleNumber?: string }) {
-    return request(`/orders/${orderId}/delivery-notes`, { method: 'POST', body: JSON.stringify(input) }, token);
-  },
   recordPayment(token: string, invoiceId: string, input: Pick<Payment, 'amount' | 'method' | 'referenceNumber'>) {
     return request(`/invoices/${invoiceId}/payments`, { method: 'POST', body: JSON.stringify(input) }, token);
   },

@@ -35,6 +35,16 @@ export interface AppState {
   auditLogs: AuditLog[];
   accountingEvents: AccountingEvent[];
   partnerRegistrations?: PartnerRegistrationSubmission[];
+  leaderboardRows?: Array<{
+    partnerId: string;
+    partnerName: string;
+    tier: string;
+    totalOrderValue: number;
+    totalOrderQty: number;
+    totalOrders: number;
+    points: number;
+    rank: number;
+  }>;
 }
 
 export const demoPasswords: Record<string, string> = {
