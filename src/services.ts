@@ -68,7 +68,7 @@ export function calculateOrder(state: AppState, partnerId: string, cartItems: Ca
   return { items, subtotal, discountTotal: 0, taxTotal: 0, grandTotal: subtotal };
 }
 
-export function createOrder(state: AppState, actor: User, partnerId: string, cartItems: CartItem[], shippingAddress: string, notes?: string): Order {
+export function createOrder(state: AppState, actor: User, partnerId: string, cartItems: CartItem[], shippingAddress: string, notes?: string, requestedDeliveryDate?: string): Order {
   const calculated = calculateOrder(state, partnerId, cartItems);
   const sequence = state.orders.length + 1;
   const id = `ord-${Date.now()}`;
@@ -85,6 +85,7 @@ export function createOrder(state: AppState, actor: User, partnerId: string, car
     taxTotal: calculated.taxTotal,
     grandTotal: calculated.grandTotal,
     shippingAddress,
+    requestedDeliveryDate,
     notes,
     createdBy: actor.id,
     items,

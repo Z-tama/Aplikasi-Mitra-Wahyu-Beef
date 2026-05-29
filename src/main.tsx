@@ -349,9 +349,9 @@ function Catalog({ state, user, token, refresh, setView }: { state: AppState; us
       return next;
     });
   }
-  async function placeOrder() {
+  async function placeOrder(requestedDeliveryDate?: string) {
     try {
-      await api.createOrder(token, { shippingAddress: activePartner.address, notes: 'Order dari portal mitra', items });
+      await api.createOrder(token, { shippingAddress: activePartner.address, requestedDeliveryDate, notes: 'Order dari portal mitra', items });
       await refresh();
       setCart({});
       setCartNotes({});
@@ -384,7 +384,8 @@ function Catalog({ state, user, token, refresh, setView }: { state: AppState; us
   </div>;
 }
 
-function CheckoutPage({ state, catalog, partnerAddress, cart, cartNotes, message, onBack, onUpdateQty, onUpdateNote, onPlaceOrder }: { state: AppState; catalog: CatalogProduct[]; partnerAddress: string; cart: Record<string, number>; cartNotes: Record<string, string>; message: string; onBack: () => void; onUpdateQty: (key: string, qty: number) => void; onUpdateNote: (key: string, note: string) => void; onPlaceOrder: () => Promise<void> }) {
+function CheckoutPage({ state, catalog, partnerAddress, cart, cartNotes, message, onBack, onUpdateQty, onUpdateNote, onPlaceOrder }: { state: AppState; catalog: CatalogProduct[]; partnerAddress: string; cart: Record<string, number>; cartNotes: Record<string, string>; message: string; onBack: () => void; onUpdateQty: (key: string, qty: number) => void; onUpdateNote: (key: string, note: string) => void; onPlaceOrder: (requestedDeliveryDate?: string) => Promise<void> }) {
+  const [requestedDeliveryDate, setRequestedDeliveryDate] = useState('');
   const rows = Object.entries(cart).filter(([, qty]) => qty > 0).map(([key, qty]) => {
     const item = cartKeyToItem(key, qty);
     const product = catalog.find((p) => p.id === item.productId)!;
@@ -403,7 +404,7 @@ function CheckoutPage({ state, catalog, partnerAddress, cart, cartNotes, message
         <div className="checkout-line-total"><b>{formatIdr(row.lineTotal)}</b><button className="btn small" onClick={() => onUpdateQty(row.key, 0)}>Hapus</button></div>
       </div>)}</div>}
     </div>
-    <div className="card checkout-summary"><div><b>Alamat Kirim</b><p>{partnerAddress}</p></div><div><span>Total Pesanan</span><strong>{formatIdr(total)}</strong></div><button className="btn primary" disabled={rows.length === 0} onClick={onPlaceOrder}>Selesaikan Pesanan</button></div>
+    <div className="card checkout-summary"><div><b>Alamat Kirim</b><p>{partnerAddress}</p></div><div className="field checkout-delivery-date"><label>Tanggal Kirim</label><input className="input" type="date" value={requestedDeliveryDate} onChange={(event) => setRequestedDeliveryDate(event.target.value)} /><small>Diisi oleh mitra saat membuat order.</small></div><div><span>Total Pesanan</span><strong>{formatIdr(total)}</strong></div><button className="btn primary" disabled={rows.length === 0} onClick={() => onPlaceOrder(requestedDeliveryDate)}>Selesaikan Pesanan</button></div>
   </div>;
 }
 
@@ -783,7 +784,7 @@ function printDocumentOnly(container: HTMLDivElement | null) {
 
 function DocumentOrder({ state, order }: { state: AppState; order: Order }) {
   const partner = state.partners.find((item) => item.id === order.partnerId);
-  return <div className="document a4-document order-print-document"><DocHeader title="ORDER" number={order.orderNumber} /><div className="doc-meta-grid"><div><span>Order Untuk</span><b>{partner?.businessName ?? partnerName(state, order.partnerId)}</b><p>{order.shippingAddress}<br />PIC: {partner?.contactPerson ?? '-'} • {partner?.phone ?? '-'}</p></div><div><span>Tanggal Order</span><b>{new Date(order.orderDate).toLocaleString('id-ID')}</b><span>Status</span><b>{statusLabels[order.status]}</b><span>No Resi</span><b>{order.trackingNumber ?? '-'}</b></div></div><LineItems order={order} showNotesColumn /><div className="doc-total-box"><div><span>Subtotal Produk</span><b>{formatIdr(order.subtotal)}</b></div><div><span>Ongkir</span><b>{formatIdr(order.shippingCost ?? 0)}</b></div><div><span>Packing</span><b>{packingSummary(order)} • {formatIdr(order.packingFee ?? 0)}</b></div><div className="grand"><span>Total Order</span><b>{formatIdr(order.grandTotal)}</b></div></div><DocFooter /></div>;
+  return <div className="document a4-document order-print-document"><DocHeader title="ORDER" number={order.orderNumber} /><div className="doc-meta-grid"><div><span>Order Untuk</span><b>{partner?.businessName ?? partnerName(state, order.partnerId)}</b><p>{order.shippingAddress}<br />PIC: {partner?.contactPerson ?? '-'} • {partner?.phone ?? '-'}</p></div><div><span>Tanggal Order</span><b>{new Date(order.orderDate).toLocaleString('id-ID')}</b><span>Tanggal Kirim</span><b>{order.requestedDeliveryDate ? new Date(order.requestedDeliveryDate).toLocaleDateString('id-ID') : '-'}</b><span>Status</span><b>{statusLabels[order.status]}</b><span>No Resi</span><b>{order.trackingNumber ?? '-'}</b></div></div><LineItems order={order} showNotesColumn /><div className="doc-total-box"><div><span>Subtotal Produk</span><b>{formatIdr(order.subtotal)}</b></div><div><span>Ongkir</span><b>{formatIdr(order.shippingCost ?? 0)}</b></div><div><span>Packing</span><b>{packingSummary(order)} • {formatIdr(order.packingFee ?? 0)}</b></div><div className="grand"><span>Total Order</span><b>{formatIdr(order.grandTotal)}</b></div></div><DocFooter /></div>;
 }
 function InvoiceDocument({ state, invoice, order }: { state: AppState; invoice: Invoice; order: Order }) { const partner = state.partners.find((item) => item.id === invoice.partnerId); return <div className="document a4-document invoice-document"><DocHeader title="INVOICE" number={invoice.invoiceNumber} /><div className="doc-meta-grid"><div><span>Ditagihkan Kepada</span><b>{partner?.businessName ?? partnerName(state, invoice.partnerId)}</b><p>{partner?.address ?? order.shippingAddress}<br />{partner?.city ?? '-'}{partner?.province ? `, ${partner.province}` : ''}<br />PIC: {partner?.contactPerson ?? '-'} • {partner?.phone ?? '-'}</p></div><div><span>Tanggal Invoice</span><b>{invoice.invoiceDate}</b><span>Jatuh Tempo</span><b>{invoice.dueDate}</b><span>Status</span><b>{invoice.status}</b></div></div><LineItems order={order} /><div className="doc-total-box"><div><span>Subtotal Produk</span><b>{formatIdr(order.subtotal)}</b></div><div><span>Ongkir</span><b>{formatIdr(order.shippingCost ?? 0)}</b></div><div><span>Packing</span><b>{packingSummary(order)} • {formatIdr(order.packingFee ?? 0)}</b></div><div className="grand"><span>Total Invoice</span><b>{formatIdr(invoice.grandTotal)}</b></div><div><span>Dibayar</span><b>{formatIdr(invoice.amountPaid)}</b></div><div><span>Sisa Tagihan</span><b>{formatIdr(invoice.amountDue)}</b></div></div><DocFooter /></div>; }
 function DeliveryDocument({ state, deliveryNote, order }: { state: AppState; deliveryNote: DeliveryNote; order: Order }) { const partner = state.partners.find((item) => item.id === order.partnerId); return <div className="document a4-document delivery-document"><DocHeader title="SURAT JALAN" number={deliveryNote.deliveryNoteNumber} /><div className="doc-meta-grid"><div><span>Dikirim Kepada</span><b>{partner?.businessName ?? partnerName(state, order.partnerId)}</b><p>{order.shippingAddress}<br />PIC: {partner?.contactPerson ?? '-'} • {partner?.phone ?? '-'}</p></div><div><span>Tanggal Kirim</span><b>{deliveryNote.deliveryDate}</b><span>No Order</span><b>{order.orderNumber}</b><span>Driver / Kendaraan</span><b>{deliveryNote.driverName ?? '-'} / {deliveryNote.vehicleNumber ?? '-'}</b></div></div><LineItems order={order} showPrice={false} /><div className="doc-signatures"><div><span>Pengirim</span><i>(........................)</i></div><div><span>Kurir</span><i>(........................)</i></div><div><span>Penerima</span><i>(........................)</i></div></div><DocFooter /></div>; }

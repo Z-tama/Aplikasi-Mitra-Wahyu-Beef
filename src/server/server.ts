@@ -165,13 +165,13 @@ const handleApi: Handler = async (req, res, url) => {
   }
 
   if (method === 'POST' && path === '/orders') {
-    const body = await readJson<{ partnerId?: string; shippingAddress: string; notes?: string; items: { productId: string; qty: number }[] }>(req);
+    const body = await readJson<{ partnerId?: string; shippingAddress: string; requestedDeliveryDate?: string; notes?: string; items: { productId: string; qty: number }[] }>(req);
     const result = await mutateState((draft) => {
       const actor = authenticate(draft, req.headers.authorization);
       const actorPartner = findPartnerForUser(draft, actor);
       const partnerId = actor.role === 'partner' ? actorPartner?.id : body.partnerId;
       if (!partnerId) throw httpError(400, 'partnerId wajib untuk admin atau user mitra harus punya partner');
-      return createOrder(draft, actor, partnerId, body.items, body.shippingAddress, body.notes);
+      return createOrder(draft, actor, partnerId, body.items, body.shippingAddress, body.notes, body.requestedDeliveryDate);
     });
     return json(res, 201, result);
   }

@@ -354,6 +354,7 @@ function makeOrder(id: string, orderNumber: string, partnerId: string, status: O
     taxTotal: 0,
     grandTotal: subtotal,
     shippingAddress: 'Alamat sesuai data mitra',
+    requestedDeliveryDate: date.slice(0, 10),
     notes: 'Seed order demo',
     deliveredAt: status === 'delivered' ? date : undefined,
     createdBy: partnerId === 'p-distributor' ? 'u-distributor' : partnerId === 'p-agen' ? 'u-agen' : partnerId === 'p-reseller' ? 'u-reseller' : 'u-sales',

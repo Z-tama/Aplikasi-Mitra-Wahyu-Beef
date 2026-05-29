@@ -111,6 +111,7 @@ export interface Order {
   taxTotal: number;
   grandTotal: number;
   shippingAddress: string;
+  requestedDeliveryDate?: string;
   shippingCost?: number;
   packingFee?: number;
   packingType?: 'none' | 'small_styrofoam' | 'medium_styrofoam' | 'large_styrofoam';
