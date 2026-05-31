@@ -42,8 +42,13 @@ function App() {
   const [restoringSession, setRestoringSession] = useState(true);
 
   async function refresh(nextToken = token) {
-    const snapshot = await api.snapshot(nextToken);
-    setState(mergeDemoOrders(snapshot));
+    try {
+      const snapshot = await api.snapshot(nextToken);
+      setState(mergeDemoOrders(snapshot));
+    } catch (error) {
+      console.warn('Snapshot gagal dimuat, memakai data lokal agar halaman tidak blank.', error);
+      setState((current) => mergeDemoOrders(current));
+    }
   }
 
   function clearSavedSession() {
@@ -64,7 +69,7 @@ function App() {
     try {
       const session = JSON.parse(saved) as Session & { expiresAt?: number };
       if (!session.token || !session.user || Number(session.expiresAt ?? 0) <= Date.now()) throw new Error('expired');
-      api.me(session.token).then(() => activateSession(session, true)).catch(() => clearSavedSession()).finally(() => setRestoringSession(false));
+      api.me(session.token).then(() => activateSession(session, true)).catch((error) => { console.warn('Session lama dibersihkan.', error); clearSavedSession(); setCurrentUser(null); setToken(''); }).finally(() => setRestoringSession(false));
     } catch {
       clearSavedSession();
       setRestoringSession(false);
@@ -186,7 +191,7 @@ function Shell({ state, user, setUser, token, view, setView, setState, refresh, 
   return <div className={`app-shell layout ${isMobileMenuOpen ? 'mobile-menu-open' : ''}`}>
     <button className="mobile-menu-scrim" aria-label="Tutup menu" onClick={() => setIsMobileMenuOpen(false)} />
     <aside className={`sidebar ${isMobileMenuOpen ? 'open' : ''}`}>
-      <div className="mobile-sidebar-head"><div className="brand"><div className="logo logo-image"><img src="/assets/logo-wahyu-beef.png" alt="Logo Wahyu Beef" /></div><div><h2>Wahyu Beef</h2><span>Mitra App</span></div></div><button className="mobile-close-btn" aria-label="Tutup menu" onClick={() => setIsMobileMenuOpen(false)}><X size={20} /></button></div>
+      <div className="mobile-sidebar-head"><div className="brand"><div className="logo logo-image"><img src="/assets/logo-wahyu-beef.png" alt="Logo Wahyu Beef" /></div><div><h2>Wahyu Beef</h2><span>Membership App</span></div></div><button className="mobile-close-btn" aria-label="Tutup menu" onClick={() => setIsMobileMenuOpen(false)}><X size={20} /></button></div>
       <nav className="nav">{nav.map(([key, label, Icon]) => <button key={key} className={view === key ? 'active' : ''} onClick={() => go(key)}><Icon size={18} /> {label}</button>)}</nav>
       <div className="user-box"><b>{user.name}</b><br /><span>{roleLabel(user.role)}</span><br /><br /><button className="btn small" onClick={onLogout}><LogOut size={14} /> Keluar</button></div>
       <p className="app-version-note">Versi Aplikasi 1.0.0</p>
@@ -247,7 +252,7 @@ function NotificationDropdown({ notifications, unreadCount, readIds, onRead, onN
 
 function MobileAppBar({ state, user, view, onMenu, onNavigate }: { state: AppState; user: User; view: View; onMenu: () => void; onNavigate: (view: View) => void }) {
   const [open, setOpen] = useState(false);
-  const title: Record<View, string> = { dashboard: 'Dashboard', catalog: 'Katalog', checkout: 'Checkout', orders: user.role === 'partner' ? 'Order Saya' : 'Order', products: 'Produk', partners: 'Mitra', pricing: 'Harga Tier', documents: 'Invoice', leaderboard: 'Papan Peringkat Mitra', areas: 'Area Mitra', profile: 'Profil', reports: 'Reports', audit: 'Audit Trail', accounting: 'Accounting' };
+  const title: Record<View, string> = { dashboard: 'Dashboard', catalog: 'Katalog', checkout: 'Checkout', orders: user.role === 'partner' ? 'Order Saya' : 'Order', products: 'Produk', partners: 'Mitra', pricing: 'Harga Tier', documents: 'Invoice', leaderboard: 'Papan Peringkat Member', areas: 'Area Mitra', profile: 'Profil', reports: 'Reports', audit: 'Audit Trail', accounting: 'Accounting' };
   const notifications = getAppNotifications(state, user);
   const { visibleReadNotificationIds, unreadCount, markNotificationAsRead } = useNotificationReadState(user.id, notifications);
   return <header className="mobile-appbar"><button type="button" aria-label="Buka menu" onClick={onMenu}><Menu size={25} /></button><h1>{title[view]}</h1><div className="mobile-notification-wrap"><button type="button" className="mobile-bell" aria-expanded={open} aria-label="Buka notifikasi" onClick={() => setOpen((value) => !value)}><Bell size={22} />{unreadCount > 0 && <span>{Math.min(unreadCount, 9)}</span>}</button>{open && <NotificationDropdown notifications={notifications} unreadCount={unreadCount} readIds={visibleReadNotificationIds} onRead={markNotificationAsRead} onNavigate={onNavigate} onClose={() => setOpen(false)} />}</div></header>;
@@ -256,7 +261,7 @@ function MobileAppBar({ state, user, view, onMenu, onNavigate }: { state: AppSta
 function Topbar({ state, user, view, onNavigate }: { state: AppState; user: User; view: View; onNavigate: (view: View) => void }) {
   const [open, setOpen] = useState(false);
   const partner = findPartnerForUser(state, user);
-  const title: Record<View, string> = { dashboard: 'Dashboard Operasional', catalog: 'Katalog Mitra', checkout: 'Checkout Pesanan', orders: user.role === 'partner' ? 'Order Saya' : 'Order Management', products: 'Product Catalog', partners: 'Mitra Management', pricing: 'Tier Pricing', documents: 'Invoice', leaderboard: 'Papan Peringkat Mitra', areas: 'Area Mitra', profile: 'Setting Profil', reports: 'Basic Reports', audit: 'Audit Trail', accounting: 'Accounting Event Log' };
+  const title: Record<View, string> = { dashboard: 'Dashboard Operasional', catalog: 'Katalog Mitra', checkout: 'Checkout Pesanan', orders: user.role === 'partner' ? 'Order Saya' : 'Order Management', products: 'Product Catalog', partners: 'Mitra Management', pricing: 'Tier Pricing', documents: 'Invoice', leaderboard: 'Papan Peringkat Member', areas: 'Area Mitra', profile: 'Setting Profil', reports: 'Basic Reports', audit: 'Audit Trail', accounting: 'Accounting Event Log' };
   const notifications = getAppNotifications(state, user);
   const { visibleReadNotificationIds, unreadCount, markNotificationAsRead } = useNotificationReadState(user.id, notifications);
   return <header className="topbar"><div><h1>{title[view]}</h1><p>{partner ? `${partner.businessName} • ${tierName(state, partner.tierId)}` : 'Admin workspace Wahyu Beef'}</p></div><div className="desktop-topbar-actions"><div className="desktop-notification-wrap"><button type="button" className="desktop-bell" aria-expanded={open} aria-label="Buka notifikasi" onClick={() => setOpen((value) => !value)}><Bell size={21} />{unreadCount > 0 && <span>{Math.min(unreadCount, 99)}</span>}</button>{open && <NotificationDropdown notifications={notifications} unreadCount={unreadCount} readIds={visibleReadNotificationIds} onRead={markNotificationAsRead} onNavigate={onNavigate} onClose={() => setOpen(false)} />}</div><div className="badge" style={{ background: '#fff8e8', color: '#8f121b', border: '1px solid #ead7ae' }}>{roleLabel(user.role)}</div></div></header>;
@@ -325,6 +330,7 @@ const packageOptions: PackageOption[] = [
   { weightGram: 1000, label: '1000 gr', ratio: 1 },
 ];
 const packagingCategoryIds = new Set(['cat-daging-sapi', 'cat-tulang-sapi', 'cat-jerohan-sapi']);
+const memberFixedPackageOption: PackageOption = { weightGram: 250, label: '250 gr', ratio: 0.25 };
 
 function Catalog({ state, user, token, refresh, setView }: { state: AppState; user: User; token: string; refresh: () => Promise<void>; setView: (view: View) => void }) {
   const partner = findPartnerForUser(state, user);
@@ -384,7 +390,7 @@ function Catalog({ state, user, token, refresh, setView }: { state: AppState; us
   }
   if (isCheckout) return <CheckoutPage state={state} catalog={catalog} partnerAddress={activePartner.address} cart={cart} cartNotes={cartNotes} message={message} onBack={() => setIsCheckout(false)} onUpdateQty={updateCartQty} onUpdateNote={(key, note) => setCartNotes((current) => ({ ...current, [key]: note }))} onPlaceOrder={placeOrder} />;
   return <div className="grid">
-    <div className="card"><b>Tier aktif: {tierName(state, activePartner.tierId)}</b><p className="footer-note">Harga di bawah dihitung server-side berdasarkan tier mitra. Untuk daging sapi, tulang sapi, dan jeroan sapi, klik produk untuk memilih kemasan 250 gr, 500 gr, atau 1000 gr.</p></div>
+    <div className="card"><b>Tier aktif: {tierName(state, activePartner.tierId)}</b><p className="footer-note">Harga di bawah dihitung server-side berdasarkan tier member. Untuk daging sapi, tulang sapi, dan jeroan sapi, kemasan member langsung 250 gr tanpa pilihan kemasan.</p></div>
     {message && <div className="notice">{message}</div>}
     <div className="catalog-filter-bar marketplace-filter-bar"><div className="field"><label>Filter Kategori</label><select value={categoryFilter} onChange={(event) => setCategoryFilter(event.target.value)}><option value="all">Semua Kategori</option>{orderedCategories(state).map((category) => <option key={category.id} value={category.id}>{category.name}</option>)}</select></div><div className="field catalog-search-field"><label>Cari Produk</label><input className="input" value={searchQuery} onChange={(event) => setSearchQuery(event.target.value)} placeholder="Cari nama produk, SKU, deskripsi..." /></div>{(categoryFilter !== 'all' || searchQuery) && <button type="button" className="btn small" onClick={() => { setCategoryFilter('all'); setSearchQuery(''); }}>Reset Filter</button>}</div>
     <div className="catalog-toolbar"><div><b>{filteredCatalog.length} / {catalog.length} Produk</b><span>Harga {tierName(state, activePartner.tierId)} • {activeCategoryName}{normalizedSearch ? ` • “${searchQuery.trim()}”` : ''}</span></div><div className="catalog-view-label">Tampilan <span className="grid-icon">▦</span></div></div>
@@ -392,9 +398,11 @@ function Catalog({ state, user, token, refresh, setView }: { state: AppState; us
       <div className="category-section-head"><div><span>Kategori</span><h3>{category.name}</h3></div><b>{products.length} Produk</b></div>
       <div className="catalog marketplace-catalog">{products.map((product) => {
         const hasPackageOptions = canChoosePackaging(product);
-        return <div className="product-card marketplace-card" key={product.id} onClick={() => hasPackageOptions && setSelectedProduct(product)} role={hasPackageOptions ? 'button' : undefined} tabIndex={hasPackageOptions ? 0 : undefined} onKeyDown={(event) => { if (hasPackageOptions && (event.key === 'Enter' || event.key === ' ')) setSelectedProduct(product); }}>
-          <div className={`product-visual marketplace-visual ${product.imageUrl ? 'has-photo' : ''}`}>{product.imageUrl && <img src={product.imageUrl} alt={product.name} loading="lazy" />}<span className="discount-badge">Mitra</span><div className="placeholder-brand">Wahyu Beef</div>{!product.imageUrl && <div className="placeholder-title">{product.name}</div>}<div className="placeholder-pack">{hasPackageOptions ? '250g • 500g • 1kg' : product.unit}</div></div>
-          <div className="product-info"><h3>{product.name}</h3><span className="product-meta">{product.sku} • {hasPackageOptions ? 'Pilih kemasan' : `MOQ ${product.minimumOrderQty} ${product.unit}`}</span><div className="price-row"><span className="voucher-tag">%</span><div className="price">{product.price ? formatIdr(product.price) : 'Belum ada harga'}</div></div><div className="deal-note">{hasPackageOptions ? 'Klik untuk pilih ukuran kemasan' : `Harga khusus ${tierName(state, activePartner.tierId)}`}</div><div className="rating-row"><span>★ 5.0</span><span>•</span><span>{Math.max(10, product.minimumOrderQty * 10)}+ terjual</span></div>{hasPackageOptions ? <button className="btn small product-pick-btn" onClick={(event) => { event.stopPropagation(); setSelectedProduct(product); }}>Pilih</button> : <div className="qty-row compact" onClick={(event) => event.stopPropagation()}><input className="input" type="number" min="0" placeholder="Qty" value={cart[cartKey(product.id)] ?? ''} onChange={(e) => setCart({ ...cart, [cartKey(product.id)]: Number(e.target.value) })} /><button className="btn small" onClick={() => addToCart(product)}>Tambah</button></div>}</div>
+        const fixedPackageKey = cartKey(product.id, memberFixedPackageOption.weightGram);
+        const displayPrice = hasPackageOptions ? getPackagePrice(product.price ?? 0, memberFixedPackageOption.weightGram) : product.price;
+        return <div className="product-card marketplace-card" key={product.id}>
+          <div className={`product-visual marketplace-visual ${product.imageUrl ? 'has-photo' : ''}`}>{product.imageUrl && <img src={product.imageUrl} alt={product.name} loading="lazy" />}<span className="discount-badge">Mitra</span><div className="placeholder-brand">Wahyu Beef</div>{!product.imageUrl && <div className="placeholder-title">{product.name}</div>}<div className="placeholder-pack">{hasPackageOptions ? '250 GR' : product.unit}</div></div>
+          <div className="product-info"><h3>{product.name}</h3><span className="product-meta">{product.sku} • MOQ {product.minimumOrderQty} {hasPackageOptions ? '250 GR' : product.unit}</span><div className="price-row"><span className="voucher-tag">%</span><div className="price">{displayPrice ? formatIdr(displayPrice) : 'Belum ada harga'}</div></div><div className="deal-note">Harga khusus {tierName(state, activePartner.tierId)}</div><div className="rating-row"><span>★ 5.0</span><span>•</span><span>{Math.max(10, product.minimumOrderQty * 10)}+ terjual</span></div><div className="qty-row compact" onClick={(event) => event.stopPropagation()}><input className="input" type="number" min="0" placeholder="Qty" value={cart[hasPackageOptions ? fixedPackageKey : cartKey(product.id)] ?? ''} onChange={(e) => setCart({ ...cart, [hasPackageOptions ? fixedPackageKey : cartKey(product.id)]: Number(e.target.value) })} /><button className="btn small" onClick={() => addToCart(product, product.minimumOrderQty, hasPackageOptions ? memberFixedPackageOption : undefined)}>Tambah</button></div></div>
         </div>;
       })}</div>
     </section>)}</div> : <div className="notice warning">Produk tidak ditemukan. Coba ubah kategori atau kata kunci pencarian.</div>}
@@ -403,7 +411,6 @@ function Catalog({ state, user, token, refresh, setView }: { state: AppState; us
       <span className="floating-cart-copy"><span>Total Harga</span><b>{formatIdr(total)}</b></span>
     </button>
     <div className="card cart-sticky"><b>Keranjang:</b> {items.length} item • <b>{formatIdr(total)}</b> <button className="btn primary" style={{ marginLeft: 12 }} disabled={items.length === 0} onClick={() => setIsCheckout(true)}>Checkout</button></div>
-    {selectedProduct && <PackageModal product={selectedProduct} onClose={() => setSelectedProduct(null)} onAdd={(option, qty) => { addToCart(selectedProduct, qty, option); setSelectedProduct(null); }} />}
   </div>;
 }
 
@@ -814,7 +821,7 @@ function DocHeader({ title, number }: { title: string; number: string }) { retur
 function DocFooter() { return <div className="doc-footer"><b>Wahyu Beef</b><span>Dokumen dicetak otomatis dari Mitra App Wahyu Beef.</span></div>; }
 function LineItems({ order, showPrice = true, showNotesColumn = false }: { order: Order; showPrice?: boolean; showNotesColumn?: boolean }) { return <div className="table-wrap" style={{ marginTop: 18 }}><table><thead><tr><th>SKU</th><th>Produk</th><th>Qty</th>{showPrice && <><th>Harga</th><th>Total</th></>}{showNotesColumn && <th>Catatan</th>}</tr></thead><tbody>{order.items.map((item) => <tr key={item.id}><td>{item.skuSnapshot}</td><td>{item.productNameSnapshot}<br /><small>{item.tierNameSnapshot}</small>{!showNotesColumn && item.notes && <div className="line-item-note"><b>Catatan:</b> {item.notes}</div>}</td><td>{item.qty} {item.unitSnapshot}</td>{showPrice && <><td>{formatIdr(item.unitPrice)}</td><td>{formatIdr(item.lineTotal)}</td></>}{showNotesColumn && <td className="line-item-notes-cell">{item.notes || '-'}</td>}</tr>)}</tbody></table></div>; }
 
-function Leaderboard({ state }: { state: AppState }) { const rows = (state.leaderboardRows ?? getLeaderboard(state)).slice(0, 10); return <div className="card mobile-card-table"><h3>Papan Peringkat Mitra</h3><div className="table-wrap responsive-table"><table><thead><tr><th>Rank</th><th>Mitra</th><th>Tier</th><th>Delivered GMV</th><th>Total Qty</th><th>Order</th><th>Poin</th></tr></thead><tbody>{rows.map((row) => <tr key={row.partnerId}><td data-label="Rank"><b className={`rank-badge rank-${row.rank <= 3 ? row.rank : 'default'}`}>{rankMedal(row.rank)} #{row.rank}</b></td><td data-label="Mitra">{row.partnerName}</td><td data-label="Tier">{row.tier}</td><td data-label="Delivered GMV">{formatIdr(row.totalOrderValue)}</td><td data-label="Total Qty">{row.totalOrderQty}</td><td data-label="Order">{row.totalOrders}</td><td data-label="Poin"><b>{row.points}</b></td></tr>)}</tbody></table></div><p className="footer-note">Menampilkan 10 besar mitra. Hanya order delivered yang dihitung agar ranking tidak dimanipulasi dari pending/cancelled.</p></div>; }
+function Leaderboard({ state }: { state: AppState }) { const rows = (state.leaderboardRows ?? getLeaderboard(state)).slice(0, 10); return <div className="card mobile-card-table"><h3>Papan Peringkat Member</h3><div className="table-wrap responsive-table"><table><thead><tr><th>Rank</th><th>Member</th><th>Tier</th><th>Delivered GMV</th><th>Total Qty</th><th>Order</th><th>Poin</th></tr></thead><tbody>{rows.map((row) => <tr key={row.partnerId}><td data-label="Rank"><b className={`rank-badge rank-${row.rank <= 3 ? row.rank : 'default'}`}>{rankMedal(row.rank)} #{row.rank}</b></td><td data-label="Member">{row.partnerName}</td><td data-label="Tier">{row.tier}</td><td data-label="Delivered GMV">{formatIdr(row.totalOrderValue)}</td><td data-label="Total Qty">{row.totalOrderQty}</td><td data-label="Order">{row.totalOrders}</td><td data-label="Poin"><b>{row.points}</b></td></tr>)}</tbody></table></div><p className="footer-note">Menampilkan 10 besar member. Hanya order delivered yang dihitung agar ranking tidak dimanipulasi dari pending/cancelled.</p></div>; }
 function rankMedal(rank: number) { return rank === 1 ? '🥇' : rank === 2 ? '🥈' : rank === 3 ? '🥉' : ''; }
 function Reports({ state }: { state: AppState }) { const topProducts = state.products.map((p) => ({ p, qty: state.orders.flatMap((o) => o.items).filter((i) => i.productId === p.id).reduce((s, i) => s + i.qty, 0) })).sort((a, b) => b.qty - a.qty).slice(0, 5); return <div className="grid cols-2"><div className="card"><h3>Sales Summary</h3><StatusSummary orders={state.orders} /></div><div className="card"><h3>Top Products</h3>{topProducts.map((row) => <p key={row.p.id}><b>{row.p.name}</b><br />{row.qty} pack terjual/order</p>)}</div><div className="card"><h3>Invoice Aging</h3>{state.invoices.map((i) => <p key={i.id}><b>{i.invoiceNumber}</b> • {partnerName(state, i.partnerId)}<br />Outstanding {formatIdr(i.amountDue)} • due {i.dueDate}</p>)}</div><div className="card"><h3>Export Ready</h3><div className="notice">Data report sudah dipisah untuk sales, produk, aging invoice, audit, dan accounting event export.</div></div></div>; }
 function Audit({ state }: { state: AppState }) { return <LogTable logs={state.auditLogs.map((log) => ({ id: log.id, type: log.action, ref: `${log.entityType}:${log.entityId}`, amount: '', time: log.timestamp, meta: JSON.stringify(log.newValue ?? {}) }))} />; }

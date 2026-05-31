@@ -7,6 +7,12 @@ interface Env {
   ALLOW_DEMO_LOGIN?: string;
   DB?: D1Database;
   UPLOADS?: R2Bucket;
+  OLSERA_APP_ID?: string;
+  OLSERA_SECRET_KEY?: string;
+  OLSERA_STORE_ID?: string;
+  OLSERA_API_BASE_URL?: string;
+  OLSERA_CUSTOMERS_PATH?: string;
+  OLSERA_SYNC_TOKEN?: string;
 }
 
 interface R2Bucket {
@@ -64,6 +70,12 @@ export const onRequest = async ({ request, env }: PagesHandlerContext) => {
         return registration;
       }, env);
       return respond(result, 201);
+    }
+
+    if (method === 'POST' && path === '/integrations/olsera/sync-members') {
+      assertOlseraSyncAuthorized(request, env);
+      const result = await syncOlseraMembers(env);
+      return respond(result, 200);
     }
 
     const currentState = await loadState(env);
@@ -295,6 +307,7 @@ function hashPassword(password: string) {
 
 const knownPasswordHashes: Record<string, string> = {
   password: '5e884898da28047151d0e56f8dc6292773603d0d6aabbdd62a11ef721d1542d8',
+  member: 'e31ab643c44f7a0ec824b59d1194d60dac334200d845e61d2d289daa0f087ea4',
   mitrawahyubeef: '2862ae49e05e2b5c76d20d348bf41d4ac203b01dce9dca6ce6302272a6554832',
   wahyubeef: '62e005f8eedafada91e509c342ffaefb1c06ec79484610d10189b30e418a626c',
 };
@@ -413,4 +426,139 @@ function httpError(status: number, message: string) {
   const error = new Error(message) as Error & { status?: number };
   error.status = status;
   return error;
+}
+
+function assertOlseraSyncAuthorized(request: Request, env: Env) {
+  const expected = env.OLSERA_SYNC_TOKEN;
+  if (!expected) throw httpError(500, 'OLSERA_SYNC_TOKEN belum diset');
+  const actual = request.headers.get('x-sync-token') ?? '';
+  if (actual !== expected) throw httpError(403, 'Token sinkronisasi tidak valid');
+}
+
+async function syncOlseraMembers(env: Env) {
+  if (!env.OLSERA_APP_ID || !env.OLSERA_SECRET_KEY || !env.OLSERA_STORE_ID) throw httpError(500, 'Credential Olsera belum lengkap');
+  const members = await fetchOlseraMembers(env);
+  const result = await mutateState((draft) => upsertOlseraMembers(draft, members), env);
+  return { ...result, source: 'olsera', storeId: env.OLSERA_STORE_ID, importedType: 'MEMBER' };
+}
+
+type OlseraMember = Record<string, unknown>;
+
+async function fetchOlseraMembers(env: Env): Promise<OlseraMember[]> {
+  const baseUrl = (env.OLSERA_API_BASE_URL || 'https://api-open.olsera.co.id').replace(/\/$/, '');
+  const accessToken = await fetchOlseraAccessToken(baseUrl, env);
+  const pathTemplate = env.OLSERA_CUSTOMERS_PATH || '/api/open-api/v1/en/customersupplier/customer?search=MEMBER&page={page}';
+  const members: OlseraMember[] = [];
+  let page = 1;
+  let lastPage = 1;
+
+  do {
+    const path = pathTemplate
+      .replace('{storeId}', encodeURIComponent(env.OLSERA_STORE_ID || ''))
+      .replace('{page}', String(page));
+    const separator = path.includes('?') ? '&' : '?';
+    const url = `${baseUrl}${path.startsWith('/') ? path : `/${path}`}${path.includes('page=') ? '' : `${separator}page=${page}`}`;
+    const response = await fetch(url, { headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json', Accept: 'application/json' } });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) throw httpError(response.status, `Olsera API gagal: ${readOlseraError(payload, response.statusText)}`);
+    const payloadRecord = payload as { data?: unknown; customers?: unknown; result?: unknown; meta?: { last_page?: unknown } };
+    const raw: unknown[] = Array.isArray(payload) ? payload : Array.isArray(payloadRecord.data) ? payloadRecord.data : Array.isArray(payloadRecord.customers) ? payloadRecord.customers : Array.isArray(payloadRecord.result) ? payloadRecord.result : [];
+    members.push(...raw.filter((item: unknown): item is OlseraMember => Boolean(item && typeof item === 'object')));
+    const reportedLastPage = Number(payloadRecord.meta?.last_page ?? 1);
+    lastPage = Number.isFinite(reportedLastPage) && reportedLastPage > 0 ? reportedLastPage : 1;
+    page += 1;
+    if (page <= lastPage) await new Promise((resolve) => setTimeout(resolve, 1200));
+  } while (page <= lastPage);
+
+  return members.filter((member) => String(readFirst(member, ['customer_type_name', 'type_name', 'customer_type'])).toUpperCase() === 'MEMBER');
+}
+
+async function fetchOlseraAccessToken(baseUrl: string, env: Env) {
+  const form = new URLSearchParams({ grant_type: 'secret_key', app_id: env.OLSERA_APP_ID ?? '', secret_key: env.OLSERA_SECRET_KEY ?? '' });
+  const response = await fetch(`${baseUrl}/api/open-api/v1/id/token`, { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded', Accept: 'application/json' }, body: form.toString() });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) throw httpError(response.status, `Olsera token gagal: ${readOlseraError(payload, response.statusText)}`);
+  const token = (payload as { access_token?: unknown }).access_token;
+  if (!token || typeof token !== 'string') throw httpError(502, 'Olsera token response tidak berisi access_token');
+  return token;
+}
+
+function readOlseraError(payload: unknown, fallback: string) {
+  const record = payload as { message?: unknown; error?: unknown };
+  if (typeof record.message === 'string') return record.message;
+  if (typeof record.error === 'string') return record.error;
+  if (record.error && typeof record.error === 'object') {
+    const nested = record.error as { message?: unknown; error?: unknown };
+    if (typeof nested.message === 'string') return nested.message;
+    if (typeof nested.error === 'string') return nested.error;
+  }
+  return fallback;
+}
+
+function upsertOlseraMembers(draft: AppState, members: OlseraMember[]) {
+  const now = new Date().toISOString();
+  const fallbackTier = draft.tiers.find((tier) => tier.code === 'RESELLER') ?? draft.tiers[0];
+  let created = 0;
+  let updated = 0;
+  const skipped: string[] = [];
+
+  for (const member of members) {
+    const externalId = readFirst(member, ['id', 'customer_id', 'customerId', 'member_id', 'memberId']);
+    const phone = normalizePhone(readFirst(member, ['phone', 'mobile', 'mobile_phone', 'customer_phone', 'whatsapp']));
+    const email = String(readFirst(member, ['email', 'customer_email']) || '').trim().toLowerCase();
+    const name = String(readFirst(member, ['name', 'customer_name', 'fullname', 'full_name']) || '').trim();
+    if (!phone && !email) { skipped.push(String(externalId || name || 'unknown')); continue; }
+
+    const userId = `olsera-user-${externalId || phone || email}`.replace(/[^a-zA-Z0-9_-]/g, '-');
+    const partnerId = `olsera-member-${externalId || phone || email}`.replace(/[^a-zA-Z0-9_-]/g, '-');
+    const displayName = name || email || phone || 'Member Olsera';
+    const safeEmail = email || `${partnerId}@olsera.local`;
+    const address = String(readFirst(member, ['address', 'customer_address', 'shipping_address']) || '-');
+    const city = String(readFirst(member, ['city', 'customer_city']) || '-');
+    const province = String(readFirst(member, ['province', 'state']) || '-');
+
+    const existingUser = draft.users.find((user) => user.id === userId || (email && user.email.toLowerCase() === email) || (phone && normalizePhone(user.phone) === phone));
+    if (existingUser) {
+      existingUser.name = displayName;
+      existingUser.email = safeEmail;
+      existingUser.phone = phone || existingUser.phone;
+      existingUser.role = 'partner';
+      existingUser.status = 'active';
+      existingUser.passwordHash = knownPasswordHashes.member;
+      updated += 1;
+    } else {
+      draft.users.push({ id: userId, name: displayName, email: safeEmail, phone, role: 'partner', status: 'active', passwordHash: knownPasswordHashes.member });
+      created += 1;
+    }
+
+    const ownerUser = existingUser ?? draft.users.find((user) => user.id === userId)!;
+    const existingPartner = draft.partners.find((partner) => partner.id === partnerId || partner.userId === ownerUser.id || (phone && normalizePhone(partner.phone) === phone) || (email && partner.email.toLowerCase() === email));
+    const partnerPayload = {
+      userId: ownerUser.id,
+      tierId: fallbackTier.id,
+      partnerCode: `OLSERA-${String(externalId || phone || email).slice(0, 24).toUpperCase()}`,
+      businessName: displayName,
+      contactPerson: displayName,
+      phone: phone || '-',
+      email: safeEmail,
+      address,
+      city,
+      province,
+      paymentTermDays: 0,
+      status: 'active' as const,
+    };
+    if (existingPartner) Object.assign(existingPartner, partnerPayload);
+    else draft.partners.push({ id: partnerId, ...partnerPayload });
+  }
+
+  draft.auditLogs.unshift({ id: `audit-olsera-sync-${Date.now()}`, actorUserId: 'olsera-sync', action: 'OLSERA_MEMBERS_SYNCED', entityType: 'integration', entityId: 'olsera-members', newValue: { fetched: members.length, created, updated, skipped: skipped.length }, timestamp: now });
+  return { fetched: members.length, created, updated, skipped };
+}
+
+function readFirst(source: Record<string, unknown>, keys: string[]) {
+  for (const key of keys) {
+    const value = source[key];
+    if (value !== undefined && value !== null && String(value).trim() !== '') return String(value);
+  }
+  return '';
 }
