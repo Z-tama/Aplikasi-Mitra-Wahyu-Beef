@@ -50,6 +50,11 @@ export interface Partner {
   province: string;
   creditLimit?: number;
   paymentTermDays: number;
+  points?: number;
+  transactionCount?: number;
+  transactionAmount?: number;
+  paidAmount?: number;
+  debtAmount?: number;
   status: PartnerStatus;
 }
 

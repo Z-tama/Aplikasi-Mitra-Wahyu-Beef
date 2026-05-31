@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
-import { BarChart3, Bell, ClipboardList, Eye, EyeOff, FileText, IceCreamBowl, LayoutDashboard, LogOut, MapPinned, Medal, Menu, Package, Printer, ReceiptText, ShieldCheck, ShoppingCart, Truck, UserCog, Users, X } from 'lucide-react';
+import { BarChart3, Bell, ClipboardList, Eye, EyeOff, FileText, Gift, IceCreamBowl, LayoutDashboard, LogOut, MapPinned, Medal, Menu, Package, Printer, ReceiptText, ShieldCheck, ShoppingCart, Sparkles, Truck, UserCog, Users, X } from 'lucide-react';
 import './styles.css';
 import { AccountingEvent, CartItem, Invoice, Order, OrderStatus, Role, User, formatIdr, statusLabels, validTransitions } from './domain';
 import { AppState, createSeedState } from './seed';
@@ -58,7 +58,7 @@ function App() {
   async function activateSession(session: Session, remember = true) {
     setToken(session.token);
     setCurrentUser(session.user);
-    setView(session.user.role === 'partner' ? 'catalog' : 'dashboard');
+    setView('dashboard');
     if (remember) localStorage.setItem(sessionStorageKey, JSON.stringify({ token: session.token, user: session.user, expiresAt: session.expiresAt ?? Date.now() + sessionTtlMs }));
     await refresh(session.token);
   }
@@ -179,10 +179,10 @@ function Shell({ state, user, setUser, token, view, setView, setState, refresh, 
   const isPartner = user.role === 'partner';
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const nav = isPartner
-    ? [['catalog', 'Katalog', ShoppingCart], ['orders', 'Order Saya', ClipboardList], ['documents', 'Invoice', FileText], ['leaderboard', 'Peringkat', Medal], ['areas', 'Area Mitra', MapPinned], ['profile', 'Profil', UserCog]] as const
+    ? [['dashboard', 'Dashboard', LayoutDashboard], ['catalog', 'Katalog', ShoppingCart], ['orders', 'Order Saya', ClipboardList], ['documents', 'Tukar Poin', Gift], ['leaderboard', 'Peringkat', Medal], ['profile', 'Profil', UserCog]] as const
     : [['dashboard', 'Dashboard', LayoutDashboard], ['orders', 'Order', ClipboardList], ['products', 'Produk', Package], ['partners', 'Mitra', Users], ['areas', 'Area Mitra', MapPinned], ['pricing', 'Harga Tier', ReceiptText], ['documents', 'Invoice', FileText], ['leaderboard', 'Peringkat', Medal], ['reports', 'Reports', BarChart3], ['accounting', 'Accounting Events', ShieldCheck], ['audit', 'Audit Trail', ShieldCheck]] as const;
   const bottomNav = isPartner
-    ? nav.filter(([key]) => ['catalog', 'orders', 'documents', 'leaderboard', 'profile'].includes(key))
+    ? nav.filter(([key]) => ['leaderboard', 'catalog', 'orders', 'documents', 'profile'].includes(key))
     : nav.filter(([key]) => ['dashboard', 'orders', 'products', 'partners', 'documents'].includes(key));
   function go(nextView: View) {
     setView(nextView);
@@ -199,13 +199,13 @@ function Shell({ state, user, setUser, token, view, setView, setState, refresh, 
     <main className="main">
       <MobileAppBar state={state} user={user} view={view} onMenu={() => setIsMobileMenuOpen(true)} onNavigate={go} />
       <Topbar state={state} user={user} view={view} onNavigate={go} />
-      {view === 'dashboard' && <Dashboard state={state} />}
+      {view === 'dashboard' && <Dashboard state={state} user={user} />}
       {view === 'catalog' && <Catalog state={state} user={user} token={token} refresh={refresh} setView={setView} />}
       {view === 'orders' && <Orders state={state} user={user} token={token} refresh={refresh} />}
       {view === 'products' && <Products state={state} />}
       {view === 'partners' && <Partners state={state} />}
       {view === 'pricing' && <Pricing state={state} />}
-      {view === 'documents' && <Documents state={state} user={user} token={token} refresh={refresh} />}
+      {view === 'documents' && (isPartner ? <RedeemPoints state={state} user={user} /> : <Documents state={state} user={user} token={token} refresh={refresh} />)}
       {view === 'leaderboard' && <Leaderboard state={state} />}
       {view === 'areas' && <PartnerAreas state={state} user={user} />}
       {view === 'profile' && <ProfileSettings state={state} user={user} token={token} setUser={setUser} setState={setState} />}
@@ -252,7 +252,7 @@ function NotificationDropdown({ notifications, unreadCount, readIds, onRead, onN
 
 function MobileAppBar({ state, user, view, onMenu, onNavigate }: { state: AppState; user: User; view: View; onMenu: () => void; onNavigate: (view: View) => void }) {
   const [open, setOpen] = useState(false);
-  const title: Record<View, string> = { dashboard: 'Dashboard', catalog: 'Katalog', checkout: 'Checkout', orders: user.role === 'partner' ? 'Order Saya' : 'Order', products: 'Produk', partners: 'Mitra', pricing: 'Harga Tier', documents: 'Invoice', leaderboard: 'Papan Peringkat Member', areas: 'Area Mitra', profile: 'Profil', reports: 'Reports', audit: 'Audit Trail', accounting: 'Accounting' };
+  const title: Record<View, string> = { dashboard: 'Dashboard', catalog: 'Katalog', checkout: 'Checkout', orders: user.role === 'partner' ? 'Order Saya' : 'Order', products: 'Produk', partners: 'Mitra', pricing: 'Harga Tier', documents: user.role === 'partner' ? 'Tukar Poin' : 'Invoice', leaderboard: 'Papan Peringkat Member', areas: user.role === 'partner' ? 'Area' : 'Area Mitra', profile: 'Profil', reports: 'Reports', audit: 'Audit Trail', accounting: 'Accounting' };
   const notifications = getAppNotifications(state, user);
   const { visibleReadNotificationIds, unreadCount, markNotificationAsRead } = useNotificationReadState(user.id, notifications);
   return <header className="mobile-appbar"><button type="button" aria-label="Buka menu" onClick={onMenu}><Menu size={25} /></button><h1>{title[view]}</h1><div className="mobile-notification-wrap"><button type="button" className="mobile-bell" aria-expanded={open} aria-label="Buka notifikasi" onClick={() => setOpen((value) => !value)}><Bell size={22} />{unreadCount > 0 && <span>{Math.min(unreadCount, 9)}</span>}</button>{open && <NotificationDropdown notifications={notifications} unreadCount={unreadCount} readIds={visibleReadNotificationIds} onRead={markNotificationAsRead} onNavigate={onNavigate} onClose={() => setOpen(false)} />}</div></header>;
@@ -261,13 +261,14 @@ function MobileAppBar({ state, user, view, onMenu, onNavigate }: { state: AppSta
 function Topbar({ state, user, view, onNavigate }: { state: AppState; user: User; view: View; onNavigate: (view: View) => void }) {
   const [open, setOpen] = useState(false);
   const partner = findPartnerForUser(state, user);
-  const title: Record<View, string> = { dashboard: 'Dashboard Operasional', catalog: 'Katalog Mitra', checkout: 'Checkout Pesanan', orders: user.role === 'partner' ? 'Order Saya' : 'Order Management', products: 'Product Catalog', partners: 'Mitra Management', pricing: 'Tier Pricing', documents: 'Invoice', leaderboard: 'Papan Peringkat Member', areas: 'Area Mitra', profile: 'Setting Profil', reports: 'Basic Reports', audit: 'Audit Trail', accounting: 'Accounting Event Log' };
+  const title: Record<View, string> = { dashboard: user.role === 'partner' ? 'Dashboard Member' : 'Dashboard Operasional', catalog: user.role === 'partner' ? 'Katalog' : 'Katalog Mitra', checkout: 'Checkout Pesanan', orders: user.role === 'partner' ? 'Order Saya' : 'Order Management', products: 'Product Catalog', partners: 'Mitra Management', pricing: 'Tier Pricing', documents: user.role === 'partner' ? 'Tukar Poin' : 'Invoice', leaderboard: 'Papan Peringkat Member', areas: user.role === 'partner' ? 'Area' : 'Area Mitra', profile: 'Setting Profil', reports: 'Basic Reports', audit: 'Audit Trail', accounting: 'Accounting Event Log' };
   const notifications = getAppNotifications(state, user);
   const { visibleReadNotificationIds, unreadCount, markNotificationAsRead } = useNotificationReadState(user.id, notifications);
   return <header className="topbar"><div><h1>{title[view]}</h1><p>{partner ? `${partner.businessName} • ${tierName(state, partner.tierId)}` : 'Admin workspace Wahyu Beef'}</p></div><div className="desktop-topbar-actions"><div className="desktop-notification-wrap"><button type="button" className="desktop-bell" aria-expanded={open} aria-label="Buka notifikasi" onClick={() => setOpen((value) => !value)}><Bell size={21} />{unreadCount > 0 && <span>{Math.min(unreadCount, 99)}</span>}</button>{open && <NotificationDropdown notifications={notifications} unreadCount={unreadCount} readIds={visibleReadNotificationIds} onRead={markNotificationAsRead} onNavigate={onNavigate} onClose={() => setOpen(false)} />}</div><div className="badge" style={{ background: '#fff8e8', color: '#8f121b', border: '1px solid #ead7ae' }}>{roleLabel(user.role)}</div></div></header>;
 }
 
-function Dashboard({ state }: { state: AppState }) {
+function Dashboard({ state, user }: { state: AppState; user: User }) {
+  if (user.role === 'partner') return <MemberDashboard state={state} user={user} />;
   const now = new Date();
   const monthKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
   const deliveredGmv = state.orders.filter((o) => o.status === 'delivered').reduce((s, o) => s + o.grandTotal, 0);
@@ -288,6 +289,32 @@ function Dashboard({ state }: { state: AppState }) {
       <FinanceChartCard monthlyRevenue={monthlyRevenue} paid={totalPaid} due={totalDue} total={invoiceTotal} monthLabel={now.toLocaleDateString('id-ID', { month: 'long', year: 'numeric' })} />
     </div>
     <OrdersTable state={state} orders={state.orders.slice(0, 5)} compact />
+  </div>;
+}
+
+
+function MemberDashboard({ state, user }: { state: AppState; user: User }) {
+  const partner = findPartnerForUser(state, user);
+  const banners = [
+    { title: 'Promo Bulan Ini', subtitle: 'Harga spesial member Wahyu Beef untuk belanja rutin keluarga.', cta: 'Cek katalog sekarang', tone: 'red' },
+    { title: 'Paket 250 GR', subtitle: 'Daging sapi, tulang sapi, dan jeroan sapi siap checkout langsung 250 GR.', cta: 'Praktis untuk stok harian', tone: 'gold' },
+    { title: 'Kumpulkan Poin', subtitle: `Poin Olsera kamu saat ini ${Math.round(partner?.points ?? 0).toLocaleString('id-ID')} poin.`, cta: 'Belanja makin untung', tone: 'dark' },
+  ];
+  return <div className="member-dashboard grid">
+    <div className="promo-slider" aria-label="Slideshow banner promo bulan ini">
+      {banners.map((banner, index) => <section className={`promo-slide ${banner.tone}`} key={banner.title}>
+        <span className="promo-kicker"><Sparkles size={16} /> Banner Promo {index + 1}</span>
+        <h2>{banner.title}</h2>
+        <p>{banner.subtitle}</p>
+        <b>{banner.cta}</b>
+      </section>)}
+    </div>
+    <div className="grid cols-3 member-dashboard-metrics">
+      <Metric label="Poin Member" value={Math.round(partner?.points ?? 0).toLocaleString('id-ID')} />
+      <Metric label="Kode Member" value={partner?.partnerCode ?? '-'} />
+      <Metric label="Status" value={partner?.status === 'active' ? 'Aktif' : partner?.status ?? '-'} />
+    </div>
+    <div className="card"><h3>Halo, {user.name}</h3><p className="footer-note">Pantau promo, poin, dan aktivitas member Wahyu Beef dari dashboard ini. Banner promo bulan ini bisa diperbarui sesuai campaign terbaru.</p></div>
   </div>;
 }
 
@@ -666,6 +693,22 @@ function ProfileSettings({ state, user, token, setUser, setState }: { state: App
   const [confirmPassword, setConfirmPassword] = useState('');
   const [passwordMessage, setPasswordMessage] = useState('');
   const [savingPassword, setSavingPassword] = useState(false);
+  const [olseraStats, setOlseraStats] = useState<{ transactionCount: number; transactionAmount: number; paidAmount: number; debtAmount: number } | null>(null);
+  const [statsMessage, setStatsMessage] = useState('Memuat statistik transaksi Olsera...');
+  const memberPoints = partner?.points ?? 0;
+
+  useEffect(() => {
+    let cancelled = false;
+    api.olseraProfileStats(token).then((stats) => {
+      if (cancelled) return;
+      setOlseraStats(stats);
+      setStatsMessage('');
+    }).catch((error) => {
+      if (cancelled) return;
+      setStatsMessage(error instanceof Error ? error.message : 'Statistik transaksi belum tersedia.');
+    });
+    return () => { cancelled = true; };
+  }, [token]);
 
   async function chooseProfilePhoto(file?: File) {
     if (!file) return;
@@ -728,13 +771,15 @@ function ProfileSettings({ state, user, token, setUser, setState }: { state: App
     <div className="card profile-card">
       <div className="profile-hero">
         <div className="avatar-preview">{avatarUrl ? <img src={avatarUrl} alt={name} /> : <span>{initials(name)}</span>}</div>
-        <div><h3>Profil Mitra</h3><p className="footer-note">Update identitas yang tampil di akun mitra dan dokumen operasional.</p></div>
+        <div><h3>Profil Member</h3><p className="footer-note">Update identitas yang tampil di akun member dan dokumen operasional.</p></div>
       </div>
+      <div className="member-profile-summary"><div className="points-card"><span>Poin Member</span><strong>{memberPoints.toLocaleString('id-ID')}</strong><small>Diambil dari saldo poin Olsera.</small></div><div className="profile-stats-card"><div><span>Jumlah Transaksi</span><b>{olseraStats ? olseraStats.transactionCount.toLocaleString('id-ID') : '-'}</b></div><div><span>Nominal Transaksi</span><b>{formatIdr(olseraStats?.transactionAmount ?? 0)}</b></div><div><span>Lunas</span><b>{formatIdr(olseraStats?.paidAmount ?? 0)}</b></div><div><span>Hutang</span><b>{formatIdr(olseraStats?.debtAmount ?? 0)}</b></div></div></div>
+      {statsMessage && <div className="notice warning">{statsMessage}</div>}
       <div className="grid cols-2">
         <div className="field profile-photo-field"><label>Foto Profil</label><label className="upload-box"><input type="file" accept="image/*" onChange={(e) => chooseProfilePhoto(e.target.files?.[0])} /><span>Pilih Foto dari Perangkat</span><small>JPG/PNG, maksimal 1 MB</small></label>{avatarUrl && <button type="button" className="btn small" onClick={() => setAvatarUrl('')}>Hapus Foto</button>}</div>
         <div className="field"><label>Nama</label><input className="input" value={name} onChange={(e) => setName(e.target.value)} /></div>
         <div className="field"><label>Nomor WA</label><input className="input" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="08xxxxxxxxxx" /></div>
-        <div className="field"><label>Kode Mitra</label><input className="input" value={partner?.partnerCode ?? '-'} disabled /></div>
+        <div className="field"><label>Kode Member</label><input className="input" value={partner?.partnerCode ?? '-'} disabled /></div>
         <div className="field profile-address"><label>Alamat</label><textarea value={address} onChange={(e) => setAddress(e.target.value)} rows={4} /></div>
       </div>
       {message && <div className={`notice ${message.includes('berhasil') ? '' : 'warning'}`}>{message}</div>}
@@ -772,6 +817,29 @@ function Products({ state }: { state: AppState }) {
 
 function Partners({ state }: { state: AppState }) { const partners = state.partners.filter(isRealPartner); return <div className="card mobile-card-table"><h3>Data Mitra</h3><p className="footer-note">Menampilkan database mitra asli Wahyu Beef. Mitra dummy sudah dihapus dari data live.</p><div className="table-wrap responsive-table"><table><thead><tr><th>Kode</th><th>Nama Bisnis</th><th>Tier</th><th>Kontak</th><th>Area</th><th>Termin</th><th>Status</th></tr></thead><tbody>{partners.map((p) => <tr key={p.id}><td data-label="Kode">{p.partnerCode}</td><td data-label="Nama Bisnis"><b>{p.businessName}</b><br /><small>{p.address}</small></td><td data-label="Tier">{tierName(state, p.tierId)}</td><td data-label="Kontak">{p.contactPerson}<br /><small>{p.phone}</small></td><td data-label="Area">{p.city}<br /><small>{p.province || '-'}</small></td><td data-label="Termin">{p.paymentTermDays} hari</td><td data-label="Status"><span className={`status ${p.status === 'active' ? 'delivered' : 'cancelled'}`}>{p.status}</span></td></tr>)}</tbody></table></div></div>; }
 function Pricing({ state }: { state: AppState }) { return <div className="card mobile-card-table"><h3>Harga Produk per Tier</h3><div className="table-wrap responsive-table"><table><thead><tr><th>Produk</th>{state.tiers.map((t) => <th key={t.id}>{t.name}</th>)}</tr></thead><tbody>{state.products.map((p) => <tr key={p.id}><td data-label="Produk"><b>{p.name}</b><br /><small>{p.sku}</small></td>{state.tiers.map((t) => <td data-label={t.name} key={t.id}>{formatIdr(state.prices.find((price) => price.productId === p.id && price.tierId === t.id)?.price ?? 0)}</td>)}</tr>)}</tbody></table></div></div>; }
+
+
+const redeemRewards = [
+  { rank: 1, name: 'Smart TV Polytron 24 Inch', points: '15.000 poin' },
+  { rank: 2, name: 'HP Oppo A77s', points: '10.000 poin' },
+  { rank: 3, name: 'Air Fryer Philips', points: '9.000 poin' },
+  { rank: 4, name: 'Cookware Set Granite', points: '8.500 poin' },
+  { rank: 5, name: 'Blender Aesthetic Philips', points: '6.500 poin' },
+  { rank: 6, name: 'Food Chopper 2L Joil', points: '3.500 poin' },
+  { rank: 7, name: 'Oven Mini 12L Advance', points: '3.000 poin' },
+  { rank: 8, name: 'Stein Cookware Kitchen Knife', points: '2.500 poin' },
+  { rank: 9, name: 'Voucher Belanja Rp50.000,-', points: '500 poin' },
+];
+
+function RedeemPoints({ state, user }: { state: AppState; user: User }) {
+  const partner = findPartnerForUser(state, user);
+  const memberPoints = Math.round(partner?.points ?? 0);
+  return <div className="grid tukar-poin-page">
+    <div className="card tukar-poin-hero"><div><span>Tukar Poin Member</span><h3>Tebus Hadiah Poin Member</h3><p>Kumpulkan poin dari transaksi Wahyu Beef, lalu tukarkan dengan hadiah pilihan. Daftar hadiah mengikuti katalog promo terbaru.</p></div><div className="tukar-poin-balance"><span>Poin Kamu</span><b>{memberPoints.toLocaleString('id-ID')}</b><small>poin</small></div></div>
+    <div className="card tukar-poin-pdf-card"><div className="tukar-poin-head"><div><h3>Katalog Hadiah</h3><p className="footer-note">Gambar diambil dari lampiran PDF Tukar Poin Member.</p></div><a className="btn small" href="/assets/tukar-poin/tukar-poin-member.pdf" target="_blank" rel="noreferrer">Buka PDF</a></div><img className="tukar-poin-poster" src="/assets/tukar-poin/tukar-poin-member-page-1.png" alt="Tebus Hadiah Poin Member Wahyu Beef" /></div>
+    <div className="card mobile-card-table"><h3>Daftar Hadiah</h3><div className="table-wrap responsive-table"><table><thead><tr><th>No</th><th>Hadiah</th><th>Poin</th><th>Status</th></tr></thead><tbody>{redeemRewards.map((reward) => { const required = Number(reward.points.replace(/[^0-9]/g, '')); const enough = memberPoints >= required; return <tr key={reward.rank}><td data-label="No"><b>#{reward.rank}</b></td><td data-label="Hadiah">{reward.name}</td><td data-label="Poin"><b>{reward.points}</b></td><td data-label="Status"><span className={`status ${enough ? 'delivered' : 'pending'}`}>{enough ? 'Bisa ditukar' : 'Kumpulkan poin'}</span></td></tr>; })}</tbody></table></div><p className="footer-note">Untuk klaim hadiah, hubungi admin Wahyu Beef agar poin dan stok hadiah bisa diverifikasi.</p></div>
+  </div>;
+}
 
 function Documents({ state, user, token, refresh }: { state: AppState; user: User; token: string; refresh: () => Promise<void> }) {
   const [doc, setDoc] = useState<{ invoice: Invoice } | null>(null);
@@ -821,7 +889,25 @@ function DocHeader({ title, number }: { title: string; number: string }) { retur
 function DocFooter() { return <div className="doc-footer"><b>Wahyu Beef</b><span>Dokumen dicetak otomatis dari Mitra App Wahyu Beef.</span></div>; }
 function LineItems({ order, showPrice = true, showNotesColumn = false }: { order: Order; showPrice?: boolean; showNotesColumn?: boolean }) { return <div className="table-wrap" style={{ marginTop: 18 }}><table><thead><tr><th>SKU</th><th>Produk</th><th>Qty</th>{showPrice && <><th>Harga</th><th>Total</th></>}{showNotesColumn && <th>Catatan</th>}</tr></thead><tbody>{order.items.map((item) => <tr key={item.id}><td>{item.skuSnapshot}</td><td>{item.productNameSnapshot}<br /><small>{item.tierNameSnapshot}</small>{!showNotesColumn && item.notes && <div className="line-item-note"><b>Catatan:</b> {item.notes}</div>}</td><td>{item.qty} {item.unitSnapshot}</td>{showPrice && <><td>{formatIdr(item.unitPrice)}</td><td>{formatIdr(item.lineTotal)}</td></>}{showNotesColumn && <td className="line-item-notes-cell">{item.notes || '-'}</td>}</tr>)}</tbody></table></div>; }
 
-function Leaderboard({ state }: { state: AppState }) { const rows = (state.leaderboardRows ?? getLeaderboard(state)).slice(0, 10); return <div className="card mobile-card-table"><h3>Papan Peringkat Member</h3><div className="table-wrap responsive-table"><table><thead><tr><th>Rank</th><th>Member</th><th>Tier</th><th>Delivered GMV</th><th>Total Qty</th><th>Order</th><th>Poin</th></tr></thead><tbody>{rows.map((row) => <tr key={row.partnerId}><td data-label="Rank"><b className={`rank-badge rank-${row.rank <= 3 ? row.rank : 'default'}`}>{rankMedal(row.rank)} #{row.rank}</b></td><td data-label="Member">{row.partnerName}</td><td data-label="Tier">{row.tier}</td><td data-label="Delivered GMV">{formatIdr(row.totalOrderValue)}</td><td data-label="Total Qty">{row.totalOrderQty}</td><td data-label="Order">{row.totalOrders}</td><td data-label="Poin"><b>{row.points}</b></td></tr>)}</tbody></table></div><p className="footer-note">Menampilkan 10 besar member. Hanya order delivered yang dihitung agar ranking tidak dimanipulasi dari pending/cancelled.</p></div>; }
+function Leaderboard({ state }: { state: AppState }) {
+  const [rows, setRows] = useState<Array<{ rank: number; memberId: string; memberName: string; points: number; transactionCount: number; transactionAmount: number }>>([]);
+  const [message, setMessage] = useState('Memuat peringkat member dari Olsera...');
+  useEffect(() => {
+    const saved = (() => { try { return JSON.parse(localStorage.getItem(sessionStorageKey) || '{}') as { token?: string }; } catch { return {}; } })();
+    if (!saved.token) { setMessage('Session tidak ditemukan. Login ulang untuk memuat ranking Olsera.'); return; }
+    let cancelled = false;
+    api.olseraLeaderboard(saved.token).then((items) => {
+      if (cancelled) return;
+      setRows(items);
+      setMessage('');
+    }).catch((error) => {
+      if (cancelled) return;
+      setMessage(error instanceof Error ? error.message : 'Ranking Olsera belum tersedia.');
+    });
+    return () => { cancelled = true; };
+  }, []);
+  return <div className="card mobile-card-table"><h3>Papan Peringkat Member</h3>{message && <div className="notice warning">{message}</div>}<div className="table-wrap responsive-table"><table><thead><tr><th>Rank</th><th>Member</th><th>Nominal Transaksi</th><th>Jumlah Transaksi</th><th>Poin</th></tr></thead><tbody>{rows.map((row) => <tr key={row.memberId}><td data-label="Rank"><b className={`rank-badge rank-${row.rank <= 3 ? row.rank : 'default'}`}>{rankMedal(row.rank)} #{row.rank}</b></td><td data-label="Member">{row.memberName}</td><td data-label="Nominal Transaksi">{formatIdr(row.transactionAmount)}</td><td data-label="Jumlah Transaksi">{row.transactionCount.toLocaleString('id-ID')}</td><td data-label="Poin"><b>{row.points.toLocaleString('id-ID')}</b></td></tr>)}</tbody></table></div><p className="footer-note">Menampilkan 10 besar member dari Olsera, diurutkan berdasarkan poin, lalu jumlah transaksi, lalu nominal transaksi.</p></div>;
+}
 function rankMedal(rank: number) { return rank === 1 ? '🥇' : rank === 2 ? '🥈' : rank === 3 ? '🥉' : ''; }
 function Reports({ state }: { state: AppState }) { const topProducts = state.products.map((p) => ({ p, qty: state.orders.flatMap((o) => o.items).filter((i) => i.productId === p.id).reduce((s, i) => s + i.qty, 0) })).sort((a, b) => b.qty - a.qty).slice(0, 5); return <div className="grid cols-2"><div className="card"><h3>Sales Summary</h3><StatusSummary orders={state.orders} /></div><div className="card"><h3>Top Products</h3>{topProducts.map((row) => <p key={row.p.id}><b>{row.p.name}</b><br />{row.qty} pack terjual/order</p>)}</div><div className="card"><h3>Invoice Aging</h3>{state.invoices.map((i) => <p key={i.id}><b>{i.invoiceNumber}</b> • {partnerName(state, i.partnerId)}<br />Outstanding {formatIdr(i.amountDue)} • due {i.dueDate}</p>)}</div><div className="card"><h3>Export Ready</h3><div className="notice">Data report sudah dipisah untuk sales, produk, aging invoice, audit, dan accounting event export.</div></div></div>; }
 function Audit({ state }: { state: AppState }) { return <LogTable logs={state.auditLogs.map((log) => ({ id: log.id, type: log.action, ref: `${log.entityType}:${log.entityId}`, amount: '', time: log.timestamp, meta: JSON.stringify(log.newValue ?? {}) }))} />; }

@@ -84,6 +84,17 @@ export const onRequest = async ({ request, env }: PagesHandlerContext) => {
     if (method === 'GET' && path === '/auth/me') return respond({ user: actor }, 200);
     if (method === 'GET' && path === '/snapshot') return respond(filteredStateForUser(currentState, actor.id), 200);
 
+    if (method === 'GET' && path === '/profile/olsera-stats') {
+      if (actor.role !== 'partner') throw httpError(403, 'Hanya akun member yang bisa melihat statistik Olsera');
+      const partner = findPartnerForUser(currentState, actor);
+      if (!partner) throw httpError(404, 'Profil member tidak ditemukan');
+      return respond(await fetchOlseraMemberStats(env, partner.businessName), 200);
+    }
+
+    if (method === 'GET' && path === '/leaderboard/olsera') {
+      return respond(await fetchOlseraLeaderboard(env), 200);
+    }
+
     if (method === 'PATCH' && path === '/profile/password') {
       const body = await readJson<{ currentPassword?: string; newPassword?: string; confirmPassword?: string }>(request);
       const result = await mutateState((draft) => {
@@ -473,6 +484,70 @@ async function fetchOlseraMembers(env: Env): Promise<OlseraMember[]> {
   return members.filter((member) => String(readFirst(member, ['customer_type_name', 'type_name', 'customer_type'])).toUpperCase() === 'MEMBER');
 }
 
+async function fetchOlseraLeaderboard(env: Env) {
+  if (!env.OLSERA_APP_ID || !env.OLSERA_SECRET_KEY) throw httpError(500, 'Credential Olsera belum lengkap');
+  const baseUrl = (env.OLSERA_API_BASE_URL || 'https://api-open.olsera.co.id').replace(/\/$/, '');
+  const accessToken = await fetchOlseraAccessToken(baseUrl, env);
+  const members = await fetchOlseraMembers(env);
+  const candidates = members
+    .map((member) => ({
+      member,
+      memberId: String(readFirst(member, ['id', 'customer_id']) || readFirst(member, ['name', 'customer_text', 'customer_name'])),
+      memberName: String(readFirst(member, ['name', 'customer_text', 'customer_name']) || 'Member Olsera'),
+      points: readNumber(member, ['balance_points', 'points', 'point', 'loyalty_points']),
+    }))
+    .sort((a, b) => b.points - a.points || a.memberName.localeCompare(b.memberName))
+    .slice(0, 10);
+
+  const enriched: Array<{ rank: number; memberId: string; memberName: string; points: number; transactionCount: number; transactionAmount: number; paidAmount: number; debtAmount: number }> = [];
+  for (const candidate of candidates) {
+    const stats = await computeOlseraMemberStats(baseUrl, accessToken, candidate.memberName);
+    enriched.push({ rank: 0, memberId: candidate.memberId, memberName: candidate.memberName, points: candidate.points, ...stats });
+    await new Promise((resolve) => setTimeout(resolve, 220));
+  }
+
+  return enriched
+    .sort((a, b) => b.points - a.points || b.transactionCount - a.transactionCount || b.transactionAmount - a.transactionAmount || a.memberName.localeCompare(b.memberName))
+    .map((row, index) => ({ ...row, rank: index + 1, tier: 'Member Basic' }));
+}
+
+async function fetchOlseraMemberStats(env: Env, customerName: string) {
+  if (!env.OLSERA_APP_ID || !env.OLSERA_SECRET_KEY) throw httpError(500, 'Credential Olsera belum lengkap');
+  const baseUrl = (env.OLSERA_API_BASE_URL || 'https://api-open.olsera.co.id').replace(/\/$/, '');
+  const accessToken = await fetchOlseraAccessToken(baseUrl, env);
+  return { ...(await computeOlseraMemberStats(baseUrl, accessToken, customerName)), source: 'olsera' };
+}
+
+async function computeOlseraMemberStats(baseUrl: string, accessToken: string, customerName: string) {
+  const orders = await fetchOlseraClosedOrdersBySearch(baseUrl, accessToken, customerName);
+  const transactionCount = orders.length;
+  const transactionAmount = orders.reduce((sum, order) => sum + readNumber(order, ['total_amount', 'order_amount']), 0);
+  const paidAmount = orders.filter((order) => Number(readFirst(order, ['is_paid'])) === 1).reduce((sum, order) => sum + readNumber(order, ['total_amount', 'order_amount']), 0);
+  const debtAmount = Math.max(0, transactionAmount - paidAmount);
+  return { transactionCount, transactionAmount, paidAmount, debtAmount };
+}
+
+async function fetchOlseraClosedOrdersBySearch(baseUrl: string, accessToken: string, search: string) {
+  const orders: OlseraMember[] = [];
+  let page = 1;
+  let lastPage = 1;
+  do {
+    const url = `${baseUrl}/api/open-api/v1/en/order/closeorder?search=${encodeURIComponent(search)}&page=${page}`;
+    const response = await fetch(url, { headers: { Authorization: `Bearer ${accessToken}`, Accept: 'application/json' } });
+    const payload = await response.json().catch(() => ({}));
+    if (response.status === 404) return orders;
+    if (!response.ok) throw httpError(response.status, `Olsera order API gagal: ${readOlseraError(payload, response.statusText)}`);
+    const payloadRecord = payload as { data?: unknown; meta?: { last_page?: unknown } };
+    const raw = Array.isArray(payloadRecord.data) ? payloadRecord.data : [];
+    orders.push(...raw.filter((item: unknown): item is OlseraMember => Boolean(item && typeof item === 'object')));
+    const reportedLastPage = Number(payloadRecord.meta?.last_page ?? 1);
+    lastPage = Number.isFinite(reportedLastPage) && reportedLastPage > 0 ? reportedLastPage : 1;
+    page += 1;
+    if (page <= lastPage) await new Promise((resolve) => setTimeout(resolve, 500));
+  } while (page <= lastPage);
+  return orders;
+}
+
 async function fetchOlseraAccessToken(baseUrl: string, env: Env) {
   const form = new URLSearchParams({ grant_type: 'secret_key', app_id: env.OLSERA_APP_ID ?? '', secret_key: env.OLSERA_SECRET_KEY ?? '' });
   const response = await fetch(`${baseUrl}/api/open-api/v1/id/token`, { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded', Accept: 'application/json' }, body: form.toString() });
@@ -516,6 +591,7 @@ function upsertOlseraMembers(draft: AppState, members: OlseraMember[]) {
     const address = String(readFirst(member, ['address', 'customer_address', 'shipping_address']) || '-');
     const city = String(readFirst(member, ['city', 'customer_city']) || '-');
     const province = String(readFirst(member, ['province', 'state']) || '-');
+    const points = readNumber(member, ['balance_points', 'points', 'point', 'loyalty_points']);
 
     const existingUser = draft.users.find((user) => user.id === userId || (email && user.email.toLowerCase() === email) || (phone && normalizePhone(user.phone) === phone));
     if (existingUser) {
@@ -545,6 +621,7 @@ function upsertOlseraMembers(draft: AppState, members: OlseraMember[]) {
       city,
       province,
       paymentTermDays: 0,
+      points,
       status: 'active' as const,
     };
     if (existingPartner) Object.assign(existingPartner, partnerPayload);
@@ -561,4 +638,10 @@ function readFirst(source: Record<string, unknown>, keys: string[]) {
     if (value !== undefined && value !== null && String(value).trim() !== '') return String(value);
   }
   return '';
+}
+
+function readNumber(source: Record<string, unknown>, keys: string[]) {
+  const raw = readFirst(source, keys).replace(/,/g, '');
+  const value = Number(raw);
+  return Number.isFinite(value) ? value : 0;
 }

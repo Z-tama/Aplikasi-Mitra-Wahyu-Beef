@@ -52,6 +52,12 @@ export const api = {
   updatePassword(token: string, input: { currentPassword: string; newPassword: string; confirmPassword: string }) {
     return request<{ user: User }>('/profile/password', { method: 'PATCH', body: JSON.stringify(input) }, token);
   },
+  olseraProfileStats(token: string) {
+    return request<{ transactionCount: number; transactionAmount: number; paidAmount: number; debtAmount: number; source: string }>('/profile/olsera-stats', {}, token);
+  },
+  olseraLeaderboard(token: string) {
+    return request<Array<{ rank: number; memberId: string; memberName: string; points: number; transactionCount: number; transactionAmount: number; paidAmount: number; debtAmount: number }>>('/leaderboard/olsera', {}, token);
+  },
   createOrder(token: string, input: { partnerId?: string; shippingAddress: string; requestedDeliveryDate?: string; notes?: string; items: CartItem[] }) {
     return request('/orders', { method: 'POST', body: JSON.stringify(input) }, token);
   },
