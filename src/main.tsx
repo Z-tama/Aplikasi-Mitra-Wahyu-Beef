@@ -109,12 +109,8 @@ function Login({ state, onLogin, onRegister }: { state: AppState; onLogin: (sess
   }
   return <main className="login-page">
     <section className="login-card">
-      <div className="hero-panel wb-css-hero">
-        <img className="wb-css-logo" src="/assets/logo-wahyu-beef.png" alt="Logo Wahyu Beef" />
-        <p className="wb-script-title">Sukses Berjamaah</p>
-        <h1><span>Bersinergi</span><span>Bersama</span></h1>
-        <p className="wb-social">@wahyubeef.id</p>
-        <span className="wb-join-button">Join Now!</span>
+      <div className="hero-panel member-header-panel">
+        <img className="member-header-image" src="/assets/headers/member-header.png" alt="Wahyu Beef Membership" />
       </div>
       <form className="login-form compact-login-form" onSubmit={submit}>
         <div className="login-mode-toggle"><button className={loginMode === 'phone' ? 'active' : ''} type="button" onClick={() => switchMode('phone')}>Masuk dengan<br /><span>Nomor HP</span></button><button className={loginMode === 'email' ? 'active' : ''} type="button" onClick={() => switchMode('email')}>Masuk dengan<br /><span>Email</span></button></div>
@@ -122,7 +118,7 @@ function Login({ state, onLogin, onRegister }: { state: AppState; onLogin: (sess
         <div className="field"><label>Password</label><div className="password-input-wrap"><input className="input" type={showPassword ? 'text' : 'password'} value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="current-password" /><button className="password-eye" type="button" onClick={() => setShowPassword((value) => !value)} aria-label={showPassword ? 'Sembunyikan password' : 'Lihat password'}>{showPassword ? <Eye aria-hidden="true" /> : <EyeOff aria-hidden="true" />}</button></div></div>
         {error && <div className="notice warning">{error}</div>}
         <button className="btn primary" type="submit">Masuk</button>
-        <button className="btn register-cta" type="button" onClick={onRegister}>Daftar Menjadi Mitra</button>
+        <button className="btn register-cta" type="button" onClick={onRegister}>Daftar Menjadi Member</button>
       </form>
     </section>
   </main>;
@@ -133,8 +129,7 @@ function PartnerRegistration({ onBack }: { onBack: () => void }) {
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState('');
   const [form, setForm] = useState({
-    businessName: '', ownerName: '', phone: '', email: '', province: '', city: '', address: '',
-    businessType: 'Reseller frozen food', salesChannel: '', currentSales: '', interestedTier: 'Reseller', notes: '',
+    ownerName: '', phone: '', email: '', address: '',
   });
   function update(field: keyof typeof form, value: string) { setForm({ ...form, [field]: value }); }
   async function submit(e: React.FormEvent) {
@@ -152,22 +147,16 @@ function PartnerRegistration({ onBack }: { onBack: () => void }) {
       setSubmitting(false);
     }
   }
-  if (submitted) return <main className="login-page registration-page"><section className="registration-shell success-shell"><div className="registration-hero"><span className="badge"><IceCreamBowl size={16} /> Pendaftaran Mitra</span><h1>Terima kasih, data pendaftaran sudah diterima.</h1><p>Tim Wahyu Beef akan menghubungi calon mitra untuk verifikasi data, area distribusi, dan tier harga yang sesuai.</p><button className="btn primary" type="button" onClick={onBack}>Kembali ke Login</button></div></section></main>;
+  if (submitted) return <main className="login-page registration-page"><section className="registration-shell success-shell"><div className="registration-hero"><span className="badge"><IceCreamBowl size={16} /> Pendaftaran Member</span><h1>Terima kasih, data pendaftaran sudah diterima.</h1><p>Tim Wahyu Beef akan menghubungi calon member untuk verifikasi data.</p><button className="btn primary" type="button" onClick={onBack}>Kembali ke Login</button></div></section></main>;
   return <main className="login-page registration-page">
     <section className="registration-shell">
-      <div className="registration-hero wb-css-hero">
-        <img className="wb-css-logo" src="/assets/logo-wahyu-beef.png" alt="Logo Wahyu Beef" />
-        <p className="wb-script-title">Sukses Berjamaah</p>
-        <h1><span>Bersinergi</span><span>Bersama</span></h1>
-        <p className="wb-social">@wahyubeef.id</p>
-        <span className="wb-join-button">Daftar Mitra</span>
+      <div className="registration-hero member-header-panel">
+        <img className="member-header-image" src="/assets/headers/member-header.png" alt="Wahyu Beef Membership" />
       </div>
       <form className="registration-form" onSubmit={submit}>
         <div className="registration-form-head compact"><button className="btn" type="button" onClick={onBack}>Kembali</button></div>
-        <div className="form-section"><h3>Identitas Usaha</h3><div className="grid cols-2"><div className="field"><label>Nama Usaha / Toko</label><input className="input" required value={form.businessName} onChange={(e) => update('businessName', e.target.value)} placeholder="Contoh: Toko Frozen Makmur" /></div><div className="field"><label>Nama Pemilik / PIC</label><input className="input" required value={form.ownerName} onChange={(e) => update('ownerName', e.target.value)} placeholder="Nama lengkap" /></div><div className="field"><label>Nomor WhatsApp</label><input className="input" required value={form.phone} onChange={(e) => update('phone', e.target.value)} placeholder="08xxxxxxxxxx" /></div><div className="field"><label>Email</label><input className="input" type="email" value={form.email} onChange={(e) => update('email', e.target.value)} placeholder="email@contoh.com" /></div></div></div>
-        <div className="form-section"><h3>Lokasi & Area</h3><div className="grid cols-2"><div className="field"><label>Provinsi</label><input className="input" required value={form.province} onChange={(e) => update('province', e.target.value)} placeholder="Jawa Barat" /></div><div className="field"><label>Kota / Kabupaten</label><input className="input" required value={form.city} onChange={(e) => update('city', e.target.value)} placeholder="Bandung" /></div><div className="field registration-wide"><label>Alamat Lengkap</label><textarea required value={form.address} onChange={(e) => update('address', e.target.value)} rows={3} placeholder="Alamat toko/gudang/pickup point" /></div></div></div>
-        <div className="form-section"><h3>Profil Penjualan</h3><div className="grid cols-2"><div className="field"><label>Jenis Usaha</label><select value={form.businessType} onChange={(e) => update('businessType', e.target.value)}><option>Reseller frozen food</option><option>Agen / distributor</option><option>Retail / minimarket</option><option>Horeca / restoran / katering</option><option>Komunitas / dropshipper</option></select></div><div className="field"><label>Channel Penjualan</label><input className="input" value={form.salesChannel} onChange={(e) => update('salesChannel', e.target.value)} placeholder="Offline, WhatsApp, marketplace, Instagram" /></div><div className="field"><label>Estimasi Penjualan per Bulan</label><select value={form.currentSales} onChange={(e) => update('currentSales', e.target.value)}><option value="">Pilih estimasi</option><option>&lt; 50 kg / bulan</option><option>50 - 200 kg / bulan</option><option>200 - 500 kg / bulan</option><option>&gt; 500 kg / bulan</option></select></div><div className="field"><label>Minat Level Mitra</label><select value={form.interestedTier} onChange={(e) => update('interestedTier', e.target.value)}><option>Reseller</option><option>Agen</option><option>Distributor</option><option>Belum tahu / minta rekomendasi</option></select></div><div className="field registration-wide"><label>Catatan Tambahan</label><textarea value={form.notes} onChange={(e) => update('notes', e.target.value)} rows={3} placeholder="Produk yang diminati, area target, kebutuhan khusus, dll." /></div></div></div>
-        <div className="notice">Dengan mengirim form ini, calon mitra setuju untuk dihubungi oleh tim Wahyu Beef untuk proses verifikasi dan onboarding.</div>
+        <div className="form-section"><h3>Biodata</h3><div className="grid cols-2"><div className="field"><label>Nama Lengkap</label><input className="input" required value={form.ownerName} onChange={(e) => update('ownerName', e.target.value)} placeholder="Nama lengkap" /></div><div className="field"><label>Nomor WhatsApp</label><input className="input" required value={form.phone} onChange={(e) => update('phone', e.target.value)} placeholder="08xxxxxxxxxx" /></div><div className="field"><label>Email</label><input className="input" type="email" value={form.email} onChange={(e) => update('email', e.target.value)} placeholder="email@contoh.com" /></div><div className="field registration-wide"><label>Alamat Lengkap</label><textarea required value={form.address} onChange={(e) => update('address', e.target.value)} rows={4} placeholder="Alamat lengkap" /></div></div></div>
+        <div className="notice">Dengan mengirim form ini, calon member setuju untuk dihubungi oleh tim Wahyu Beef untuk proses verifikasi.</div>
         {submitError && <div className="notice warning">{submitError}</div>}
         <button className="btn primary" type="submit" disabled={submitting}>{submitting ? 'Mengirim...' : 'Kirim Pendaftaran'}</button>
       </form>
@@ -336,14 +325,22 @@ function ChartBar({ label, value, height, tone }: { label: string; value: number
 
 type CatalogProduct = ReturnType<typeof getCatalogForPartner>[number];
 
-const preferredCategoryIds = ['cat-daging-sapi', 'cat-tulang-sapi', 'cat-jerohan-sapi', 'cat-processed-meat', 'cat-seafood-series'];
+const preferredCategoryOrder = ['DAGING', 'TULANG', 'JEROAN', 'OLAHAN', 'BERKAH CHICKEN'];
 function orderedCategories(state: AppState) {
-  return [...state.categories].sort((a, b) => {
-    const ai = preferredCategoryIds.indexOf(a.id);
-    const bi = preferredCategoryIds.indexOf(b.id);
+  return state.categories.filter((category) => category.isActive).sort((a, b) => {
+    const ai = preferredCategoryOrder.indexOf(a.name.toUpperCase());
+    const bi = preferredCategoryOrder.indexOf(b.name.toUpperCase());
     return (ai === -1 ? 999 : ai) - (bi === -1 ? 999 : bi) || a.name.localeCompare(b.name);
   });
 }
+function formatProductStock(product: { description?: string; unit?: string }) {
+  const match = product.description?.match(/Stok Olsera:\s*([\d.,]+)/i);
+  if (!match) return 'Tersedia';
+  const value = Number(match[1].replace(/,/g, ''));
+  if (!Number.isFinite(value)) return 'Tersedia';
+  return `${value.toLocaleString('id-ID')} ${product.unit || 'pcs'}`;
+}
+
 function categoryName(state: AppState, categoryId: string) {
   return state.categories.find((category) => category.id === categoryId)?.name ?? '-';
 }
@@ -417,9 +414,8 @@ function Catalog({ state, user, token, refresh, setView }: { state: AppState; us
   }
   if (isCheckout) return <CheckoutPage state={state} catalog={catalog} partnerAddress={activePartner.address} cart={cart} cartNotes={cartNotes} message={message} onBack={() => setIsCheckout(false)} onUpdateQty={updateCartQty} onUpdateNote={(key, note) => setCartNotes((current) => ({ ...current, [key]: note }))} onPlaceOrder={placeOrder} />;
   return <div className="grid">
-    <div className="card"><b>Tier aktif: {tierName(state, activePartner.tierId)}</b><p className="footer-note">Harga di bawah dihitung server-side berdasarkan tier member. Untuk daging sapi, tulang sapi, dan jeroan sapi, kemasan member langsung 250 gr tanpa pilihan kemasan.</p></div>
     {message && <div className="notice">{message}</div>}
-    <div className="catalog-filter-bar marketplace-filter-bar"><div className="field"><label>Filter Kategori</label><select value={categoryFilter} onChange={(event) => setCategoryFilter(event.target.value)}><option value="all">Semua Kategori</option>{orderedCategories(state).map((category) => <option key={category.id} value={category.id}>{category.name}</option>)}</select></div><div className="field catalog-search-field"><label>Cari Produk</label><input className="input" value={searchQuery} onChange={(event) => setSearchQuery(event.target.value)} placeholder="Cari nama produk, SKU, deskripsi..." /></div>{(categoryFilter !== 'all' || searchQuery) && <button type="button" className="btn small" onClick={() => { setCategoryFilter('all'); setSearchQuery(''); }}>Reset Filter</button>}</div>
+    <div className="catalog-filter-bar marketplace-filter-bar"><div className="field catalog-search-field"><label>Cari Produk</label><input className="input" value={searchQuery} onChange={(event) => setSearchQuery(event.target.value)} placeholder="Cari nama produk, SKU, deskripsi..." /></div><div className="field"><label>Filter Kategori</label><select value={categoryFilter} onChange={(event) => setCategoryFilter(event.target.value)}><option value="all">Semua Kategori</option>{orderedCategories(state).map((category) => <option key={category.id} value={category.id}>{category.name}</option>)}</select></div>{(categoryFilter !== 'all' || searchQuery) && <button type="button" className="btn small" onClick={() => { setCategoryFilter('all'); setSearchQuery(''); }}>Reset Filter</button>}</div>
     <div className="catalog-toolbar"><div><b>{filteredCatalog.length} / {catalog.length} Produk</b><span>Harga {tierName(state, activePartner.tierId)} • {activeCategoryName}{normalizedSearch ? ` • “${searchQuery.trim()}”` : ''}</span></div><div className="catalog-view-label">Tampilan <span className="grid-icon">▦</span></div></div>
     {catalogGroups.length ? <div className="catalog-category-stack">{catalogGroups.map(({ category, products }) => <section className="catalog-category-section" key={category.id}>
       <div className="category-section-head"><div><span>Kategori</span><h3>{category.name}</h3></div><b>{products.length} Produk</b></div>
@@ -428,8 +424,8 @@ function Catalog({ state, user, token, refresh, setView }: { state: AppState; us
         const fixedPackageKey = cartKey(product.id, memberFixedPackageOption.weightGram);
         const displayPrice = hasPackageOptions ? getPackagePrice(product.price ?? 0, memberFixedPackageOption.weightGram) : product.price;
         return <div className="product-card marketplace-card" key={product.id}>
-          <div className={`product-visual marketplace-visual ${product.imageUrl ? 'has-photo' : ''}`}>{product.imageUrl && <img src={product.imageUrl} alt={product.name} loading="lazy" />}<span className="discount-badge">Mitra</span><div className="placeholder-brand">Wahyu Beef</div>{!product.imageUrl && <div className="placeholder-title">{product.name}</div>}<div className="placeholder-pack">{hasPackageOptions ? '250 GR' : product.unit}</div></div>
-          <div className="product-info"><h3>{product.name}</h3><span className="product-meta">{product.sku} • MOQ {product.minimumOrderQty} {hasPackageOptions ? '250 GR' : product.unit}</span><div className="price-row"><span className="voucher-tag">%</span><div className="price">{displayPrice ? formatIdr(displayPrice) : 'Belum ada harga'}</div></div><div className="deal-note">Harga khusus {tierName(state, activePartner.tierId)}</div><div className="rating-row"><span>★ 5.0</span><span>•</span><span>{Math.max(10, product.minimumOrderQty * 10)}+ terjual</span></div><div className="qty-row compact" onClick={(event) => event.stopPropagation()}><input className="input" type="number" min="0" placeholder="Qty" value={cart[hasPackageOptions ? fixedPackageKey : cartKey(product.id)] ?? ''} onChange={(e) => setCart({ ...cart, [hasPackageOptions ? fixedPackageKey : cartKey(product.id)]: Number(e.target.value) })} /><button className="btn small" onClick={() => addToCart(product, product.minimumOrderQty, hasPackageOptions ? memberFixedPackageOption : undefined)}>Tambah</button></div></div>
+          <div className={`product-visual marketplace-visual ${product.imageUrl ? 'has-photo' : ''}`}>{product.imageUrl && <img src={product.imageUrl} alt={product.name} loading="lazy" />}<span className="discount-badge">Member</span><div className="placeholder-brand">Wahyu Beef</div>{!product.imageUrl && <div className="placeholder-title">{product.name}</div>}<div className="placeholder-pack">{hasPackageOptions ? '250 GR' : product.unit}</div></div>
+          <div className="product-info"><h3>{product.name}</h3><span className="product-meta">{product.sku} • MOQ {product.minimumOrderQty} {hasPackageOptions ? '250 GR' : product.unit}</span><div className="price-row"><span className="voucher-tag">%</span><div className="price">{displayPrice ? formatIdr(displayPrice) : 'Belum ada harga'}</div></div><div className="rating-row stock-row"><span>Stok Produk</span><span>•</span><span>{formatProductStock(product)}</span></div><div className="qty-row compact" onClick={(event) => event.stopPropagation()}><input className="input" type="number" min="0" placeholder="Qty" value={cart[hasPackageOptions ? fixedPackageKey : cartKey(product.id)] ?? ''} onChange={(e) => setCart({ ...cart, [hasPackageOptions ? fixedPackageKey : cartKey(product.id)]: Number(e.target.value) })} /><button className="btn small" onClick={() => addToCart(product, product.minimumOrderQty, hasPackageOptions ? memberFixedPackageOption : undefined)}>Tambah</button></div></div>
         </div>;
       })}</div>
     </section>)}</div> : <div className="notice warning">Produk tidak ditemukan. Coba ubah kategori atau kata kunci pencarian.</div>}

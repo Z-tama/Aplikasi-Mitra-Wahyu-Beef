@@ -12,6 +12,7 @@ interface Env {
   OLSERA_STORE_ID?: string;
   OLSERA_API_BASE_URL?: string;
   OLSERA_CUSTOMERS_PATH?: string;
+  OLSERA_PRODUCTS_PATH?: string;
   OLSERA_SYNC_TOKEN?: string;
 }
 
@@ -75,6 +76,24 @@ export const onRequest = async ({ request, env }: PagesHandlerContext) => {
     if (method === 'POST' && path === '/integrations/olsera/sync-members') {
       assertOlseraSyncAuthorized(request, env);
       const result = await syncOlseraMembers(env);
+      return respond(result, 200);
+    }
+
+    if (method === 'POST' && path === '/integrations/olsera/sync-products') {
+      assertOlseraSyncAuthorized(request, env);
+      const result = await syncOlseraProducts(env);
+      return respond(result, 200);
+    }
+
+    if (method === 'GET' && path === '/integrations/olsera/product-fields') {
+      assertOlseraSyncAuthorized(request, env);
+      const result = await inspectOlseraProductFields(env);
+      return respond(result, 200);
+    }
+
+    if (method === 'POST' && path === '/integrations/olsera/archive-legacy-categories') {
+      assertOlseraSyncAuthorized(request, env);
+      const result = await archiveLegacyCatalogCategories(env);
       return respond(result, 200);
     }
 
@@ -365,24 +384,24 @@ function imageExtension(contentType: string) {
 }
 
 function buildPartnerRegistration(body: Record<string, string>) {
-  const required = ['businessName', 'ownerName', 'phone', 'province', 'city', 'address'];
+  const required = ['ownerName', 'phone', 'address'];
   for (const field of required) {
     if (!String(body[field] ?? '').trim()) throw httpError(400, 'Data pendaftaran belum lengkap');
   }
   const submittedAt = new Date().toISOString();
   const registration = {
     id: `reg-${Date.now()}`,
-    businessName: clean(body.businessName),
+    businessName: clean(body.ownerName),
     ownerName: clean(body.ownerName),
     phone: clean(body.phone),
     email: clean(body.email),
-    province: clean(body.province),
-    city: clean(body.city),
+    province: '',
+    city: '',
     address: clean(body.address),
-    businessType: clean(body.businessType),
-    salesChannel: clean(body.salesChannel),
-    currentSales: clean(body.currentSales),
-    interestedTier: clean(body.interestedTier),
+    businessType: 'Member Wahyu Beef',
+    salesChannel: '',
+    currentSales: '',
+    interestedTier: 'Member',
     notes: clean(body.notes),
     status: 'new' as const,
     submittedAt,
@@ -390,18 +409,11 @@ function buildPartnerRegistration(body: Record<string, string>) {
     whatsappMessage: '',
   };
   registration.whatsappMessage = [
-    'Pendaftaran Mitra Baru Wahyu Beef',
-    `Nama Usaha: ${registration.businessName}`,
-    `PIC: ${registration.ownerName}`,
+    'Pendaftaran Member Baru Wahyu Beef',
+    `Nama Lengkap: ${registration.ownerName}`,
     `WA: ${registration.phone}`,
     registration.email ? `Email: ${registration.email}` : '',
-    `Lokasi: ${registration.city}, ${registration.province}`,
     `Alamat: ${registration.address}`,
-    `Jenis Usaha: ${registration.businessType}`,
-    registration.salesChannel ? `Channel: ${registration.salesChannel}` : '',
-    registration.currentSales ? `Estimasi: ${registration.currentSales}` : '',
-    `Minat Tier: ${registration.interestedTier}`,
-    registration.notes ? `Catatan: ${registration.notes}` : '',
     `Waktu Submit: ${new Date(submittedAt).toLocaleString('id-ID')}`,
   ].filter(Boolean).join('\n');
   return registration;
@@ -444,6 +456,197 @@ function assertOlseraSyncAuthorized(request: Request, env: Env) {
   if (!expected) throw httpError(500, 'OLSERA_SYNC_TOKEN belum diset');
   const actual = request.headers.get('x-sync-token') ?? '';
   if (actual !== expected) throw httpError(403, 'Token sinkronisasi tidak valid');
+}
+
+
+type OlseraProduct = Record<string, unknown>;
+
+
+async function inspectOlseraProductFields(env: Env) {
+  const products = await fetchOlseraProducts(env);
+  const sample = products.slice(0, 5).map((product) => ({
+    keys: Object.keys(product).sort(),
+    values: Object.fromEntries(Object.entries(product).filter(([key]) => /group|category|price|stock|qty|unit|name|sku|code|id/i.test(key)).slice(0, 80)),
+  }));
+  return { fetched: products.length, sample };
+}
+
+type OlseraProductImportItem = {
+  id: string;
+  sku: string;
+  name: string;
+  categoryName: string;
+  description: string;
+  unit: string;
+  price: number;
+  stock: number;
+  raw: OlseraProduct;
+};
+
+
+async function archiveLegacyCatalogCategories(env: Env) {
+  const legacyNames = new Set(['DAGING SAPI', 'TULANG SAPI', 'JEROAN SAPI', 'OLAHAN DAGING', 'SEAFOOD SERIES']);
+  return mutateState((draft) => {
+    const now = new Date().toISOString();
+    const archived = draft.categories.filter((category) => category.isActive && legacyNames.has(category.name.toUpperCase()));
+    for (const category of archived) category.isActive = false;
+    if (archived.length) draft.auditLogs.unshift({ id: `audit-legacy-categories-${Date.now()}`, actorUserId: 'olsera-sync', action: 'LEGACY_CATEGORIES_ARCHIVED', entityType: 'productCategory', entityId: 'legacy-categories', newValue: { archived: archived.map((category) => ({ id: category.id, name: category.name })) }, timestamp: now });
+    return { archived: archived.length, names: archived.map((category) => category.name) };
+  }, env);
+}
+
+async function syncOlseraProducts(env: Env) {
+  if (!env.OLSERA_APP_ID || !env.OLSERA_SECRET_KEY || !env.OLSERA_STORE_ID) throw httpError(500, 'Credential Olsera belum lengkap');
+  const baseUrl = (env.OLSERA_API_BASE_URL || 'https://api-open.olsera.co.id').replace(/\/$/, '');
+  const accessToken = await fetchOlseraAccessToken(baseUrl, env);
+  const [products, groups] = await Promise.all([fetchOlseraProducts(env, baseUrl, accessToken), fetchOlseraProductGroups(baseUrl, accessToken)]);
+  const result = await mutateState((draft) => importOlseraProducts(draft, products, groups), env);
+  return { ...result, source: 'olsera', storeId: env.OLSERA_STORE_ID };
+}
+
+async function fetchOlseraProducts(env: Env, suppliedBaseUrl?: string, suppliedAccessToken?: string): Promise<OlseraProduct[]> {
+  const baseUrl = suppliedBaseUrl || (env.OLSERA_API_BASE_URL || 'https://api-open.olsera.co.id').replace(/\/$/, '');
+  const accessToken = suppliedAccessToken || await fetchOlseraAccessToken(baseUrl, env);
+  const pathTemplate = env.OLSERA_PRODUCTS_PATH || '/api/open-api/v1/en/product?page={page}';
+  const products: OlseraProduct[] = [];
+  let page = 1;
+  let lastPage = 1;
+
+  do {
+    const path = pathTemplate
+      .replace('{storeId}', encodeURIComponent(env.OLSERA_STORE_ID || ''))
+      .replace('{page}', String(page));
+    const separator = path.includes('?') ? '&' : '?';
+    const url = `${baseUrl}${path.startsWith('/') ? path : `/${path}`}${path.includes('page=') ? '' : `${separator}page=${page}`}`;
+    const response = await fetch(url, { headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json', Accept: 'application/json' } });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) throw httpError(response.status, `Olsera product API gagal: ${readOlseraError(payload, response.statusText)}`);
+    const payloadRecord = payload as { data?: unknown; products?: unknown; result?: unknown; meta?: { last_page?: unknown } };
+    const raw: unknown[] = Array.isArray(payload) ? payload : Array.isArray(payloadRecord.data) ? payloadRecord.data : Array.isArray(payloadRecord.products) ? payloadRecord.products : Array.isArray(payloadRecord.result) ? payloadRecord.result : [];
+    products.push(...raw.filter((item: unknown): item is OlseraProduct => Boolean(item && typeof item === 'object')));
+    const reportedLastPage = Number(payloadRecord.meta?.last_page ?? 1);
+    lastPage = Number.isFinite(reportedLastPage) && reportedLastPage > 0 ? reportedLastPage : 1;
+    page += 1;
+    if (page <= lastPage) await new Promise((resolve) => setTimeout(resolve, 900));
+  } while (page <= lastPage);
+
+  return products;
+}
+
+async function fetchOlseraProductGroups(baseUrl: string, accessToken: string) {
+  const paths = [
+    '/api/open-api/v1/en/product/group?page={page}',
+    '/api/open-api/v1/en/product/productgroup?page={page}',
+    '/api/open-api/v1/en/product/klasifikasi?page={page}',
+  ];
+  for (const pathTemplate of paths) {
+    const groups: OlseraProduct[] = [];
+    let page = 1;
+    let lastPage = 1;
+    let ok = false;
+    do {
+      const url = `${baseUrl}${pathTemplate.replace('{page}', String(page))}`;
+      const response = await fetch(url, { headers: { Authorization: `Bearer ${accessToken}`, Accept: 'application/json' } });
+      const payload = await response.json().catch(() => ({}));
+      if (response.status === 404) break;
+      if (!response.ok) break;
+      ok = true;
+      const payloadRecord = payload as { data?: unknown; groups?: unknown; result?: unknown; meta?: { last_page?: unknown } };
+      const raw: unknown[] = Array.isArray(payload) ? payload : Array.isArray(payloadRecord.data) ? payloadRecord.data : Array.isArray(payloadRecord.groups) ? payloadRecord.groups : Array.isArray(payloadRecord.result) ? payloadRecord.result : [];
+      groups.push(...raw.filter((item: unknown): item is OlseraProduct => Boolean(item && typeof item === 'object')));
+      const reportedLastPage = Number(payloadRecord.meta?.last_page ?? 1);
+      lastPage = Number.isFinite(reportedLastPage) && reportedLastPage > 0 ? reportedLastPage : 1;
+      page += 1;
+      if (page <= lastPage) await new Promise((resolve) => setTimeout(resolve, 600));
+    } while (page <= lastPage);
+    if (ok && groups.length) {
+      const map = new Map<string, string>();
+      for (const group of groups) {
+        const id = readFirst(group, ['id', 'product_group_id', 'klasifikasi_id']);
+        const name = readFirst(group, ['name', 'group_name', 'klasifikasi', 'description']);
+        if (id && name) map.set(id, name);
+      }
+      if (map.size) return map;
+    }
+  }
+  return new Map<string, string>();
+}
+
+function importOlseraProducts(draft: AppState, rawProducts: OlseraProduct[], groups = new Map<string, string>()) {
+  const now = new Date().toISOString();
+  const activeOldCategories = draft.categories.filter((category) => category.isActive).length;
+  const activeOldProducts = draft.products.filter((product) => product.isActive).length;
+  const imported = rawProducts.map((product) => mapOlseraProduct(product, groups)).filter((item) => item.name && item.price > 0);
+  const groupNames = Array.from(new Set(imported.map((item) => item.categoryName))).sort(sortCategoryNames);
+  const categories = groupNames.map((name) => ({ id: `olsera-cat-${slugify(name)}`, name, slug: slugify(name), isActive: true }));
+  const categoryMap = new Map(categories.map((category) => [category.name, category.id]));
+  const tiers = draft.tiers.length ? draft.tiers : [{ id: 'tier-reseller', code: 'RESELLER', name: 'Member Basic', discountRate: 0, paymentTermDays: 0, isActive: true }];
+
+  draft.categories = [
+    ...draft.categories.map((category) => category.isActive ? { ...category, isActive: false, slug: category.slug.startsWith('archived-') ? category.slug : `archived-${category.slug}` } : category),
+    ...categories,
+  ];
+  draft.products = [
+    ...draft.products.map((product) => product.isActive ? { ...product, isActive: false } : product),
+    ...imported.map((item) => ({
+      id: item.id,
+      categoryId: categoryMap.get(item.categoryName) || categories[0]?.id || 'olsera-cat-lainnya',
+      sku: item.sku,
+      name: item.name,
+      description: item.stock > 0 ? `${item.description}${item.description ? ' • ' : ''}Stok Olsera: ${item.stock}` : item.description,
+      unit: item.unit,
+      weightGram: undefined,
+      imageUrl: readFirst(item.raw, ['photo', 'image', 'image_url', 'photo_md', 'photo_lg', 'picture']) || undefined,
+      minimumOrderQty: 1,
+      baseCost: undefined,
+      isActive: true,
+    })),
+  ];
+  draft.prices = [
+    ...draft.prices.map((price) => price.isActive ? { ...price, isActive: false, effectiveTo: now } : price),
+    ...imported.flatMap((item) => tiers.map((tier) => ({
+      id: `olsera-price-${item.id}-${tier.id}`,
+      productId: item.id,
+      tierId: tier.id,
+      price: item.price,
+      effectiveFrom: now.slice(0, 10),
+      isActive: true,
+    }))),
+  ];
+  draft.auditLogs.unshift({ id: `audit-olsera-products-${Date.now()}`, actorUserId: 'olsera-sync', action: 'OLSERA_PRODUCTS_SYNCED', entityType: 'integration', entityId: 'olsera-products', newValue: { fetched: rawProducts.length, imported: imported.length, categories: categories.length, archivedProducts: activeOldProducts, archivedCategories: activeOldCategories }, timestamp: now });
+  return { fetched: rawProducts.length, imported: imported.length, categories: categories.length, archivedProducts: activeOldProducts, archivedCategories: activeOldCategories, stockSynced: imported.some((item) => item.stock > 0) };
+}
+
+function mapOlseraProduct(product: OlseraProduct, groups = new Map<string, string>()): OlseraProductImportItem {
+  const name = readFirst(product, ['name', 'product_name', 'product_text', 'product']) || 'Produk Olsera';
+  const sku = readFirst(product, ['sku', 'code', 'product_code', 'barcode']) || `OLS-${readFirst(product, ['id', 'product_id']) || slugify(name)}`;
+  const id = `olsera-prd-${slugify(readFirst(product, ['id', 'product_id']) || sku || name)}`;
+  const groupId = readFirst(product, ['product_group_id', 'klasifikasi_id', 'group_id']);
+  const categoryName = readFirst(product, ['group_name', 'product_group_name', 'klasifikasi', 'category_name', 'category', 'group']) || groups.get(groupId) || (groupId ? `Grup ${groupId}` : 'Lainnya');
+  const price = readNumber(product, ['sell_price', 'selling_price', 'price', 'price_sell', 'retail_price', 'sellprice', 'price_sell_store', 'store_price']);
+  const stock = readNumber(product, ['stock_qty', 'stock', 'qty', 'quantity', 'available_stock', 'total_stock']);
+  return {
+    id,
+    sku,
+    name,
+    categoryName,
+    description: readFirst(product, ['description', 'notes', 'variant_name']),
+    unit: readFirst(product, ['unit', 'uom', 'unit_name']) || 'pcs',
+    price,
+    stock,
+    raw: product,
+  };
+}
+
+function sortCategoryNames(a: string, b: string) {
+  const preferred = ['DAGING', 'TULANG', 'JEROAN', 'OLAHAN', 'BERKAH CHICKEN'];
+  const ai = preferred.indexOf(a.toUpperCase());
+  const bi = preferred.indexOf(b.toUpperCase());
+  return (ai === -1 ? 999 : ai) - (bi === -1 ? 999 : bi) || a.localeCompare(b);
+}
+
+function slugify(value: string) {
+  return String(value || 'item').toLowerCase().normalize('NFKD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 80) || 'item';
 }
 
 async function syncOlseraMembers(env: Env) {
