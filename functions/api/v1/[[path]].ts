@@ -1,4 +1,4 @@
-import { createSeedState, type AppState } from '../../../src/seed';
+import { createSeedState, syncProductCatalogImages, type AppState } from '../../../src/seed';
 import { createInvoice, createOrder, findPartnerForUser, getLeaderboard, recordPayment, updateOrderShipping, updateOrderStatus } from '../../../src/services';
 import type { OrderStatus, Payment, Role, User } from '../../../src/domain';
 
@@ -212,15 +212,16 @@ export const onRequest = async ({ request, env }: PagesHandlerContext) => {
 };
 
 async function loadState(env?: Env) {
-  if (state) return state;
+  if (state) return ensureMitraState(state);
   if (env?.DB) {
     const row = await env.DB.prepare("SELECT value FROM app_state WHERE key = ?").bind('state').first<{ value: string }>();
     if (row?.value) {
-      state = JSON.parse(row.value) as AppState;
+      state = ensureMitraState(JSON.parse(row.value) as AppState);
+      await saveState(env, state);
       return state;
     }
   }
-  state = createSeedState();
+  state = ensureMitraState(createSeedState());
   if (env?.DB) await saveState(env, state);
   return state;
 }
@@ -306,6 +307,11 @@ function verifyPassword(user: User, password: string, env?: Env) {
   const fallback = user.email.endsWith('@mitra.wahyubeef.local') ? 'mitrawahyubeef' : allowDemoLogin ? defaultPasswordForUser(user) : undefined;
   return Boolean(fallback) && fallback === password;
 }
+
+function ensureMitraState(currentState: AppState) {
+  return syncProductCatalogImages(currentState);
+}
+
 
 function defaultPasswordForUser(user: User) {
   if (user.email.endsWith('@mitra.wahyubeef.local')) return 'mitrawahyubeef';

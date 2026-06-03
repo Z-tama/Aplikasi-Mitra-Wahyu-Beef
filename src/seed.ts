@@ -57,6 +57,91 @@ export const demoPasswords: Record<string, string> = {
   'reseller@mitra.local': 'password',
 };
 
+export const productCatalogImageUrlById: Record<string, string> = {
+  "prd-dgs-001": "https://drive.google.com/thumbnail?id=1VxVoE6rkY2xqvplKjrNOJD3AHE9LQzjS&sz=w1000",
+  "prd-dgs-002": "https://drive.google.com/thumbnail?id=1m58DFLUYym0Y9LOF4K-K3WD1GUJUvVR1&sz=w1000",
+  "prd-dgs-003": "https://drive.google.com/thumbnail?id=11lCX6M5iAsbEnLGVjQA9se5htCFokDuX&sz=w1000",
+  "prd-dgs-004": "https://drive.google.com/thumbnail?id=1u1QqZ13iX4g47S66zUOjNELpUymDw9Kt&sz=w1000",
+  "prd-dgs-005": "https://drive.google.com/thumbnail?id=1AJ0kI-oPiIS5iTTfEREOLJADBpv8C6tE&sz=w1000",
+  "prd-dgs-006": "https://drive.google.com/thumbnail?id=1nk-wqpuEhmKFvjFy1Goxx53rWJrQOLuY&sz=w1000",
+  "prd-dgs-007": "https://drive.google.com/thumbnail?id=1TdddRQmeIGyOeJsxtYVGRe6hsS4KZUUQ&sz=w1000",
+  "prd-dgs-008": "https://drive.google.com/thumbnail?id=1-_H2i4pOIQ4go2ZC7EVFw8G2IkBetO5J&sz=w1000",
+  "prd-dgs-009": "https://drive.google.com/thumbnail?id=1JM9fNvjjU22z6PxGdJCXtGo__cWAJw4w&sz=w1000",
+  "prd-dgs-014": "https://drive.google.com/thumbnail?id=1BHgT7fY24-X7ojD9Dgn6MKW8_GLUN6_x&sz=w1000",
+  "prd-dgs-015": "https://drive.google.com/thumbnail?id=1JV0uiW9n2ZL11BKsqUsMvu6LiHdaoEKo&sz=w1000",
+  "prd-dgs-016": "https://drive.google.com/thumbnail?id=1HDI-ZfiYxs7LdJ7VRddWX0PqD0hB72wZ&sz=w1000",
+  "prd-dgs-017": "https://drive.google.com/thumbnail?id=1fml9-J9ZBuSjS-B0QHzfaL2QN_eLUBGh&sz=w1000",
+  "prd-dgs-018": "https://drive.google.com/thumbnail?id=1E7yRd6JmKdgF5l-SDUYkkw77Ur-HRqTC&sz=w1000",
+  "prd-dgs-019": "https://drive.google.com/thumbnail?id=1E7yRd6JmKdgF5l-SDUYkkw77Ur-HRqTC&sz=w1000",
+  "prd-dgs-020": "https://drive.google.com/thumbnail?id=1E7yRd6JmKdgF5l-SDUYkkw77Ur-HRqTC&sz=w1000",
+  "prd-tls-001": "https://drive.google.com/thumbnail?id=1ClVW-Y_f-xLql0t2WLp8tw6bKIw3DqcB&sz=w1000",
+  "prd-tls-002": "https://drive.google.com/thumbnail?id=10buvN3RH9ODFGXKXfAx5lyLrx1lxjXrm&sz=w1000",
+  "prd-tls-003": "https://drive.google.com/thumbnail?id=1H4mQQN637bC17GXHwa-a9yz3tQ0n-CzQ&sz=w1000",
+  "prd-tls-004": "https://drive.google.com/thumbnail?id=1CxJ0TuUN2aGKi3kyj5UjrLv6NPg9jGHo&sz=w1000",
+  "prd-tls-005": "https://drive.google.com/thumbnail?id=1pN55O04fguCqvJHDPZGZfYRa0Xfjjr5V&sz=w1000",
+  "prd-tls-006": "https://drive.google.com/thumbnail?id=1fJZqFB-xJtReRKhERHaOd47kr7IaQsz_&sz=w1000",
+  "prd-tls-007": "https://drive.google.com/thumbnail?id=1lBf9HhUZIZ1_ND-9ETRNCSCh2svvbgUz&sz=w1000",
+  "prd-tls-008": "https://drive.google.com/thumbnail?id=1lBf9HhUZIZ1_ND-9ETRNCSCh2svvbgUz&sz=w1000",
+  "prd-tls-009": "https://drive.google.com/thumbnail?id=1lBf9HhUZIZ1_ND-9ETRNCSCh2svvbgUz&sz=w1000",
+  "prd-tls-010": "https://drive.google.com/thumbnail?id=10Ai6c_1QAF7lzl_KGWH4WOkJHAQos1KE&sz=w1000",
+  "prd-jrh-001": "https://drive.google.com/thumbnail?id=1AflUSavXET5bx6yQvigVYGpSMRaBNWFc&sz=w1000",
+  "prd-jrh-002": "https://drive.google.com/thumbnail?id=1q2VvUH2mjxlsz1vQjlmfBI5uk2V71HWF&sz=w1000",
+  "prd-jrh-003": "https://drive.google.com/thumbnail?id=1PuZzZ1IrC8wRaflAh1WcFDJ2hctdszfy&sz=w1000",
+  "prd-jrh-006": "https://drive.google.com/thumbnail?id=1y7amP8uzX-txK9foBRy-vqyUMJ--55QH&sz=w1000",
+  "prd-jrh-007": "https://drive.google.com/thumbnail?id=1sdt9wcvTpiDCtReUWOB5xbhKdapA2lmD&sz=w1000",
+  "prd-jrh-008": "https://drive.google.com/thumbnail?id=1GnCD1WeLC_jxREL2eHvWh_8138VPwaqg&sz=w1000",
+  "prd-jrh-009": "https://drive.google.com/thumbnail?id=1jtdh6l891ATV3RDeBmDbV-HEPib0CxUB&sz=w1000",
+  "prd-jrh-010": "https://drive.google.com/thumbnail?id=1IO0jNU05sWS5lB9G-6LDmU3gU7Lav-UW&sz=w1000",
+  "prd-jrh-011": "https://drive.google.com/thumbnail?id=17NK92qYOfrov7soDcixGl_EAygQuzAI0&sz=w1000",
+  "prd-jrh-013": "https://drive.google.com/thumbnail?id=1i90JjFxcBLVzKIzhbh1kysP5FX9N2Hre&sz=w1000",
+  "prd-jrh-014": "https://drive.google.com/thumbnail?id=1prHbYceRTQs9QRS3F1FGmAO1tbHrFCHl&sz=w1000",
+  "prd-jrh-016": "https://drive.google.com/thumbnail?id=1_zwW6WzDWqlMPo88_7pKPr76KTA3PRnF&sz=w1000",
+  "prd-jrh-017": "https://drive.google.com/thumbnail?id=1cO9-NmpFcDJDrFKLgMli98RzMVMBK_IP&sz=w1000",
+  "prd-prs-001": "https://drive.google.com/thumbnail?id=1kkObryfxvubCGm7S7ggYgpIi_14zrKKg&sz=w1000",
+  "prd-prs-002": "https://drive.google.com/thumbnail?id=1rdpgN5t8csCocnJscoeNIaptT9Ytita9&sz=w1000",
+  "prd-prs-003": "https://drive.google.com/thumbnail?id=12q2IycTQvSZdXIWXgaXh3SEoQEziZ7UE&sz=w1000",
+  "prd-prs-004": "https://drive.google.com/thumbnail?id=1y86DDhoS0H17_9zruf7ZZGNoH2q2GS84&sz=w1000",
+  "prd-prs-005": "https://drive.google.com/thumbnail?id=1IrlweLODS333LsvyVOcw02IhSMWSkq8K&sz=w1000",
+  "prd-prs-006": "https://drive.google.com/thumbnail?id=17nPelqn8kZHQran9F5YoQp5a69unM4yt&sz=w1000",
+  "prd-prs-007": "https://drive.google.com/thumbnail?id=1JNqet5c4kMaTXGuy7xRuDP__fXHHXRaS&sz=w1000",
+  "prd-prs-008": "https://drive.google.com/thumbnail?id=1SSwukmGF2zrNYReNUffrzh5XwZIbZ01i&sz=w1000",
+  "prd-prs-009": "https://drive.google.com/thumbnail?id=1lSZ5Ac-fFur0dZNMF35n_vOpnyiZUTDO&sz=w1000",
+  "prd-prs-010": "https://drive.google.com/thumbnail?id=1npVHBXx-2Gc80XuUzdh85dpnoRywwKY0&sz=w1000",
+  "prd-prs-011": "https://drive.google.com/thumbnail?id=1q2VvUH2mjxlsz1vQjlmfBI5uk2V71HWF&sz=w1000",
+  "prd-prs-012": "https://drive.google.com/thumbnail?id=1GnCD1WeLC_jxREL2eHvWh_8138VPwaqg&sz=w1000",
+  "prd-prs-013": "https://drive.google.com/thumbnail?id=1Q0ioZ6yA9qemp_WuOc2CNJdKIH-0AeC_&sz=w1000",
+  "prd-prs-014": "https://drive.google.com/thumbnail?id=1uxrEmP_kKCmZAQe49XLniQ9ytDqGGSI_&sz=w1000",
+  "prd-prs-015": "https://drive.google.com/thumbnail?id=1hH2PSa9Ji-EG-HpF7NxxPRmQSwzW2Q0N&sz=w1000",
+  "prd-prs-016": "https://drive.google.com/thumbnail?id=1aAftXKHgH69hf8rtghM_EIGlzSppHzg5&sz=w1000",
+  "prd-prs-018": "https://drive.google.com/thumbnail?id=1D10KIWjr5fxZoibBz8Jy8uZWmeNCMUT6&sz=w1000",
+  "prd-prs-019": "https://drive.google.com/thumbnail?id=1r7L2J-24iglxUM5flDoZawCtrZ0QTde8&sz=w1000",
+  "prd-prs-020": "https://drive.google.com/thumbnail?id=18L5ThbW9IFd3mhud2LNFa2dYeKI7B_Kj&sz=w1000",
+  "prd-prs-021": "https://drive.google.com/thumbnail?id=1rbFTFtMd1WtAjj1c9cA08k8vlrej3Jma&sz=w1000",
+  "prd-prs-022": "https://drive.google.com/thumbnail?id=1XIn2eXxDs__8U4IeDVodDCg8XI8ZQQ3d&sz=w1000",
+  "prd-prs-023": "https://drive.google.com/thumbnail?id=1zebbkGzJvvD-bSvzlRDBhlkYbFY5OS8d&sz=w1000",
+  "prd-prs-024": "https://drive.google.com/thumbnail?id=1b9GTzjmaGglPQmixcG7fFy8Pbap13Lsm&sz=w1000",
+  "prd-prs-025": "https://drive.google.com/thumbnail?id=1w8layOMDVq6WJ0lgtAi9W-l8saS9okj8&sz=w1000",
+  "prd-prs-026": "https://drive.google.com/thumbnail?id=1jUBpFEaaw7LObcSjfk7YElkeOdoLDMyd&sz=w1000",
+  "prd-prs-027": "https://drive.google.com/thumbnail?id=1fQjRlelR2IhALDRssvAE8_MOCiG8TNHX&sz=w1000",
+  "prd-prs-028": "https://drive.google.com/thumbnail?id=1fQjRlelR2IhALDRssvAE8_MOCiG8TNHX&sz=w1000",
+  "prd-prs-029": "https://drive.google.com/thumbnail?id=1fQjRlelR2IhALDRssvAE8_MOCiG8TNHX&sz=w1000",
+  "prd-prs-030": "https://drive.google.com/thumbnail?id=1fQjRlelR2IhALDRssvAE8_MOCiG8TNHX&sz=w1000",
+  "prd-prs-031": "https://drive.google.com/thumbnail?id=1rf36nSFrdqM80jQSqrIPC0y-h3x0BsYC&sz=w1000",
+  "prd-prs-032": "https://drive.google.com/thumbnail?id=11YFlGygGVxOaAwiTvrGuJKElhGpAkHzM&sz=w1000",
+  "prd-prs-033": "https://drive.google.com/thumbnail?id=1UbIswv2uM4xm3Ez4S2K488wYvxiHq-XS&sz=w1000",
+  "prd-prs-034": "https://drive.google.com/thumbnail?id=1a7W18O22nj7uac2czu3uL6_lB577PzOv&sz=w1000",
+  "prd-prs-035": "https://drive.google.com/thumbnail?id=1yfjY3W27ffztpzx6Ez1tj7UsAfbCqbR1&sz=w1000",
+  "prd-prs-036": "https://drive.google.com/thumbnail?id=1xV-Tp7sFFIEDvqZLG9EaN4JSnQCGzWOG&sz=w1000"
+};
+
+export function syncProductCatalogImages<T extends { products: Product[] }>(state: T): T {
+  state.products = state.products.map((product) => {
+    const imageUrl = productCatalogImageUrlById[product.id];
+    return imageUrl ? { ...product, imageUrl } : product;
+  });
+  return state;
+}
+
 export function createSeedState(): AppState {
   const tiers: PartnerTier[] = [
     { id: 'tier-distributor', code: 'DISTRIBUTOR', name: 'Distributor', rankOrder: 1, description: 'Mitra volume besar', isActive: true },
@@ -302,7 +387,7 @@ export function createSeedState(): AppState {
     categoryId: item.categoryId,
     description: `Wahyu Beef ${item.name} kemasan ${item.size}.`,
     unit: item.size,
-    imageUrl: productImageByName[item.name],
+    imageUrl: productCatalogImageUrlById[item.id] ?? productImageByName[item.name],
     minimumOrderQty: 1,
     baseCost: item.distributor,
     isActive: true,
@@ -334,7 +419,7 @@ export function createSeedState(): AppState {
     { id: 'ae-3', eventType: 'PAYMENT_RECEIVED', referenceType: 'payment', referenceId: 'pay-1', partnerId: 'p-distributor', eventDate: '2026-05-06T09:00:00.000Z', amount: 1_500_000, currency: 'IDR', status: 'pending_mapping', metadata: {}, createdBy: 'u-finance' },
   ];
 
-  return { users, tiers, partners, categories, products, prices, orders, statusHistories, deliveryNotes, invoices, payments, auditLogs, accountingEvents };
+  return syncProductCatalogImages({ users, tiers, partners, categories, products, prices, orders, statusHistories, deliveryNotes, invoices, payments, auditLogs, accountingEvents });
 }
 
 function makeOrder(id: string, orderNumber: string, partnerId: string, status: Order['status'], rows: { product: Product; qty: number; price: number }[], date: string): Order {
