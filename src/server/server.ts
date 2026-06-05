@@ -5,7 +5,7 @@ import { authenticate, hashPassword, httpError, login, requireRole, verifyPasswo
 import { loadState, mutateState } from './persistence.ts';
 import { backupStatus, runBackup, startBackupScheduler } from './backup.ts';
 import { storeUpload } from './storage.ts';
-import { createInvoice, createOrder, findPartnerForUser, getLeaderboard, recordPayment, updateOrderShipping, updateOrderStatus } from '../services.ts';
+import { cancelPartnerOrder, createInvoice, createOrder, findPartnerForUser, getLeaderboard, recordPayment, updateOrderShipping, updateOrderStatus } from '../services.ts';
 import type { OrderStatus, Payment } from '../domain.ts';
 
 const PORT = Number(process.env.PORT ?? 3000);
@@ -183,6 +183,16 @@ const handleApi: Handler = async (req, res, url) => {
       const actor = authenticate(draft, req.headers.authorization);
       requireRole(actor, ['super_admin', 'sales_admin', 'warehouse']);
       return updateOrderStatus(draft, actor, statusMatch[1], body.status, body.note);
+    });
+    return json(res, 200, result);
+  }
+
+  const cancelMatch = path.match(/^\/orders\/([^/]+)\/cancel$/);
+  if (method === 'PATCH' && cancelMatch) {
+    const body = await readJson<{ note?: string }>(req);
+    const result = await mutateState((draft) => {
+      const actor = authenticate(draft, req.headers.authorization);
+      return cancelPartnerOrder(draft, actor, cancelMatch[1], body.note);
     });
     return json(res, 200, result);
   }

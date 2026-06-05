@@ -5,7 +5,7 @@ import './styles.css';
 import { AccountingEvent, CartItem, Invoice, Order, OrderStatus, Role, User, formatIdr, statusLabels, validTransitions } from './domain';
 import { AppState, createSeedState } from './seed';
 import { api, type Session } from './apiClient';
-import { findPartnerForUser, getCatalogForPartner, getLeaderboard } from './services';
+import { calculateCartWeightGram, calculateStyrofoamPlan, findPartnerForUser, getCatalogForPartner, getLeaderboard, parseProductWeightGram } from './services';
 
 const stateSingleton = createSeedState();
 const sessionStorageKey = 'wahyu-beef-session-v1';
@@ -188,8 +188,8 @@ function Shell({ state, user, setUser, token, view, setView, setState, refresh, 
     <aside className={`sidebar ${isMobileMenuOpen ? 'open' : ''}`}>
       <div className="mobile-sidebar-head"><div className="brand"><div className="logo logo-image"><img src="/assets/logo-wahyu-beef.png" alt="Logo Wahyu Beef" /></div><div><h2>Wahyu Beef</h2><span>Mitra App</span></div></div><button className="mobile-close-btn" aria-label="Tutup menu" onClick={() => setIsMobileMenuOpen(false)}><X size={20} /></button></div>
       <nav className="nav">{nav.map(([key, label, Icon]) => <button key={key} className={view === key ? 'active' : ''} onClick={() => go(key)}><Icon size={18} /> {label}</button>)}</nav>
-      <div className="user-box"><b>{user.name}</b><br /><span>{roleLabel(user.role)}</span><br /><br /><button className="btn small" onClick={onLogout}><LogOut size={14} /> Keluar</button></div>
-      <p className="app-version-note">Versi Aplikasi 1.0.0</p>
+      <div className="user-box"><b>{user.name}</b><br /><span>{roleLabel(user.role)}</span><br /><br /><button className="btn sidebar-logout-btn" onClick={onLogout}><LogOut size={18} /> Keluar</button></div>
+      <p className="app-version-note">Versi Aplikasi v1.3.0</p>
     </aside>
     <main className="main">
       <MobileAppBar state={state} user={user} view={view} onMenu={() => setIsMobileMenuOpen(true)} onNavigate={go} />
@@ -415,19 +415,32 @@ function CheckoutPage({ state, catalog, partnerAddress, cart, cartNotes, message
     const unitPrice = getPackagePrice(product?.price ?? 0, item.packageWeightGram);
     return { key, item, product, unitPrice, lineTotal: unitPrice * qty };
   }).filter((row) => row.product);
-  const total = rows.reduce((sum, row) => sum + row.lineTotal, 0);
+  const totalPesanan = rows.reduce((sum, row) => sum + row.lineTotal, 0);
+  const totalBeratGram = calculateCartWeightGram(catalog, rows.map((row) => row.item));
+  const styrofoamPlan = calculateStyrofoamPlan(totalBeratGram);
+  const packingTotal = styrofoamPlan.reduce((sum, item) => sum + item.lineTotal, 0);
+  const diskon = 0;
+  const totalTagihan = totalPesanan - diskon + packingTotal;
   return <div className="grid checkout-page">
-    <div className="card checkout-head"><div><h3>Ringkasan Keranjang</h3><p className="footer-note">Cek ulang produk, kemasan, qty, dan catatan sebelum menekan tombol Selesaikan Pesanan.</p></div><button className="btn" onClick={onBack}>Kembali ke Katalog</button></div>
+    <div className="card checkout-head"><div><h3>Ringkasan Keranjang</h3><p className="footer-note">Cek ulang produk, kemasan, qty, sterofoam otomatis, dan catatan sebelum menekan tombol Selesaikan Pesanan.</p></div><button className="btn" onClick={onBack}>Kembali ke Katalog</button></div>
     {message && <div className="notice">{message}</div>}
     <div className="card checkout-card">
-      {rows.length === 0 ? <div className="notice warning">Keranjang masih kosong.</div> : <div className="checkout-items">{rows.map((row) => <div className="checkout-item" key={row.key}>
-        <div className={`checkout-thumb ${row.product.imageUrl ? 'has-photo' : ''}`}>{row.product.imageUrl ? <img src={row.product.imageUrl} alt={row.product.name} /> : <span>WB</span>}</div>
-        <div className="checkout-info"><b>{row.item.packageWeightGram ? `${row.product.name} ${row.item.packageWeightGram} gr` : row.product.name}</b><span>{row.product.sku} • {row.item.packageLabel ?? row.product.unit}</span><small>{formatIdr(row.unitPrice)} / item</small><label className="checkout-note"><span>Catatan</span><textarea value={cartNotes[row.key] ?? ''} onChange={(event) => onUpdateNote(row.key, event.target.value)} rows={2} placeholder="Contoh: potong kecil, kirim pagi, pilih yang minim lemak" /></label></div>
-        <div className="qty-stepper checkout-stepper"><button type="button" onClick={() => onUpdateQty(row.key, row.item.qty - 1)}>−</button><input className="input" type="number" min="0" value={row.item.qty} onChange={(event) => onUpdateQty(row.key, Number(event.target.value) || 0)} /><button type="button" onClick={() => onUpdateQty(row.key, row.item.qty + 1)}>+</button></div>
-        <div className="checkout-line-total"><b>{formatIdr(row.lineTotal)}</b><button className="btn small" onClick={() => onUpdateQty(row.key, 0)}>Hapus</button></div>
+      {rows.length === 0 ? <div className="notice warning">Keranjang masih kosong.</div> : <div className="checkout-items">{rows.map((row) => {
+        const weightGram = parseProductWeightGram(row.product, row.item.packageWeightGram);
+        return <div className="checkout-item" key={row.key}>
+          <div className={`checkout-thumb ${row.product.imageUrl ? 'has-photo' : ''}`}>{row.product.imageUrl ? <img src={row.product.imageUrl} alt={row.product.name} /> : <span>WB</span>}</div>
+          <div className="checkout-info"><b>{row.item.packageWeightGram ? `${row.product.name} ${row.item.packageWeightGram} gr` : row.product.name}</b><span>{row.product.sku} • {row.item.packageLabel ?? row.product.unit}</span><small>{formatIdr(row.unitPrice)} / item • Berat {formatWeightGram(weightGram * row.item.qty)}</small><label className="checkout-note"><span>Catatan</span><textarea value={cartNotes[row.key] ?? ''} onChange={(event) => onUpdateNote(row.key, event.target.value)} rows={2} placeholder="Contoh: potong kecil, kirim pagi, pilih yang minim lemak" /></label></div>
+          <div className="qty-stepper checkout-stepper"><button type="button" onClick={() => onUpdateQty(row.key, row.item.qty - 1)}>−</button><input className="input" type="number" min="0" value={row.item.qty} onChange={(event) => onUpdateQty(row.key, Number(event.target.value) || 0)} /><button type="button" onClick={() => onUpdateQty(row.key, row.item.qty + 1)}>+</button></div>
+          <div className="checkout-line-total"><b>{formatIdr(row.lineTotal)}</b><button className="btn small" onClick={() => onUpdateQty(row.key, 0)}>Hapus</button></div>
+        </div>;
+      })}{styrofoamPlan.map((item) => <div className="checkout-item checkout-packaging-item" key={item.size}>
+        <div className="checkout-thumb checkout-packaging-thumb"><span>SF</span></div>
+        <div className="checkout-info"><b>{item.label}</b><span>Kemasan otomatis • Kapasitas {item.capacityLabel}</span><small>{formatIdr(item.unitPrice)} / pcs • Qty {item.qty} pcs</small></div>
+        <div className="checkout-stepper checkout-packaging-qty"><b>{item.qty} pcs</b></div>
+        <div className="checkout-line-total"><b>{formatIdr(item.lineTotal)}</b><small>Otomatis</small></div>
       </div>)}</div>}
     </div>
-    <div className="card checkout-summary"><div><b>Alamat Kirim</b><p>{partnerAddress}</p></div><div className="field checkout-delivery-date"><label>Tanggal Kirim</label><input className="input" type="date" value={requestedDeliveryDate} onChange={(event) => setRequestedDeliveryDate(event.target.value)} /><small>Diisi oleh mitra saat membuat order.</small></div><div><span>Total Pesanan</span><strong>{formatIdr(total)}</strong></div><button className="btn primary" disabled={rows.length === 0} onClick={() => onPlaceOrder(requestedDeliveryDate)}>Selesaikan Pesanan</button></div>
+    <div className="card checkout-summary proper-checkout-summary"><div className="checkout-address-block"><b>Alamat Kirim</b><p>{partnerAddress}</p></div><div className="field checkout-delivery-date"><label>Tanggal Kirim</label><input className="input" type="date" value={requestedDeliveryDate} onChange={(event) => setRequestedDeliveryDate(event.target.value)} /><small>Diisi oleh mitra saat membuat order.</small></div><div className="checkout-total-panel"><div><span>Total Pesanan</span><b>{formatIdr(totalPesanan)}</b></div><div><span>Total Berat</span><b>{formatWeightGram(totalBeratGram)}</b></div><div><span>Biaya Sterofoam</span><b>{formatIdr(packingTotal)}</b></div><div><span>Diskon</span><b>{formatIdr(diskon)}</b></div><div className="checkout-grand-total"><span>Total Tagihan</span><strong>{formatIdr(totalTagihan)}</strong></div></div><button className="btn primary" disabled={rows.length === 0} onClick={() => onPlaceOrder(requestedDeliveryDate)}>Selesaikan Pesanan</button></div>
   </div>;
 }
 
@@ -443,6 +456,7 @@ function PackageModal({ product, onClose, onAdd }: { product: CatalogProduct; on
 
 function canChoosePackaging(product: CatalogProduct) { return packagingCategoryIds.has(product.categoryId); }
 function getPackagePrice(basePrice: number, weightGram?: number) { return Math.round(basePrice * (weightGram === 250 ? 0.25 : weightGram === 500 ? 0.5 : 1)); }
+function formatWeightGram(value: number) { return `${Math.round(value).toLocaleString('id-ID')} Gram`; }
 function cartKey(productId: string, weightGram?: number) { return weightGram ? `${productId}__${weightGram}` : productId; }
 function cartKeyToItem(key: string, qty: number): CartItem { const [productId, weight] = key.split('__'); const packageWeightGram = Number(weight) as 250 | 500 | 1000; return weight ? { productId, qty, packageWeightGram, packageLabel: `${packageWeightGram} GR` } : { productId, qty }; }
 
@@ -535,7 +549,26 @@ function OrderShippingPanel({ order, token, refresh }: { order: Order; token: st
 
 function OrdersTable({ state, orders, user, token, refresh, compact }: { state: AppState; orders: Order[]; user?: User; token?: string; refresh?: () => Promise<void>; compact?: boolean }) {
   const [selected, setSelected] = useState<Order | null>(null);
-  return <div className="card orders-card"><h3>{compact ? 'Order Terbaru' : 'Daftar Order'}</h3><div className="table-wrap orders-table"><table><thead><tr><th>No Order</th><th>Mitra</th><th>Status</th><th>Total</th><th>Packing</th><th>Item</th><th>Aksi</th></tr></thead><tbody>{orders.map((order) => <tr key={order.id}><td data-label="No Order"><b>{order.orderNumber}</b><br /><small>{new Date(order.orderDate).toLocaleString('id-ID')}</small></td><td data-label="Mitra">{partnerName(state, order.partnerId)}<br /><small>{tierName(state, state.partners.find((p) => p.id === order.partnerId)?.tierId ?? '')}</small></td><td data-label="Status"><span className={`status ${order.status}`}>{statusLabels[order.status]}</span></td><td data-label="Total"><b>{formatIdr(order.grandTotal)}</b><br /><small>{(order.shippingCost || order.packingFee) ? `+ ${formatIdr((order.shippingCost ?? 0) + (order.packingFee ?? 0))} ongkir/packing` : 'Belum ada tambahan'}</small></td><td data-label="Packing">{packingSummary(order)}<br /><small>{formatIdr(order.packingFee ?? 0)}</small></td><td data-label="Item">{order.items.length} item</td><td data-label="Aksi"><div className="actions"><button className="btn small" onClick={() => setSelected(order)}>{order.status === 'in_production' && user?.role !== 'partner' ? 'Atur Packing' : 'Detail'}</button>{user && token && refresh && user.role !== 'partner' && validTransitions[order.status].map((target) => <button key={target} className="btn small" onClick={async () => { await api.updateOrderStatus(token, order.id, target, `Update ke ${target}`); await refresh(); }}>{statusLabels[target]}</button>)}</div></td></tr>)}</tbody></table></div>{selected && <OrderModal state={state} order={selected} user={user} token={token} refresh={refresh} onClose={() => setSelected(null)} />}</div>;
+  const [actionMessage, setActionMessage] = useState('');
+  const [cancellingOrderId, setCancellingOrderId] = useState<string | null>(null);
+  const canPartnerCancel = (order: Order) => user?.role === 'partner' && ['pending', 'confirmed'].includes(order.status);
+  async function cancelOrder(order: Order) {
+    if (!token || !refresh) return;
+    const confirmed = window.confirm(`Batalkan order ${order.orderNumber}? Order yang sudah diproses tidak bisa dibatalkan oleh mitra.`);
+    if (!confirmed) return;
+    setActionMessage('');
+    setCancellingOrderId(order.id);
+    try {
+      await api.cancelOrder(token, order.id, 'Dibatalkan oleh mitra dari menu Order Saya');
+      await refresh();
+      setActionMessage(`${order.orderNumber} berhasil dibatalkan.`);
+    } catch (error) {
+      setActionMessage(error instanceof Error ? error.message : 'Gagal membatalkan order');
+    } finally {
+      setCancellingOrderId(null);
+    }
+  }
+  return <div className="card orders-card"><h3>{compact ? 'Order Terbaru' : 'Daftar Order'}</h3>{actionMessage && <div className={`notice ${actionMessage.includes('berhasil') ? '' : 'warning'}`}>{actionMessage}</div>}<div className="table-wrap orders-table"><table><thead><tr><th>No Order</th><th>Mitra</th><th>Status</th><th>Total</th><th>Packing</th><th>Item</th><th>Aksi</th></tr></thead><tbody>{orders.map((order) => <tr key={order.id}><td data-label="No Order"><b>{order.orderNumber}</b><br /><small>{new Date(order.orderDate).toLocaleString('id-ID')}</small></td><td data-label="Mitra">{partnerName(state, order.partnerId)}<br /><small>{tierName(state, state.partners.find((p) => p.id === order.partnerId)?.tierId ?? '')}</small></td><td data-label="Status"><span className={`status ${order.status}`}>{statusLabels[order.status]}</span></td><td data-label="Total"><b>{formatIdr(order.grandTotal)}</b><br /><small>{(order.shippingCost || order.packingFee) ? `+ ${formatIdr((order.shippingCost ?? 0) + (order.packingFee ?? 0))} ongkir/packing` : 'Belum ada tambahan'}</small></td><td data-label="Packing">{packingSummary(order)}<br /><small>{formatIdr(order.packingFee ?? 0)}</small></td><td data-label="Item">{order.items.length} item</td><td data-label="Aksi"><div className="actions"><button className="btn small" onClick={() => setSelected(order)}>{order.status === 'in_production' && user?.role !== 'partner' ? 'Atur Packing' : 'Detail'}</button>{user && token && refresh && canPartnerCancel(order) && <button className="btn small danger" disabled={cancellingOrderId === order.id} onClick={() => cancelOrder(order)}>{cancellingOrderId === order.id ? 'Membatalkan...' : 'Batalkan'}</button>}{user && token && refresh && user.role !== 'partner' && validTransitions[order.status].map((target) => <button key={target} className="btn small" onClick={async () => { await api.updateOrderStatus(token, order.id, target, `Update ke ${target}`); await refresh(); }}>{statusLabels[target]}</button>)}</div></td></tr>)}</tbody></table></div>{selected && <OrderModal state={state} order={selected} user={user} token={token} refresh={refresh} onClose={() => setSelected(null)} />}</div>;
 }
 
 function OrderModal({ state, order, user, token, refresh, onClose }: { state: AppState; order: Order; user?: User; token?: string; refresh?: () => Promise<void>; onClose: () => void }) {

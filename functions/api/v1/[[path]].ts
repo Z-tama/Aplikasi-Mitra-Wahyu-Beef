@@ -1,5 +1,5 @@
 import { createSeedState, syncProductCatalogImages, type AppState } from '../../../src/seed';
-import { createInvoice, createOrder, findPartnerForUser, getLeaderboard, recordPayment, updateOrderShipping, updateOrderStatus } from '../../../src/services';
+import { cancelPartnerOrder, createInvoice, createOrder, findPartnerForUser, getLeaderboard, recordPayment, updateOrderShipping, updateOrderStatus } from '../../../src/services';
 import type { OrderStatus, Payment, Role, User } from '../../../src/domain';
 
 interface Env {
@@ -182,6 +182,13 @@ export const onRequest = async ({ request, env }: PagesHandlerContext) => {
         requireRole(actor, ['super_admin', 'sales_admin', 'warehouse']);
         return updateOrderStatus(draft, actor, statusMatch[1], body.status, body.note);
       }, env);
+      return respond(result, 200);
+    }
+
+    const cancelMatch = path.match(/^\/orders\/([^/]+)\/cancel$/);
+    if (method === 'PATCH' && cancelMatch) {
+      const body = await readJson<{ note?: string }>(request);
+      const result = await mutateState((draft) => cancelPartnerOrder(draft, actor, cancelMatch[1], body.note), env);
       return respond(result, 200);
     }
 

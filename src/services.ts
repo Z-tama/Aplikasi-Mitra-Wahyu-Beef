@@ -1,6 +1,6 @@
 import type { AppState } from './seed.ts';
 import { canTransition, todayIso } from './domain.ts';
-import type { AccountingEvent, CartItem, Invoice, Order, OrderItem, OrderStatus, Payment, User } from './domain.ts';
+import type { AccountingEvent, CartItem, Invoice, Order, OrderItem, OrderStatus, Payment, Product, User } from './domain.ts';
 
 export function findPartnerForUser(state: AppState, user: User) {
   return state.partners.find((partner) => partner.userId === user.id);
@@ -25,6 +25,73 @@ export function getCatalogForPartner(state: AppState, partnerId: string) {
         isPriceComplete: Boolean(price),
       };
     });
+}
+
+export type StyrofoamSize = 'small' | 'medium' | 'large';
+
+export interface StyrofoamPlanItem {
+  size: StyrofoamSize;
+  label: string;
+  capacityLabel: string;
+  qty: number;
+  unitPrice: number;
+  lineTotal: number;
+}
+
+export function parseProductWeightGram(product: Pick<Product, 'unit' | 'weightGram' | 'categoryId'>, packageWeightGram?: number) {
+  if (packageWeightGram) return packageWeightGram;
+  if (product.weightGram && product.weightGram > 0) return product.weightGram;
+  const unit = product.unit.toUpperCase().replace(',', '.');
+  const match = unit.match(/(\d+(?:\.\d+)?)\s*(KG|KILOGRAM|GR|GRAM|G)\b/);
+  if (!match) return product.categoryId === 'cat-processed-meat' ? 250 : 0;
+  const value = Number(match[1]);
+  if (!Number.isFinite(value)) return product.categoryId === 'cat-processed-meat' ? 250 : 0;
+  return match[2].startsWith('KG') || match[2] === 'KILOGRAM' ? Math.round(value * 1000) : Math.round(value);
+}
+
+export function calculateCartWeightGram(products: Product[], cartItems: CartItem[]) {
+  return cartItems.reduce((sum, cart) => {
+    const product = products.find((item) => item.id === cart.productId);
+    if (!product) return sum;
+    return sum + parseProductWeightGram(product, cart.packageWeightGram) * cart.qty;
+  }, 0);
+}
+
+export function calculateStyrofoamPlan(totalWeightGram: number): StyrofoamPlanItem[] {
+  const totalKg = Math.ceil(Math.max(0, totalWeightGram) / 1000);
+  if (totalKg <= 0) return [];
+  const options = {
+    small: { size: 'small' as const, label: 'Sterofoam kecil', capacityLabel: '1-15 kg', unitPrice: 20000 },
+    medium: { size: 'medium' as const, label: 'Sterofoam sedang', capacityLabel: '15-30 kg', unitPrice: 30000 },
+    large: { size: 'large' as const, label: 'Sterofoam besar', capacityLabel: '30-50 kg', unitPrice: 50000 },
+  };
+  const largeQty = Math.floor(totalKg / 50);
+  const remainder = totalKg % 50;
+  const plan: StyrofoamPlanItem[] = [];
+  if (largeQty > 0) plan.push({ ...options.large, qty: largeQty, lineTotal: largeQty * options.large.unitPrice });
+  if (remainder > 0) {
+    const option = remainder <= 15 ? options.small : remainder <= 30 ? options.medium : options.large;
+    plan.push({ ...option, qty: 1, lineTotal: option.unitPrice });
+  }
+  return plan;
+}
+
+function styrofoamOrderItems(plan: StyrofoamPlanItem[], startIndex: number): OrderItem[] {
+  return plan.map((item, index) => ({
+    id: `draft-item-${startIndex + index + 1}`,
+    orderId: 'draft',
+    productId: `packaging-styrofoam-${item.size}`,
+    skuSnapshot: `PACK-STYROFOAM-${item.size.toUpperCase()}`,
+    productNameSnapshot: item.label,
+    unitSnapshot: `${item.capacityLabel} / pcs`,
+    tierIdSnapshot: 'packing',
+    tierNameSnapshot: 'Biaya Kemasan',
+    qty: item.qty,
+    unitPrice: item.unitPrice,
+    discountAmount: 0,
+    lineTotal: item.lineTotal,
+    notes: `Otomatis dari total berat pesanan`,
+  }));
 }
 
 export function calculateOrder(state: AppState, partnerId: string, cartItems: CartItem[]) {
@@ -65,7 +132,10 @@ export function calculateOrder(state: AppState, partnerId: string, cartItems: Ca
   });
 
   const subtotal = items.reduce((sum, item) => sum + item.lineTotal, 0);
-  return { items, subtotal, discountTotal: 0, taxTotal: 0, grandTotal: subtotal };
+  const totalWeightGram = calculateCartWeightGram(state.products, cartItems);
+  const styrofoamPlan = calculateStyrofoamPlan(totalWeightGram);
+  const packingFee = styrofoamPlan.reduce((sum, item) => sum + item.lineTotal, 0);
+  return { items: [...items, ...styrofoamOrderItems(styrofoamPlan, items.length)], subtotal, discountTotal: 0, taxTotal: 0, packingFee, totalWeightGram, styrofoamPlan, grandTotal: subtotal + packingFee };
 }
 
 export function createOrder(state: AppState, actor: User, partnerId: string, cartItems: CartItem[], shippingAddress: string, notes?: string, requestedDeliveryDate?: string): Order {
@@ -85,6 +155,9 @@ export function createOrder(state: AppState, actor: User, partnerId: string, car
     taxTotal: calculated.taxTotal,
     grandTotal: calculated.grandTotal,
     shippingAddress,
+    packingFee: calculated.packingFee,
+    packingType: calculated.styrofoamPlan.length === 1 ? `${calculated.styrofoamPlan[0].size}_styrofoam` as Order['packingType'] : calculated.styrofoamPlan.length ? 'large_styrofoam' : 'none',
+    packingQuantity: calculated.styrofoamPlan.reduce((sum, item) => sum + item.qty, 0),
     requestedDeliveryDate,
     notes,
     createdBy: actor.id,
@@ -132,6 +205,17 @@ export function updateOrderStatus(state: AppState, actor: User, orderId: string,
   if (targetStatus === 'delivered') accounting(state, 'GOODS_DELIVERED', 'order', orderId, order.partnerId, order.grandTotal, { psak72: 'Eligible revenue recognition jika kontrol berpindah sesuai kebijakan' }, actor.id);
   if (targetStatus === 'cancelled') accounting(state, 'ORDER_CANCELLED', 'order', orderId, order.partnerId, order.grandTotal, { note }, actor.id);
   return order;
+}
+
+export function cancelPartnerOrder(state: AppState, actor: User, orderId: string, note = 'Dibatalkan oleh mitra') {
+  if (actor.role !== 'partner') throw new Error('Hanya akun mitra yang bisa membatalkan order lewat menu Order Saya');
+  const partner = findPartnerForUser(state, actor);
+  if (!partner) throw new Error('Profil mitra tidak ditemukan');
+  const order = state.orders.find((item) => item.id === orderId);
+  if (!order) throw new Error('Order tidak ditemukan');
+  if (order.partnerId !== partner.id) throw new Error('Order ini bukan milik mitra yang sedang login');
+  if (!['pending', 'confirmed'].includes(order.status)) throw new Error('Order hanya bisa dibatalkan sebelum diproses / dispatching');
+  return updateOrderStatus(state, actor, orderId, 'cancelled', note);
 }
 
 export function createInvoice(state: AppState, actor: User, orderId: string): Invoice {
@@ -186,7 +270,7 @@ export function getLeaderboard(state: AppState) {
   const rows = state.partners.map((partner) => {
     const delivered = state.orders.filter((order) => order.partnerId === partner.id && order.status === 'delivered');
     const totalOrderValue = delivered.reduce((sum, order) => sum + order.grandTotal, 0);
-    const totalOrderQty = delivered.reduce((sum, order) => sum + order.items.reduce((itemSum, item) => itemSum + item.qty, 0), 0);
+    const totalOrderQty = delivered.reduce((sum, order) => sum + order.items.filter((item) => !item.productId.startsWith('packaging-')).reduce((itemSum, item) => itemSum + item.qty, 0), 0);
     const tier = state.tiers.find((item) => item.id === partner.tierId);
     return { partnerId: partner.id, partnerName: partner.businessName, tier: tier?.name ?? '-', totalOrderValue, totalOrderQty, totalOrders: delivered.length, points: Math.floor(totalOrderValue / 100000), rank: 0 };
   }).filter((row) => row.totalOrders > 0).sort((a, b) => b.points - a.points || b.totalOrderValue - a.totalOrderValue);
