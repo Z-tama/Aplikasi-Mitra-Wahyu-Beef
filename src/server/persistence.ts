@@ -1,7 +1,7 @@
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
 import type { AppState } from '../seed.ts';
-import { createSeedState } from '../seed.ts';
+import { createSeedState, syncProductCatalogImages, syncProductCatalogPrices } from '../seed.ts';
 
 const DATA_PATH = resolve(process.cwd(), process.env.DATA_FILE ?? 'data/app-state.json');
 let state: AppState | null = null;
@@ -11,7 +11,7 @@ export async function loadState(): Promise<AppState> {
   if (state) return state;
   try {
     const raw = await readFile(DATA_PATH, 'utf8');
-    state = JSON.parse(raw) as AppState;
+    state = syncProductCatalogPrices(syncProductCatalogImages(JSON.parse(raw) as AppState));
   } catch {
     state = createSeedState();
     await saveState(state);

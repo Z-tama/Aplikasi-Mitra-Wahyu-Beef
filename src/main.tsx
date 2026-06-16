@@ -2,17 +2,93 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { BarChart3, Bell, ClipboardList, Eye, EyeOff, FileText, IceCreamBowl, LayoutDashboard, LogOut, MapPinned, Medal, Menu, Package, Printer, ReceiptText, ShieldCheck, ShoppingCart, Truck, UserCog, Users, X } from 'lucide-react';
 import './styles.css';
-import { AccountingEvent, CartItem, Invoice, Order, OrderStatus, Role, User, formatIdr, statusLabels, validTransitions } from './domain';
+import { AccountingEvent, CartItem, ExpeditionType, Invoice, Order, OrderStatus, Partner, Role, User, defaultExpedition, expeditionLabels, formatIdr, orderWorkflowStatuses, statusLabels, thermalTruckExpedition } from './domain';
 import { AppState, createSeedState } from './seed';
 import { api, type Session } from './apiClient';
 import { calculateCartWeightGram, calculateStyrofoamPlan, findPartnerForUser, getCatalogForPartner, getLeaderboard, parseProductWeightGram } from './services';
 
 const stateSingleton = createSeedState();
+const emptyRuntimeState: AppState = { ...stateSingleton, orders: [], statusHistories: [], invoices: [], deliveryNotes: [], payments: [], leaderboardRows: [] };
 const sessionStorageKey = 'wahyu-beef-session-v1';
 const demoOrdersStorageKey = 'wahyu-beef-demo-orders-v1';
+const expeditionOptions = Object.entries(expeditionLabels) as [ExpeditionType, string][];
 const sessionTtlMs = 30 * 60 * 1000;
 
 type View = 'dashboard' | 'catalog' | 'checkout' | 'orders' | 'products' | 'partners' | 'pricing' | 'documents' | 'leaderboard' | 'areas' | 'profile' | 'reports' | 'audit' | 'accounting';
+
+const adminViews: View[] = ['dashboard', 'orders', 'products', 'partners', 'areas', 'pricing', 'documents', 'leaderboard', 'reports', 'accounting', 'audit'];
+const partnerViews: View[] = ['catalog', 'checkout', 'orders', 'documents', 'leaderboard', 'areas', 'profile'];
+const pathToView: Record<string, View> = {
+  '/dashboard': 'dashboard',
+  '/katalog': 'catalog',
+  '/checkout': 'checkout',
+  '/order-saya': 'orders',
+  '/orders': 'orders',
+  '/order': 'orders',
+  '/produk': 'products',
+  '/products': 'products',
+  '/mitra': 'partners',
+  '/partners': 'partners',
+  '/harga-tier': 'pricing',
+  '/pricing': 'pricing',
+  '/invoice': 'documents',
+  '/documents': 'documents',
+  '/peringkat': 'leaderboard',
+  '/leaderboard': 'leaderboard',
+  '/area-mitra': 'areas',
+  '/areas': 'areas',
+  '/profil': 'profile',
+  '/profile': 'profile',
+  '/reports': 'reports',
+  '/accounting': 'accounting',
+  '/audit-trail': 'audit',
+  '/audit': 'audit',
+};
+const adminViewPaths: Record<View, string> = {
+  dashboard: '/dashboard',
+  catalog: '/katalog',
+  checkout: '/checkout',
+  orders: '/orders',
+  products: '/produk',
+  partners: '/mitra',
+  pricing: '/harga-tier',
+  documents: '/invoice',
+  leaderboard: '/peringkat',
+  areas: '/area-mitra',
+  profile: '/profil',
+  reports: '/reports',
+  audit: '/audit-trail',
+  accounting: '/accounting',
+};
+const partnerViewPaths: Record<View, string> = {
+  ...adminViewPaths,
+  catalog: '/katalog',
+  orders: '/order-saya',
+  documents: '/invoice',
+  leaderboard: '/peringkat',
+  areas: '/area-mitra',
+  profile: '/profil',
+};
+function normalizePath(pathname: string) {
+  const clean = pathname.replace(/\/+$/, '') || '/';
+  return clean.toLowerCase();
+}
+function defaultViewForUser(user: User): View { return user.role === 'partner' ? 'catalog' : 'dashboard'; }
+function isViewAllowedForUser(view: View, user: User) {
+  const allowed = user.role === 'partner' ? partnerViews : adminViews;
+  return allowed.includes(view);
+}
+function viewFromCurrentPath(user: User) {
+  const view = pathToView[normalizePath(window.location.pathname)];
+  return view && isViewAllowedForUser(view, user) ? view : null;
+}
+function pathForView(view: View, user: User) {
+  return (user.role === 'partner' ? partnerViewPaths : adminViewPaths)[view] ?? '/dashboard';
+}
+function updateBrowserRoute(pathname: string, mode: 'push' | 'replace' = 'push') {
+  if (typeof window === 'undefined' || window.location.pathname === pathname) return;
+  window.history[mode === 'replace' ? 'replaceState' : 'pushState']({}, '', pathname);
+}
 
 function readDemoOrders() {
   try { return JSON.parse(localStorage.getItem(demoOrdersStorageKey) || '[]') as Order[]; } catch { return []; }
@@ -34,11 +110,11 @@ function mergeDemoOrders(snapshot: AppState): AppState {
 }
 
 function App() {
-  const [state, setState] = useState<AppState>(stateSingleton);
+  const [state, setState] = useState<AppState>(emptyRuntimeState);
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [token, setToken] = useState('');
-  const [view, setView] = useState<View>('dashboard');
-  const [authPage, setAuthPage] = useState<'login' | 'register'>('login');
+  const [view, setViewState] = useState<View>('dashboard');
+  const [authPage, setAuthPage] = useState<'login' | 'register'>(() => normalizePath(window.location.pathname) === '/daftar-mitra' ? 'register' : 'login');
   const [restoringSession, setRestoringSession] = useState(true);
 
   async function refresh(nextToken = token) {
@@ -50,10 +126,23 @@ function App() {
     localStorage.removeItem(sessionStorageKey);
   }
 
+  function navigateView(nextView: View, mode: 'push' | 'replace' = 'push', userOverride = currentUser) {
+    if (!userOverride || !isViewAllowedForUser(nextView, userOverride)) return;
+    setViewState(nextView);
+    updateBrowserRoute(pathForView(nextView, userOverride), mode);
+  }
+
+  function showAuthPage(nextPage: 'login' | 'register') {
+    setAuthPage(nextPage);
+    updateBrowserRoute(nextPage === 'register' ? '/daftar-mitra' : '/login');
+  }
+
   async function activateSession(session: Session, remember = true) {
+    const nextView = viewFromCurrentPath(session.user) ?? defaultViewForUser(session.user);
     setToken(session.token);
     setCurrentUser(session.user);
-    setView(session.user.role === 'partner' ? 'catalog' : 'dashboard');
+    setViewState(nextView);
+    updateBrowserRoute(pathForView(nextView, session.user), 'replace');
     if (remember) localStorage.setItem(sessionStorageKey, JSON.stringify({ token: session.token, user: session.user, expiresAt: session.expiresAt ?? Date.now() + sessionTtlMs }));
     await refresh(session.token);
   }
@@ -73,11 +162,23 @@ function App() {
 
   useEffect(() => setState((current) => mergeDemoOrders(current)), []);
 
+  useEffect(() => {
+    function onPopState() {
+      if (!currentUser) {
+        setAuthPage(normalizePath(window.location.pathname) === '/daftar-mitra' ? 'register' : 'login');
+        return;
+      }
+      setViewState(viewFromCurrentPath(currentUser) ?? defaultViewForUser(currentUser));
+    }
+    window.addEventListener('popstate', onPopState);
+    return () => window.removeEventListener('popstate', onPopState);
+  }, [currentUser]);
+
   if (restoringSession) return <div className="login-page"><div className="login-card"><div className="login-form"><h2>Memuat session...</h2><p>Jarvis sedang mengecek login terakhir.</p></div></div></div>;
   if (!currentUser) return authPage === 'register'
-    ? <PartnerRegistration onBack={() => setAuthPage('login')} />
-    : <Login onRegister={() => setAuthPage('register')} onLogin={(session) => activateSession(session)} state={state} />;
-  return <Shell state={state} user={currentUser} setUser={setCurrentUser} token={token} view={view} setView={setView} setState={setState} refresh={refresh} onLogout={() => { clearSavedSession(); setCurrentUser(null); setToken(''); }} />;
+    ? <PartnerRegistration onBack={() => showAuthPage('login')} />
+    : <Login onRegister={() => showAuthPage('register')} onLogin={(session) => activateSession(session)} state={state} />;
+  return <Shell state={state} user={currentUser} setUser={setCurrentUser} token={token} view={view} setView={navigateView} setState={setState} refresh={refresh} onLogout={() => { clearSavedSession(); setCurrentUser(null); setToken(''); showAuthPage('login'); }} />;
 }
 
 function Login({ state, onLogin, onRegister }: { state: AppState; onLogin: (session: Session) => Promise<void>; onRegister: () => void }) {
@@ -189,15 +290,15 @@ function Shell({ state, user, setUser, token, view, setView, setState, refresh, 
       <div className="mobile-sidebar-head"><div className="brand"><div className="logo logo-image"><img src="/assets/logo-wahyu-beef.png" alt="Logo Wahyu Beef" /></div><div><h2>Wahyu Beef</h2><span>Mitra App</span></div></div><button className="mobile-close-btn" aria-label="Tutup menu" onClick={() => setIsMobileMenuOpen(false)}><X size={20} /></button></div>
       <nav className="nav">{nav.map(([key, label, Icon]) => <button key={key} className={view === key ? 'active' : ''} onClick={() => go(key)}><Icon size={18} /> {label}</button>)}</nav>
       <div className="user-box"><b>{user.name}</b><br /><span>{roleLabel(user.role)}</span><br /><br /><button className="btn sidebar-logout-btn" onClick={onLogout}><LogOut size={18} /> Keluar</button></div>
-      <p className="app-version-note">Versi Aplikasi v1.3.0</p>
+      <p className="app-version-note">Versi Aplikasi v1.4.0</p>
     </aside>
     <main className="main">
       <MobileAppBar state={state} user={user} view={view} onMenu={() => setIsMobileMenuOpen(true)} onNavigate={go} />
       <Topbar state={state} user={user} view={view} onNavigate={go} />
       {view === 'dashboard' && <Dashboard state={state} />}
-      {view === 'catalog' && <Catalog state={state} user={user} token={token} refresh={refresh} setView={setView} />}
+      {(view === 'catalog' || view === 'checkout') && <Catalog state={state} user={user} token={token} refresh={refresh} setView={setView} currentView={view} />}
       {view === 'orders' && <Orders state={state} user={user} token={token} refresh={refresh} />}
-      {view === 'products' && <Products state={state} />}
+      {view === 'products' && <Products state={state} user={user} token={token} refresh={refresh} />}
       {view === 'partners' && <Partners state={state} />}
       {view === 'pricing' && <Pricing state={state} />}
       {view === 'documents' && <Documents state={state} user={user} token={token} refresh={refresh} />}
@@ -326,13 +427,13 @@ const packageOptions: PackageOption[] = [
 ];
 const packagingCategoryIds = new Set(['cat-daging-sapi', 'cat-tulang-sapi', 'cat-jerohan-sapi']);
 
-function Catalog({ state, user, token, refresh, setView }: { state: AppState; user: User; token: string; refresh: () => Promise<void>; setView: (view: View) => void }) {
+function Catalog({ state, user, token, refresh, setView, currentView }: { state: AppState; user: User; token: string; refresh: () => Promise<void>; setView: (view: View) => void; currentView: View }) {
   const partner = findPartnerForUser(state, user);
   const [cart, setCart] = useState<Record<string, number>>({});
   const [cartNotes, setCartNotes] = useState<Record<string, string>>({});
   const [message, setMessage] = useState('');
   const [selectedProduct, setSelectedProduct] = useState<CatalogProduct | null>(null);
-  const [isCheckout, setIsCheckout] = useState(false);
+  const [isCheckout, setIsCheckout] = useState(currentView === 'checkout');
   const [categoryFilter, setCategoryFilter] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
   if (!partner) return <div className="notice warning">User ini tidak punya data mitra.</div>;
@@ -371,9 +472,9 @@ function Catalog({ state, user, token, refresh, setView }: { state: AppState; us
       return next;
     });
   }
-  async function placeOrder(requestedDeliveryDate?: string) {
+  async function placeOrder(requestedDeliveryDate?: string, expedition: ExpeditionType = defaultExpedition) {
     try {
-      const createdOrder = await api.createOrder(token, { shippingAddress: activePartner.address, requestedDeliveryDate, notes: 'Order dari portal mitra', items });
+      const createdOrder = await api.createOrder(token, { shippingAddress: activePartner.address, requestedDeliveryDate, expedition, notes: 'Order dari portal mitra', items });
       rememberDemoOrder(createdOrder as Order);
       await refresh();
       setCart({});
@@ -382,11 +483,11 @@ function Catalog({ state, user, token, refresh, setView }: { state: AppState; us
       setView('orders');
     } catch (error) { setMessage(error instanceof Error ? error.message : 'Checkout gagal'); }
   }
-  if (isCheckout) return <CheckoutPage state={state} catalog={catalog} partnerAddress={activePartner.address} cart={cart} cartNotes={cartNotes} message={message} onBack={() => setIsCheckout(false)} onUpdateQty={updateCartQty} onUpdateNote={(key, note) => setCartNotes((current) => ({ ...current, [key]: note }))} onPlaceOrder={placeOrder} />;
+  if (isCheckout) return <CheckoutPage state={state} catalog={catalog} partnerAddress={activePartner.address} cart={cart} cartNotes={cartNotes} message={message} onBack={() => { setIsCheckout(false); setView('catalog'); }} onUpdateQty={updateCartQty} onUpdateNote={(key, note) => setCartNotes((current) => ({ ...current, [key]: note }))} onPlaceOrder={placeOrder} />;
   return <div className="grid">
-    <div className="card"><b>Tier aktif: {tierName(state, activePartner.tierId)}</b><p className="footer-note">Harga di bawah dihitung server-side berdasarkan tier mitra. Untuk daging sapi, tulang sapi, dan jeroan sapi, klik produk untuk memilih kemasan 250 gr, 500 gr, atau 1000 gr.</p></div>
+    <div className="card"><b>Tier aktif: {tierName(state, activePartner.tierId)}</b></div>
     {message && <div className="notice">{message}</div>}
-    <div className="catalog-filter-bar marketplace-filter-bar"><div className="field"><label>Filter Kategori</label><select value={categoryFilter} onChange={(event) => setCategoryFilter(event.target.value)}><option value="all">Semua Kategori</option>{orderedCategories(state).map((category) => <option key={category.id} value={category.id}>{category.name}</option>)}</select></div><div className="field catalog-search-field"><label>Cari Produk</label><input className="input" value={searchQuery} onChange={(event) => setSearchQuery(event.target.value)} placeholder="Cari nama produk, SKU, deskripsi..." /></div>{(categoryFilter !== 'all' || searchQuery) && <button type="button" className="btn small" onClick={() => { setCategoryFilter('all'); setSearchQuery(''); }}>Reset Filter</button>}</div>
+    <div className="catalog-filter-bar marketplace-filter-bar"><div className="field catalog-search-field"><label>Cari Produk</label><input className="input" value={searchQuery} onChange={(event) => setSearchQuery(event.target.value)} placeholder="Cari nama produk, SKU, deskripsi..." /></div><div className="field"><label>Filter Kategori</label><select value={categoryFilter} onChange={(event) => setCategoryFilter(event.target.value)}><option value="all">Semua Kategori</option>{orderedCategories(state).map((category) => <option key={category.id} value={category.id}>{category.name}</option>)}</select></div>{(categoryFilter !== 'all' || searchQuery) && <button type="button" className="btn small" onClick={() => { setCategoryFilter('all'); setSearchQuery(''); }}>Reset Filter</button>}</div>
     <div className="catalog-toolbar"><div><b>{filteredCatalog.length} / {catalog.length} Produk</b><span>Harga {tierName(state, activePartner.tierId)} • {activeCategoryName}{normalizedSearch ? ` • “${searchQuery.trim()}”` : ''}</span></div><div className="catalog-view-label">Tampilan <span className="grid-icon">▦</span></div></div>
     {catalogGroups.length ? <div className="catalog-category-stack">{catalogGroups.map(({ category, products }) => <section className="catalog-category-section" key={category.id}>
       <div className="category-section-head"><div><span>Kategori</span><h3>{category.name}</h3></div><b>{products.length} Produk</b></div>
@@ -398,17 +499,18 @@ function Catalog({ state, user, token, refresh, setView }: { state: AppState; us
         </div>;
       })}</div>
     </section>)}</div> : <div className="notice warning">Produk tidak ditemukan. Coba ubah kategori atau kata kunci pencarian.</div>}
-    <button className="floating-cart" type="button" disabled={items.length === 0} onClick={() => setIsCheckout(true)} aria-label={`Checkout ${cartQty} item dengan total ${formatIdr(total)}`}>
+    <button className="floating-cart" type="button" disabled={items.length === 0} onClick={() => { setIsCheckout(true); setView('checkout'); }} aria-label={`Checkout ${cartQty} item dengan total ${formatIdr(total)}`}>
       <span className="floating-cart-icon"><ShoppingCart size={23} strokeWidth={2.8} /><span className="floating-cart-badge">{cartQty > 99 ? '99+' : cartQty}</span></span>
       <span className="floating-cart-copy"><span>Total Harga</span><b>{formatIdr(total)}</b></span>
     </button>
-    <div className="card cart-sticky"><b>Keranjang:</b> {items.length} item • <b>{formatIdr(total)}</b> <button className="btn primary" style={{ marginLeft: 12 }} disabled={items.length === 0} onClick={() => setIsCheckout(true)}>Checkout</button></div>
+    <div className="card cart-sticky"><b>Keranjang:</b> {items.length} item • <b>{formatIdr(total)}</b> <button className="btn primary" style={{ marginLeft: 12 }} disabled={items.length === 0} onClick={() => { setIsCheckout(true); setView('checkout'); }}>Checkout</button></div>
     {selectedProduct && <PackageModal product={selectedProduct} onClose={() => setSelectedProduct(null)} onAdd={(option, qty) => { addToCart(selectedProduct, qty, option); setSelectedProduct(null); }} />}
   </div>;
 }
 
-function CheckoutPage({ state, catalog, partnerAddress, cart, cartNotes, message, onBack, onUpdateQty, onUpdateNote, onPlaceOrder }: { state: AppState; catalog: CatalogProduct[]; partnerAddress: string; cart: Record<string, number>; cartNotes: Record<string, string>; message: string; onBack: () => void; onUpdateQty: (key: string, qty: number) => void; onUpdateNote: (key: string, note: string) => void; onPlaceOrder: (requestedDeliveryDate?: string) => Promise<void> }) {
+function CheckoutPage({ state, catalog, partnerAddress, assistedPartner, cart, cartNotes, message, onBack, onUpdateQty, onUpdateNote, onPlaceOrder }: { state: AppState; catalog: CatalogProduct[]; partnerAddress: string; assistedPartner?: Partner; cart: Record<string, number>; cartNotes: Record<string, string>; message: string; onBack: () => void; onUpdateQty: (key: string, qty: number) => void; onUpdateNote: (key: string, note: string) => void; onPlaceOrder: (requestedDeliveryDate?: string, expedition?: ExpeditionType) => Promise<void> }) {
   const [requestedDeliveryDate, setRequestedDeliveryDate] = useState('');
+  const [expedition, setExpedition] = useState<ExpeditionType>(defaultExpedition);
   const rows = Object.entries(cart).filter(([, qty]) => qty > 0).map(([key, qty]) => {
     const item = cartKeyToItem(key, qty);
     const product = catalog.find((p) => p.id === item.productId)!;
@@ -417,12 +519,13 @@ function CheckoutPage({ state, catalog, partnerAddress, cart, cartNotes, message
   }).filter((row) => row.product);
   const totalPesanan = rows.reduce((sum, row) => sum + row.lineTotal, 0);
   const totalBeratGram = calculateCartWeightGram(catalog, rows.map((row) => row.item));
-  const styrofoamPlan = calculateStyrofoamPlan(totalBeratGram);
+  const shouldUseStyrofoam = expedition !== thermalTruckExpedition;
+  const styrofoamPlan = shouldUseStyrofoam ? calculateStyrofoamPlan(totalBeratGram) : [];
   const packingTotal = styrofoamPlan.reduce((sum, item) => sum + item.lineTotal, 0);
   const diskon = 0;
   const totalTagihan = totalPesanan - diskon + packingTotal;
   return <div className="grid checkout-page">
-    <div className="card checkout-head"><div><h3>Ringkasan Keranjang</h3><p className="footer-note">Cek ulang produk, kemasan, qty, sterofoam otomatis, dan catatan sebelum menekan tombol Selesaikan Pesanan.</p></div><button className="btn" onClick={onBack}>Kembali ke Katalog</button></div>
+    <div className="card checkout-head"><div><h3>Ringkasan Keranjang</h3><p className="footer-note">Cek ulang produk, ekspedisi, kemasan, qty, sterofoam otomatis, dan catatan sebelum menekan tombol Selesaikan Pesanan.</p>{assistedPartner && <p className="footer-note"><b>Order dibantu admin untuk:</b> {assistedPartner.businessName} • {tierName(state, assistedPartner.tierId)}</p>}</div><button className="btn" onClick={onBack}>Kembali ke Katalog</button></div>
     {message && <div className="notice">{message}</div>}
     <div className="card checkout-card">
       {rows.length === 0 ? <div className="notice warning">Keranjang masih kosong.</div> : <div className="checkout-items">{rows.map((row) => {
@@ -433,14 +536,14 @@ function CheckoutPage({ state, catalog, partnerAddress, cart, cartNotes, message
           <div className="qty-stepper checkout-stepper"><button type="button" onClick={() => onUpdateQty(row.key, row.item.qty - 1)}>−</button><input className="input" type="number" min="0" value={row.item.qty} onChange={(event) => onUpdateQty(row.key, Number(event.target.value) || 0)} /><button type="button" onClick={() => onUpdateQty(row.key, row.item.qty + 1)}>+</button></div>
           <div className="checkout-line-total"><b>{formatIdr(row.lineTotal)}</b><button className="btn small" onClick={() => onUpdateQty(row.key, 0)}>Hapus</button></div>
         </div>;
-      })}{styrofoamPlan.map((item) => <div className="checkout-item checkout-packaging-item" key={item.size}>
+      })}{!shouldUseStyrofoam && rows.length > 0 && <div className="checkout-item checkout-packaging-item checkout-packaging-free"><div className="checkout-thumb checkout-packaging-thumb"><Truck size={23} /></div><div className="checkout-info"><b>Tanpa Sterofoam</b><span>Truk Thermal Wahyu Beef</span><small>Packaging sterofoam tidak dikenakan untuk armada thermal.</small></div><div className="checkout-stepper checkout-packaging-qty"><b>Rp0</b></div><div className="checkout-line-total"><b>{formatIdr(0)}</b><small>Otomatis</small></div></div>}{styrofoamPlan.map((item) => <div className="checkout-item checkout-packaging-item" key={item.size}>
         <div className="checkout-thumb checkout-packaging-thumb"><span>SF</span></div>
         <div className="checkout-info"><b>{item.label}</b><span>Kemasan otomatis • Kapasitas {item.capacityLabel}</span><small>{formatIdr(item.unitPrice)} / pcs • Qty {item.qty} pcs</small></div>
         <div className="checkout-stepper checkout-packaging-qty"><b>{item.qty} pcs</b></div>
         <div className="checkout-line-total"><b>{formatIdr(item.lineTotal)}</b><small>Otomatis</small></div>
       </div>)}</div>}
     </div>
-    <div className="card checkout-summary proper-checkout-summary"><div className="checkout-address-block"><b>Alamat Kirim</b><p>{partnerAddress}</p></div><div className="field checkout-delivery-date"><label>Tanggal Kirim</label><input className="input" type="date" value={requestedDeliveryDate} onChange={(event) => setRequestedDeliveryDate(event.target.value)} /><small>Diisi oleh mitra saat membuat order.</small></div><div className="checkout-total-panel"><div><span>Total Pesanan</span><b>{formatIdr(totalPesanan)}</b></div><div><span>Total Berat</span><b>{formatWeightGram(totalBeratGram)}</b></div><div><span>Biaya Sterofoam</span><b>{formatIdr(packingTotal)}</b></div><div><span>Diskon</span><b>{formatIdr(diskon)}</b></div><div className="checkout-grand-total"><span>Total Tagihan</span><strong>{formatIdr(totalTagihan)}</strong></div></div><button className="btn primary" disabled={rows.length === 0} onClick={() => onPlaceOrder(requestedDeliveryDate)}>Selesaikan Pesanan</button></div>
+    <div className="card checkout-summary proper-checkout-summary"><div className="checkout-address-block"><b>Alamat Kirim</b><p>{partnerAddress}</p></div><div className="field checkout-expedition-field"><label>Ekspedisi</label><select value={expedition} onChange={(event) => setExpedition(event.target.value as ExpeditionType)}>{expeditionOptions.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select><small>{expedition === thermalTruckExpedition ? 'Truk thermal: biaya sterofoam otomatis Rp0.' : 'Pilih ekspedisi untuk pengiriman order.'}</small></div><div className="field checkout-delivery-date"><label>Tanggal Kirim</label><input className="input" type="date" value={requestedDeliveryDate} onChange={(event) => setRequestedDeliveryDate(event.target.value)} /><small>Diisi oleh mitra saat membuat order.</small></div><div className="checkout-total-panel"><div><span>Total Pesanan</span><b>{formatIdr(totalPesanan)}</b></div><div><span>Total Berat</span><b>{formatWeightGram(totalBeratGram)}</b></div><div><span>Ekspedisi</span><b>{expeditionLabels[expedition]}</b></div><div><span>Biaya Sterofoam</span><b>{formatIdr(packingTotal)}</b></div><div><span>Diskon</span><b>{formatIdr(diskon)}</b></div><div className="checkout-grand-total"><span>Total Tagihan</span><strong>{formatIdr(totalTagihan)}</strong></div></div><button className="btn primary" disabled={rows.length === 0} onClick={() => onPlaceOrder(requestedDeliveryDate, expedition)}>Selesaikan Pesanan</button></div>
   </div>;
 }
 
@@ -547,33 +650,148 @@ function OrderShippingPanel({ order, token, refresh }: { order: Order; token: st
   </div>;
 }
 
-function OrdersTable({ state, orders, user, token, refresh, compact }: { state: AppState; orders: Order[]; user?: User; token?: string; refresh?: () => Promise<void>; compact?: boolean }) {
-  const [selected, setSelected] = useState<Order | null>(null);
-  const [actionMessage, setActionMessage] = useState('');
-  const [cancellingOrderId, setCancellingOrderId] = useState<string | null>(null);
-  const canPartnerCancel = (order: Order) => user?.role === 'partner' && ['pending', 'confirmed'].includes(order.status);
-  async function cancelOrder(order: Order) {
-    if (!token || !refresh) return;
-    const confirmed = window.confirm(`Batalkan order ${order.orderNumber}? Order yang sudah diproses tidak bisa dibatalkan oleh mitra.`);
-    if (!confirmed) return;
-    setActionMessage('');
-    setCancellingOrderId(order.id);
-    try {
-      await api.cancelOrder(token, order.id, 'Dibatalkan oleh mitra dari menu Order Saya');
-      await refresh();
-      setActionMessage(`${order.orderNumber} berhasil dibatalkan.`);
-    } catch (error) {
-      setActionMessage(error instanceof Error ? error.message : 'Gagal membatalkan order');
-    } finally {
-      setCancellingOrderId(null);
-    }
-  }
-  return <div className="card orders-card"><h3>{compact ? 'Order Terbaru' : 'Daftar Order'}</h3>{actionMessage && <div className={`notice ${actionMessage.includes('berhasil') ? '' : 'warning'}`}>{actionMessage}</div>}<div className="table-wrap orders-table"><table><thead><tr><th>No Order</th><th>Mitra</th><th>Status</th><th>Total</th><th>Packing</th><th>Item</th><th>Aksi</th></tr></thead><tbody>{orders.map((order) => <tr key={order.id}><td data-label="No Order"><b>{order.orderNumber}</b><br /><small>{new Date(order.orderDate).toLocaleString('id-ID')}</small></td><td data-label="Mitra">{partnerName(state, order.partnerId)}<br /><small>{tierName(state, state.partners.find((p) => p.id === order.partnerId)?.tierId ?? '')}</small></td><td data-label="Status"><span className={`status ${order.status}`}>{statusLabels[order.status]}</span></td><td data-label="Total"><b>{formatIdr(order.grandTotal)}</b><br /><small>{(order.shippingCost || order.packingFee) ? `+ ${formatIdr((order.shippingCost ?? 0) + (order.packingFee ?? 0))} ongkir/packing` : 'Belum ada tambahan'}</small></td><td data-label="Packing">{packingSummary(order)}<br /><small>{formatIdr(order.packingFee ?? 0)}</small></td><td data-label="Item">{order.items.length} item</td><td data-label="Aksi"><div className="actions"><button className="btn small" onClick={() => setSelected(order)}>{order.status === 'in_production' && user?.role !== 'partner' ? 'Atur Packing' : 'Detail'}</button>{user && token && refresh && canPartnerCancel(order) && <button className="btn small danger" disabled={cancellingOrderId === order.id} onClick={() => cancelOrder(order)}>{cancellingOrderId === order.id ? 'Membatalkan...' : 'Batalkan'}</button>}{user && token && refresh && user.role !== 'partner' && validTransitions[order.status].map((target) => <button key={target} className="btn small" onClick={async () => { await api.updateOrderStatus(token, order.id, target, `Update ke ${target}`); await refresh(); }}>{statusLabels[target]}</button>)}</div></td></tr>)}</tbody></table></div>{selected && <OrderModal state={state} order={selected} user={user} token={token} refresh={refresh} onClose={() => setSelected(null)} />}</div>;
+function orderProductItems(order: Order) {
+  return order.items.filter((item) => !item.productId.startsWith('packaging-'));
+}
+function orderRequestedQty(order: Order) {
+  return orderProductItems(order).reduce((sum, item) => sum + item.qty, 0);
+}
+function orderQcDeliveredQty(order: Order) {
+  return orderProductItems(order).reduce((sum, item) => sum + (item.qcDeliveredQty ?? item.qty), 0);
+}
+function orderSuitabilityPercent(order: Order) {
+  const requested = orderRequestedQty(order);
+  if (!requested) return 100;
+  return Math.max(0, Math.min(100, Math.round((orderQcDeliveredQty(order) / requested) * 100)));
+}
+function suitabilityClass(value: number) {
+  return value >= 100 ? 'delivered' : value >= 80 ? 'ready_to_ship' : 'cancelled';
 }
 
-function OrderModal({ state, order, user, token, refresh, onClose }: { state: AppState; order: Order; user?: User; token?: string; refresh?: () => Promise<void>; onClose: () => void }) {
+function OrdersTable({ state, orders, user, token, refresh, compact }: { state: AppState; orders: Order[]; user?: User; token?: string; refresh?: () => Promise<void>; compact?: boolean }) {
+  const [selected, setSelected] = useState<Order | null>(null);
+  const selectedOrder = selected ? state.orders.find((order) => order.id === selected.id) ?? selected : null;
+  const [editingOrder, setEditingOrder] = useState<Order | null>(null);
+  const [actionMessage, setActionMessage] = useState('');
+  const canPartnerCancel = (order: Order) => user?.role === 'partner' && ['pending', 'confirmed'].includes(order.status);
+  const canPartnerEdit = canPartnerCancel;
+  return <div className="card orders-card"><h3>{compact ? 'Order Terbaru' : 'Daftar Order'}</h3>{actionMessage && <div className={`notice ${actionMessage.includes('berhasil') ? '' : 'warning'}`}>{actionMessage}</div>}<div className="table-wrap orders-table"><table><thead><tr><th>No Order</th><th>Mitra</th><th>Status</th><th>Total</th><th>Packing</th><th>Item</th><th>% Kesesuaian</th><th>Aksi</th></tr></thead><tbody>{orders.map((order) => {
+    const suitability = orderSuitabilityPercent(order);
+    return <tr key={order.id}><td data-label="No Order"><b>{order.orderNumber}</b><br /><small>{new Date(order.orderDate).toLocaleString('id-ID')}</small></td><td data-label="Mitra">{partnerName(state, order.partnerId)}<br /><small>{tierName(state, state.partners.find((p) => p.id === order.partnerId)?.tierId ?? '')}</small></td><td data-label="Status"><span className={`status ${order.status}`}>{statusLabels[order.status]}</span></td><td data-label="Total"><b>{formatIdr(order.grandTotal)}</b><br /><small>{(order.shippingCost || order.packingFee) ? `+ ${formatIdr((order.shippingCost ?? 0) + (order.packingFee ?? 0))} ongkir/packing` : 'Belum ada tambahan'}</small></td><td data-label="Packing">{packingSummary(order)}<br /><small>{formatIdr(order.packingFee ?? 0)}</small></td><td data-label="Item">{order.items.length} item</td><td data-label="% Kesesuaian"><span className={`status ${suitabilityClass(suitability)}`}>{suitability}%</span><br /><small>{orderQcDeliveredQty(order)} / {orderRequestedQty(order)} qty</small></td><td data-label="Aksi"><div className="actions"><button className="btn small" onClick={() => setSelected(order)}>Detail</button></div></td></tr>;
+  })}</tbody></table></div>{selectedOrder && <OrderModal state={state} order={selectedOrder} user={user} token={token} refresh={refresh} onClose={() => setSelected(null)} onEditOrder={(orderToEdit) => setEditingOrder(orderToEdit)} />}{editingOrder && user && token && refresh && <EditOrderModal state={state} order={editingOrder} token={token} refresh={refresh} onClose={() => setEditingOrder(null)} onSaved={(updated) => { setEditingOrder(null); setSelected(updated); setActionMessage(`${updated.orderNumber} berhasil direvisi.`); }} />}</div>;
+}
+
+
+function cartItemsFromOrder(order: Order): CartItem[] {
+  return order.items
+    .filter((item) => !item.productId.startsWith('packaging-'))
+    .map((item) => {
+      const gramMatch = item.unitSnapshot.match(/^(250|500|1000)\s*GR$/i);
+      const packageWeightGram = gramMatch ? Number(gramMatch[1]) as 250 | 500 | 1000 : undefined;
+      return { productId: item.productId, qty: item.qty, packageWeightGram, packageLabel: packageWeightGram ? `${packageWeightGram} GR` : undefined, notes: item.notes };
+    });
+}
+function editKeyForCartItem(item: CartItem, index: number) { return `${item.productId}__${item.packageWeightGram ?? 'unit'}__${index}`; }
+
+function EditOrderModal({ state, order, token, refresh, onClose, onSaved }: { state: AppState; order: Order; token: string; refresh: () => Promise<void>; onClose: () => void; onSaved: (order: Order) => void }) {
+  const partner = state.partners.find((item) => item.id === order.partnerId);
+  const catalog = getCatalogForPartner(state, order.partnerId);
+  const [items, setItems] = useState<CartItem[]>(cartItemsFromOrder(order));
+  const [requestedDeliveryDate, setRequestedDeliveryDate] = useState(order.requestedDeliveryDate ?? '');
+  const [expedition, setExpedition] = useState<ExpeditionType>(order.expedition ?? defaultExpedition);
+  const [selectedProductId, setSelectedProductId] = useState(catalog[0]?.id ?? '');
+  const [selectedPackageWeight, setSelectedPackageWeight] = useState<'unit' | '250' | '500' | '1000'>('unit');
+  const [message, setMessage] = useState('');
+  const [saving, setSaving] = useState(false);
+  const rows = items.map((item, index) => {
+    const product = catalog.find((product) => product.id === item.productId);
+    const unitPrice = getPackagePrice(product?.price ?? 0, item.packageWeightGram);
+    return { key: editKeyForCartItem(item, index), item, index, product, unitPrice, lineTotal: unitPrice * item.qty };
+  }).filter((row) => row.product);
+  const totalPesanan = rows.reduce((sum, row) => sum + row.lineTotal, 0);
+  const totalBeratGram = calculateCartWeightGram(catalog, items);
+  const styrofoamPlan = expedition === thermalTruckExpedition ? [] : calculateStyrofoamPlan(totalBeratGram);
+  const packingTotal = styrofoamPlan.reduce((sum, item) => sum + item.lineTotal, 0);
+  const totalTagihan = totalPesanan + packingTotal + (order.shippingCost ?? 0);
+
+  function updateItem(index: number, patch: Partial<CartItem>) {
+    setItems((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, ...patch } : item).filter((item) => item.qty > 0));
+  }
+  function addProduct() {
+    const product = catalog.find((item) => item.id === selectedProductId);
+    if (!product) return;
+    const packageWeightGram = selectedPackageWeight === 'unit' ? undefined : Number(selectedPackageWeight) as 250 | 500 | 1000;
+    setItems((current) => [...current, { productId: product.id, qty: product.minimumOrderQty, packageWeightGram, packageLabel: packageWeightGram ? `${packageWeightGram} GR` : undefined }]);
+  }
+  async function saveRevision() {
+    if (!items.length) {
+      setMessage('Pesanan wajib memiliki minimal 1 item produk.');
+      return;
+    }
+    setSaving(true);
+    setMessage('');
+    try {
+      const updated = await api.reviseOrder(token, order.id, { requestedDeliveryDate, expedition, notes: order.notes, items });
+      await refresh();
+      onSaved(updated as Order);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Gagal menyimpan revisi pesanan.');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return <div className="modal-backdrop"><div className="modal edit-order-modal"><button className="modal-x" type="button" aria-label="Tutup edit pesanan" onClick={onClose}><X size={20} /></button><div className="topbar"><div><h2>Edit Pesanan</h2><p>{order.orderNumber} • {partner?.businessName ?? partnerName(state, order.partnerId)}</p></div><button className="btn desktop-modal-close" onClick={onClose}>Tutup</button></div><div className="notice">Revisi hanya bisa dilakukan sebelum order diproses. Nomor order tetap sama, item dan total akan dihitung ulang.</div>{message && <div className="notice warning">{message}</div>}<div className="edit-order-items">{rows.map((row) => <div className="edit-order-item" key={row.key}><div><b>{row.product?.name}</b><span>{row.product?.sku} • {row.item.packageLabel ?? row.product?.unit}</span><small>{formatIdr(row.unitPrice)} / item • Subtotal {formatIdr(row.lineTotal)}</small><label className="checkout-note"><span>Catatan</span><textarea rows={2} value={row.item.notes ?? ''} onChange={(event) => updateItem(row.index, { notes: event.target.value })} /></label></div><div className="qty-stepper checkout-stepper"><button type="button" onClick={() => updateItem(row.index, { qty: row.item.qty - 1 })}>−</button><input className="input" type="number" min="0" value={row.item.qty} onChange={(event) => updateItem(row.index, { qty: Number(event.target.value) || 0 })} /><button type="button" onClick={() => updateItem(row.index, { qty: row.item.qty + 1 })}>+</button></div><button className="btn small danger" type="button" onClick={() => updateItem(row.index, { qty: 0 })}>Hapus</button></div>)}</div><div className="card edit-order-add-panel"><b>Tambah Produk</b><div className="grid cols-3"><div className="field"><label>Produk</label><select value={selectedProductId} onChange={(event) => { setSelectedProductId(event.target.value); setSelectedPackageWeight('unit'); }}>{catalog.map((product) => <option key={product.id} value={product.id}>{product.name}</option>)}</select></div><div className="field"><label>Kemasan</label><select value={selectedPackageWeight} onChange={(event) => setSelectedPackageWeight(event.target.value as typeof selectedPackageWeight)}><option value="unit">Unit asli</option>{catalog.find((product) => product.id === selectedProductId && canChoosePackaging(product)) && <><option value="250">250 GR</option><option value="500">500 GR</option><option value="1000">1000 GR</option></>}</select></div><button className="btn" type="button" onClick={addProduct}>Tambah ke Pesanan</button></div></div><div className="card checkout-summary proper-checkout-summary"><div className="checkout-address-block"><b>Alamat Kirim</b><p>{order.shippingAddress}</p></div><div className="field"><label>Ekspedisi</label><select value={expedition} onChange={(event) => setExpedition(event.target.value as ExpeditionType)}>{expeditionOptions.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select><small>{expedition === thermalTruckExpedition ? 'Truk thermal: biaya sterofoam otomatis Rp0.' : 'Pilih ekspedisi untuk pengiriman order.'}</small></div><div className="field"><label>Tanggal Kirim</label><input className="input" type="date" value={requestedDeliveryDate} onChange={(event) => setRequestedDeliveryDate(event.target.value)} /></div><div className="checkout-total-panel"><div><span>Total Pesanan</span><b>{formatIdr(totalPesanan)}</b></div><div><span>Total Berat</span><b>{formatWeightGram(totalBeratGram)}</b></div><div><span>Biaya Sterofoam</span><b>{formatIdr(packingTotal)}</b></div>{order.shippingCost ? <div><span>Ongkir tersimpan</span><b>{formatIdr(order.shippingCost)}</b></div> : null}<div className="checkout-grand-total"><span>Total Tagihan</span><strong>{formatIdr(totalTagihan)}</strong></div></div><button className="btn primary" disabled={saving || rows.length === 0} onClick={saveRevision}>{saving ? 'Menyimpan...' : 'Simpan Revisi Pesanan'}</button></div></div></div>;
+}
+
+function OrderStatusPanel({ order, token, refresh }: { order: Order; token: string; refresh: () => Promise<void> }) {
+  const [targetStatus, setTargetStatus] = useState<OrderStatus>(order.status === 'delivered' || order.status === 'cancelled' ? 'pending' : order.status);
+  const [message, setMessage] = useState('');
+  async function saveStatus() {
+    setMessage('');
+    try {
+      await api.updateOrderStatus(token, order.id, targetStatus, `Update status order ke ${statusLabels[targetStatus]}`);
+      await refresh();
+      setMessage(`Status berhasil diubah ke ${statusLabels[targetStatus]}.`);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Status gagal disimpan.');
+    }
+  }
+  return <div className="shipping-panel status-panel"><b>Status Order</b><div className="grid cols-2"><div className="field"><label>Pilih Tahapan Status</label><select value={targetStatus} onChange={(event) => setTargetStatus(event.target.value as OrderStatus)}>{orderWorkflowStatuses.map((status) => <option key={status} value={status}>{statusLabels[status]}</option>)}</select><small>Status utama disederhanakan menjadi 5 tahap operasional.</small></div><div className="field"><label>Status Saat Ini</label><span className={`status ${order.status}`}>{statusLabels[order.status]}</span></div></div>{message && <div className={`notice ${message.includes('berhasil') ? '' : 'warning'}`}>{message}</div>}<div className="actions"><button className="btn primary" type="button" disabled={targetStatus === order.status} onClick={saveStatus}>Simpan Status</button></div></div>;
+}
+
+function OrderQcPanel({ order, token, refresh, onEditOrder }: { order: Order; token: string; refresh: () => Promise<void>; onEditOrder?: (order: Order) => void }) {
+  const qcItems = order.items;
+  const productItems = orderProductItems(order);
+  const [qtyMap, setQtyMap] = useState<Record<string, string>>(() => Object.fromEntries(qcItems.map((item) => [item.id, String(item.qcDeliveredQty ?? item.qty)])));
+  const [message, setMessage] = useState('');
+  useEffect(() => {
+    setQtyMap(Object.fromEntries(qcItems.map((item) => [item.id, String(item.qcDeliveredQty ?? item.qty)])));
+  }, [order.id, order.items.map((item) => `${item.id}:${item.qty}:${item.qcDeliveredQty ?? ''}`).join('|')]);
+  const requestedQty = orderRequestedQty(order);
+  const deliveredQty = productItems.reduce((sum, item) => sum + Math.max(0, Math.min(item.qty, Number(qtyMap[item.id] || 0))), 0);
+  const suitability = requestedQty ? Math.round((deliveredQty / requestedQty) * 100) : 100;
+  const packagingQcTotal = qcItems.filter((item) => item.productId.startsWith('packaging-')).reduce((sum, item) => sum + Math.max(0, Math.min(item.qty, Number(qtyMap[item.id] || 0))) * item.unitPrice, 0);
+  async function saveQc() {
+    setMessage('');
+    try {
+      await api.updateOrderQc(token, order.id, { items: qcItems.map((item) => ({ itemId: item.id, qcDeliveredQty: Math.max(0, Math.min(item.qty, Number(qtyMap[item.id] || 0))) })) });
+      await refresh();
+      setMessage('Hasil QC berhasil disimpan. Qty produk, packaging, packing fee, dan total order sudah disesuaikan.');
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Hasil QC gagal disimpan.');
+    }
+  }
+  return <div className="shipping-panel qc-panel"><b>Hasil QC Pesanan</b><div className="notice">Input qty yang benar-benar lolos QC / dikirim, termasuk packaging/sterofoam. Jika packaging dikurangi atau 0, biaya packing dan total order ikut menyesuaikan.</div><div className="qc-items">{qcItems.map((item) => {
+    const isPackaging = item.productId.startsWith('packaging-');
+    return <div className={`qc-item ${isPackaging ? 'qc-packaging-item' : ''}`} key={item.id}><div><b>{item.productNameSnapshot}</b><small>{item.skuSnapshot} • Permintaan {item.qty} {item.unitSnapshot}{isPackaging ? ' • Packaging/Sterofoam' : ''}</small></div><div className="field"><label>{isPackaging ? 'Qty packaging QC' : 'Qty dikirim'}</label><input className="input" type="number" min="0" max={item.qty} value={qtyMap[item.id] ?? String(item.qty)} onChange={(event) => setQtyMap((current) => ({ ...current, [item.id]: event.target.value }))} /></div></div>;
+  })}</div><div className="notice">% Kesesuaian produk: <b>{suitability}%</b> ({deliveredQty} / {requestedQty} qty) • Estimasi packing QC: <b>{formatIdr(packagingQcTotal)}</b></div>{message && <div className={`notice ${message.includes('berhasil') ? '' : 'warning'}`}>{message}</div>}<div className="actions"><button className="btn primary" type="button" onClick={saveQc}>Simpan Hasil QC</button>{onEditOrder && <button className="btn" type="button" onClick={() => onEditOrder(order)}>Edit Pesanan Sesuai Hasil QC</button>}</div></div>;
+}
+
+function OrderModal({ state, order, user, token, refresh, onClose, onEditOrder }: { state: AppState; order: Order; user?: User; token?: string; refresh?: () => Promise<void>; onClose: () => void; onEditOrder?: (order: Order) => void }) {
   const documentRef = useRef<HTMLDivElement>(null);
-  return <div className="modal-backdrop"><div className="modal order-modal"><button className="modal-x" type="button" aria-label="Tutup detail order" onClick={onClose}><X size={20} /></button><div className="topbar"><div><h2>{order.orderNumber}</h2><p>{partnerName(state, order.partnerId)} • {statusLabels[order.status]}</p></div><div className="actions desktop-modal-actions"><button className="btn" type="button" onClick={() => printDocumentOnly(documentRef.current)}><Printer size={16} /> Cetak Order</button><button className="btn desktop-modal-close" onClick={onClose}>Tutup</button></div></div><div ref={documentRef}><DocumentOrder state={state} order={order} /></div><div className="actions mobile-print-actions"><button className="btn primary" type="button" onClick={() => printDocumentOnly(documentRef.current)}><Printer size={16} /> Cetak Order</button></div>{user && token && refresh && user.role !== 'partner' && <OrderShippingPanel order={order} token={token} refresh={refresh} />}</div></div>;
+  const isAdmin = Boolean(user && user.role !== 'partner' && token && refresh);
+  return <div className="modal-backdrop print-backdrop"><div className="modal order-modal print-modal"><button className="modal-x" type="button" aria-label="Tutup detail order" onClick={onClose}><X size={20} /></button><div className="topbar"><div><h2>{order.orderNumber}</h2><p>{partnerName(state, order.partnerId)} • {statusLabels[order.status]}</p></div><div className="actions desktop-modal-actions"><button className="btn" type="button" onClick={() => printDocumentOnly(documentRef.current)}><Printer size={16} /> Cetak Order</button><button className="btn desktop-modal-close" onClick={onClose}>Tutup</button></div></div><div ref={documentRef}><DocumentOrder state={state} order={order} /></div><div className="actions mobile-print-actions"><button className="btn primary" type="button" onClick={() => printDocumentOnly(documentRef.current)}><Printer size={16} /> Cetak Order</button></div>{isAdmin && <><OrderStatusPanel order={order} token={token!} refresh={refresh!} />{order.status === 'ready_to_ship' && <OrderQcPanel order={order} token={token!} refresh={refresh!} onEditOrder={onEditOrder} />}<OrderShippingPanel order={order} token={token!} refresh={refresh!} /></>}</div></div>;
 }
 
 
@@ -782,22 +1000,62 @@ function ProfileSettings({ state, user, token, setUser, setState }: { state: App
 
 function initials(name: string) { return name.split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part[0]?.toUpperCase()).join('') || 'M'; }
 
-function Products({ state }: { state: AppState }) {
-  const [categoryFilter, setCategoryFilter] = useState('all');
-  const [searchQuery, setSearchQuery] = useState('');
-  const normalizedSearch = searchQuery.trim().toLowerCase();
-  const filteredProducts = state.products.filter((product) => {
-    const matchesCategory = categoryFilter === 'all' || product.categoryId === categoryFilter;
-    const haystack = `${product.name} ${product.sku} ${product.description ?? ''} ${categoryName(state, product.categoryId)}`.toLowerCase();
-    return matchesCategory && (!normalizedSearch || haystack.includes(normalizedSearch));
-  });
-  const groups = productsByCategory(state, filteredProducts);
-  const activeCategoryName = categoryFilter === 'all' ? 'Semua Kategori' : categoryName(state, categoryFilter);
-  return <div className="card products-catalog-card"><div className="products-catalog-head"><div><h3>Produk Frozen Food</h3><p className="footer-note">Katalog produk dirapikan per kategori sesuai PDF: Daging Sapi, Tulang Sapi, Jeroan Sapi, Olahan Daging, dan Seafood Series.</p></div><span className="area-pill">{filteredProducts.length} / {state.products.length} Produk</span></div><div className="catalog-filter-bar"><div className="field"><label>Filter Kategori</label><select value={categoryFilter} onChange={(event) => setCategoryFilter(event.target.value)}><option value="all">Semua Kategori</option>{orderedCategories(state).map((category) => <option key={category.id} value={category.id}>{category.name}</option>)}</select></div><div className="field catalog-search-field"><label>Cari Produk</label><input className="input" value={searchQuery} onChange={(event) => setSearchQuery(event.target.value)} placeholder="Cari nama produk, SKU, deskripsi..." /></div>{(categoryFilter !== 'all' || searchQuery) && <button type="button" className="btn small" onClick={() => { setCategoryFilter('all'); setSearchQuery(''); }}>Reset Filter</button>}</div><div className="catalog-filter-summary"><b>{activeCategoryName}</b><span>{normalizedSearch ? `Hasil pencarian: “${searchQuery.trim()}”` : 'Menampilkan produk sesuai filter aktif.'}</span></div>{groups.length ? <div className="admin-category-stack">{groups.map(({ category, products }) => <section className="admin-category-section" key={category.id}><div className="category-section-head"><div><span>Kategori Produk</span><h3>{category.name}</h3></div><b>{products.length} Produk</b></div><div className="admin-product-grid">{products.map((p) => <article className="admin-product-card" key={p.id}><div className={`admin-product-visual ${p.imageUrl ? 'has-photo' : ''}`}>{p.imageUrl ? <img src={p.imageUrl} alt={p.name} loading="lazy" /> : <span>WB</span>}</div><div className="admin-product-body"><div className="admin-product-kicker">{p.sku}</div><h4>{p.name}</h4><p>{p.description}</p><div className="admin-product-meta"><span>{categoryName(state, p.categoryId)}</span><span>MOQ {p.minimumOrderQty} {p.unit}</span></div><span className="status delivered">Aktif</span></div></article>)}</div></section>)}</div> : <div className="notice warning">Produk tidak ditemukan. Coba ubah kategori atau kata kunci pencarian.</div>}</div>;
+function AdminOrderCatalog({ state, user, token, refresh }: { state: AppState; user: User; token: string; refresh: () => Promise<void> }) {
+  const partners = state.partners.filter((partner) => partner.status === 'active');
+  const [selectedPartnerId, setSelectedPartnerId] = useState(partners[0]?.id ?? '');
+  const [cart, setCart] = useState<Record<string, number>>({});
+  const [cartNotes, setCartNotes] = useState<Record<string, string>>({});
+  const [message, setMessage] = useState('');
+  const [selectedProduct, setSelectedProduct] = useState<CatalogProduct | null>(null);
+  const [isCheckout, setIsCheckout] = useState(false);
+  const selectedPartner = partners.find((partner) => partner.id === selectedPartnerId) ?? partners[0];
+  if (!selectedPartner) return <div className="notice warning">Belum ada mitra aktif untuk dibuatkan order.</div>;
+  const catalog = getCatalogForPartner(state, selectedPartner.id);
+  const activeProducts = catalog.filter((product) => product.isActive);
+  const items: CartItem[] = Object.entries(cart).filter(([, qty]) => qty > 0).map(([key, qty]) => ({ ...cartKeyToItem(key, qty), notes: cartNotes[key]?.trim() || undefined }));
+  const total = items.reduce((sum, item) => {
+    const product = catalog.find((p) => p.id === item.productId);
+    return sum + getPackagePrice(product?.price ?? 0, item.packageWeightGram) * item.qty;
+  }, 0);
+  const cartQty = items.reduce((sum, item) => sum + item.qty, 0);
+  function addToCart(product: CatalogProduct, qty = product.minimumOrderQty, option?: PackageOption) {
+    const key = cartKey(product.id, option?.weightGram);
+    setCart((current) => ({ ...current, [key]: (current[key] ?? 0) + Math.max(qty, product.minimumOrderQty) }));
+  }
+  function updateCartQty(key: string, qty: number) {
+    setCart((current) => {
+      const next = { ...current };
+      if (qty <= 0) delete next[key]; else next[key] = qty;
+      return next;
+    });
+  }
+  async function placeOrder(requestedDeliveryDate?: string, expedition: ExpeditionType = defaultExpedition) {
+    setMessage('');
+    try {
+      const createdOrder = await api.createOrder(token, { partnerId: selectedPartner.id, shippingAddress: selectedPartner.address, requestedDeliveryDate, expedition, notes: `Order dibuat admin (${user.name}) untuk ${selectedPartner.businessName}`, items });
+      rememberDemoOrder(createdOrder as Order);
+      await refresh();
+      setCart({});
+      setCartNotes({});
+      setIsCheckout(false);
+      setMessage('Order mitra berhasil dibuat oleh admin. Notifikasi WA dan email tetap diproses setelah order tersimpan.');
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Order admin gagal dibuat.');
+    }
+  }
+  if (isCheckout) return <CheckoutPage state={state} catalog={catalog} partnerAddress={selectedPartner.address} assistedPartner={selectedPartner} cart={cart} cartNotes={cartNotes} message={message} onBack={() => setIsCheckout(false)} onUpdateQty={updateCartQty} onUpdateNote={(key, note) => setCartNotes((current) => ({ ...current, [key]: note }))} onPlaceOrder={placeOrder} />;
+  return <div className="grid"><div className="card admin-assisted-order"><div className="products-catalog-head"><div><h3>Buat Order untuk Mitra</h3><p className="footer-note">Admin bisa membantu transaksi order mitra. Pilih mitra dulu agar harga tier, alamat kirim, WA, dan email notification tetap sesuai data mitra.</p></div><span className="area-pill">{cartQty} item • {formatIdr(total)}</span></div><div className="grid cols-2"><div className="field"><label>Mitra yang dibantu order</label><select value={selectedPartner.id} onChange={(event) => { setSelectedPartnerId(event.target.value); setCart({}); setCartNotes({}); }}>{partners.map((partner) => <option key={partner.id} value={partner.id}>{partner.businessName} • {tierName(state, partner.tierId)}</option>)}</select><small>{selectedPartner.address}</small></div><div className="field"><label>Ringkasan Keranjang</label><button className="btn primary" disabled={items.length === 0} onClick={() => setIsCheckout(true)}>Checkout Order Mitra</button><small>{items.length} produk • {formatIdr(total)}</small></div></div>{message && <div className={`notice ${message.includes('berhasil') ? '' : 'warning'}`}>{message}</div>}</div><div className="catalog marketplace-catalog">{activeProducts.map((product) => {
+    const hasPackageOptions = canChoosePackaging(product);
+    return <div className="product-card marketplace-card" key={product.id} onClick={() => hasPackageOptions && setSelectedProduct(product)} role={hasPackageOptions ? 'button' : undefined}><div className={`product-visual marketplace-visual ${product.imageUrl ? 'has-photo' : ''}`}>{product.imageUrl && <img src={product.imageUrl} alt={product.name} loading="lazy" />}<span className="discount-badge">Admin</span><div className="placeholder-brand">Wahyu Beef</div><div className="placeholder-pack">{hasPackageOptions ? '250g • 500g • 1kg' : product.unit}</div></div><div className="product-info"><h3>{product.name}</h3><span className="product-meta">{product.sku} • {hasPackageOptions ? 'Pilih kemasan' : `MOQ ${product.minimumOrderQty} ${product.unit}`}</span><div className="price-row"><span className="voucher-tag">%</span><div className="price">{product.price ? formatIdr(product.price) : 'Belum ada harga'}</div></div><div className="deal-note">Harga {tierName(state, selectedPartner.tierId)}</div>{hasPackageOptions ? <button className="btn small product-pick-btn" onClick={(event) => { event.stopPropagation(); setSelectedProduct(product); }}>Pilih</button> : <div className="qty-row compact" onClick={(event) => event.stopPropagation()}><input className="input" type="number" min="0" placeholder="Qty" value={cart[cartKey(product.id)] ?? ''} onChange={(e) => setCart({ ...cart, [cartKey(product.id)]: Number(e.target.value) })} /><button className="btn small" onClick={() => addToCart(product)}>Tambah</button></div>}</div></div>;
+  })}</div>{selectedProduct && <PackageModal product={selectedProduct} onClose={() => setSelectedProduct(null)} onAdd={(option, qty) => { addToCart(selectedProduct, qty, option); setSelectedProduct(null); }} />}</div>;
+}
+
+function Products({ state, user, token, refresh }: { state: AppState; user: User; token: string; refresh: () => Promise<void> }) {
+  return <AdminOrderCatalog state={state} user={user} token={token} refresh={refresh} />;
 }
 
 function Partners({ state }: { state: AppState }) { const partners = state.partners.filter(isRealPartner); return <div className="card mobile-card-table"><h3>Data Mitra</h3><p className="footer-note">Menampilkan database mitra asli Wahyu Beef. Mitra dummy sudah dihapus dari data live.</p><div className="table-wrap responsive-table"><table><thead><tr><th>Kode</th><th>Nama Bisnis</th><th>Tier</th><th>Kontak</th><th>Area</th><th>Termin</th><th>Status</th></tr></thead><tbody>{partners.map((p) => <tr key={p.id}><td data-label="Kode">{p.partnerCode}</td><td data-label="Nama Bisnis"><b>{p.businessName}</b><br /><small>{p.address}</small></td><td data-label="Tier">{tierName(state, p.tierId)}</td><td data-label="Kontak">{p.contactPerson}<br /><small>{p.phone}</small></td><td data-label="Area">{p.city}<br /><small>{p.province || '-'}</small></td><td data-label="Termin">{p.paymentTermDays} hari</td><td data-label="Status"><span className={`status ${p.status === 'active' ? 'delivered' : 'cancelled'}`}>{p.status}</span></td></tr>)}</tbody></table></div></div>; }
-function Pricing({ state }: { state: AppState }) { return <div className="card mobile-card-table"><h3>Harga Produk per Tier</h3><div className="table-wrap responsive-table"><table><thead><tr><th>Produk</th>{state.tiers.map((t) => <th key={t.id}>{t.name}</th>)}</tr></thead><tbody>{state.products.map((p) => <tr key={p.id}><td data-label="Produk"><b>{p.name}</b><br /><small>{p.sku}</small></td>{state.tiers.map((t) => <td data-label={t.name} key={t.id}>{formatIdr(state.prices.find((price) => price.productId === p.id && price.tierId === t.id)?.price ?? 0)}</td>)}</tr>)}</tbody></table></div></div>; }
+function Pricing({ state }: { state: AppState }) { const activeProducts = state.products.filter((product) => product.isActive); return <div className="card mobile-card-table"><h3>Harga Produk per Tier</h3><div className="table-wrap responsive-table"><table><thead><tr><th>Produk</th>{state.tiers.map((t) => <th key={t.id}>{t.name}</th>)}</tr></thead><tbody>{activeProducts.map((p) => <tr key={p.id}><td data-label="Produk"><b>{p.name}</b><br /><small>{p.sku}</small></td>{state.tiers.map((t) => <td data-label={t.name} key={t.id}>{formatIdr(state.prices.find((price) => price.productId === p.id && price.tierId === t.id)?.price ?? 0)}</td>)}</tr>)}</tbody></table></div></div>; }
 
 function Documents({ state, user, token, refresh }: { state: AppState; user: User; token: string; refresh: () => Promise<void> }) {
   const [doc, setDoc] = useState<{ invoice: Invoice } | null>(null);
@@ -813,39 +1071,103 @@ function DocumentModal({ state, doc, onClose }: { state: AppState; doc: { invoic
 }
 
 function printDocumentOnly(container: HTMLDivElement | null) {
-  const documentEl = container?.querySelector('.a4-document');
-  if (!documentEl) return window.print();
-  const styles = Array.from(document.querySelectorAll<HTMLLinkElement>('link[rel="stylesheet"]')).map((link) => `<link rel="stylesheet" href="${link.href}">`).join('');
+  const documentEls = Array.from(container?.querySelectorAll('.a4-document') ?? []);
+  if (!documentEls.length) return window.print();
   const printWindow = window.open('', '_blank', 'width=900,height=1200');
   if (!printWindow) return window.print();
-  printWindow.document.write(`<!doctype html><html lang="id"><head><meta charset="UTF-8" /><title>Print Dokumen Wahyu Beef</title>${styles}<style>
-    @page { size: A4 portrait; margin: 0; }
-    html, body { width: 210mm; min-height: 297mm; margin: 0; padding: 0; background: #fff; }
+  const printableDocuments = documentEls.map((documentEl) => documentEl.outerHTML).join('');
+  printWindow.document.write(`<!doctype html><html lang="id"><head><meta charset="UTF-8" /><title>Print Dokumen Wahyu Beef</title><style>
+    @page { size: A4 portrait; margin: 8mm; }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; padding: 0; background: #fff; color: #1f2933; font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; font-size: 10px; }
     body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-    .print-export-page { width: 210mm; min-height: 297mm; margin: 0; padding: 0; background: #fff; }
-    .print-export-page .a4-document { box-sizing: border-box !important; width: 210mm !important; height: 297mm !important; min-height: 0 !important; max-height: 297mm !important; max-width: none !important; margin: 0 !important; padding: 12mm !important; box-shadow: none !important; border: 0 !important; overflow: hidden !important; break-before: avoid !important; break-after: avoid !important; page-break-before: avoid !important; page-break-after: avoid !important; page-break-inside: avoid !important; }
-    .print-export-page .doc-brand-head { padding-bottom: 10px !important; margin-bottom: 12px !important; }
-    .print-export-page .doc-brand img { width: 46px !important; height: 46px !important; }
-    .print-export-page .doc-brand b { font-size: 18px !important; }
-    .print-export-page .doc-title h2 { font-size: 24px !important; }
-    .print-export-page .doc-meta-grid { gap: 12px !important; margin-bottom: 12px !important; }
-    .print-export-page .doc-meta-grid > div { padding: 9px !important; }
-    .print-export-page .doc-total-box { margin-top: 12px !important; }
-    .print-export-page .doc-total-box > div { padding: 7px 10px !important; }
-    .print-export-page .doc-footer { margin-top: 12px !important; padding-top: 8px !important; }
-    @media print { body * { visibility: visible !important; } }
-  </style></head><body><main class="print-export-page">${documentEl.outerHTML}</main><script>window.onload=function(){setTimeout(function(){window.focus();window.print();},250)};<\/script></body></html>`);
+    .print-export-page { width: 194mm; margin: 0 auto; padding: 0; background: #fff; }
+    .a4-document { width: 194mm; min-height: auto; margin: 0 auto; padding: 0; background: #fff; overflow: visible; page-break-after: always; break-after: page; break-inside: avoid; page-break-inside: avoid; }
+    .a4-document:last-child { page-break-after: auto; break-after: auto; }
+    .doc-brand-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 14px; padding-bottom: 6px; border-bottom: 3px solid #8f121b; margin-bottom: 7px; }
+    .doc-brand { display: flex; align-items: center; gap: 10px; }
+    .doc-brand img { width: 40px; height: 40px; object-fit: contain; }
+    .doc-brand b { display: block; font-size: 16px; color: #8f121b; letter-spacing: -.02em; }
+    .doc-brand span, .doc-title b, .doc-meta-grid span, .doc-total-box span, .doc-footer span { color: #7c6754; font-weight: 800; }
+    .doc-title { text-align: right; }
+    .doc-title h2 { margin: 0 0 4px; font-size: 21px; letter-spacing: .08em; color: #2d2118; }
+    .doc-title b { font-size: 12px; }
+    .doc-page-label { margin: -4px 0 8px; text-align: right; color: #7c6754; font-size: 9px; font-weight: 900; }
+    .doc-meta-grid { display: grid; grid-template-columns: 1.25fr .75fr; gap: 8px; margin-bottom: 7px; }
+    .doc-meta-grid > div { border: 1px solid #ead7ae; border-radius: 8px; padding: 6px; background: #fffaf0; display: grid; gap: 2px; align-content: start; }
+    .doc-meta-grid b { font-size: 12px; color: #2d2118; }
+    .doc-meta-grid p { margin: 4px 0 0; line-height: 1.4; color: #4f3c2d; }
+    .table-wrap { margin-top: 6px !important; border: 1px solid #d9c8a7; border-radius: 8px; overflow: visible; }
+    table { width: 100%; border-collapse: collapse; font-size: 9px; table-layout: fixed; }
+    th { background: #8f121b; color: #fff8e8; border: 1px solid #7e1018; padding: 4px 5px; text-align: left; }
+    td { border: 1px solid #ead7ae; padding: 2.5px 4.5px; vertical-align: top; overflow-wrap: anywhere; line-height: 1.12; }
+    small { color: #7c6754; font-size: 8px; font-weight: 700; }
+    .line-item-notes-cell { max-width: 20mm; }
+    .line-item-qc-cell { width: 9mm; min-width: 9mm; }
+    .order-print-document th:nth-child(1), .order-print-document td:nth-child(1) { width: 17%; }
+    .order-print-document th:nth-child(2), .order-print-document td:nth-child(2) { width: 32%; }
+    .order-print-document th:nth-child(3), .order-print-document td:nth-child(3) { width: 10%; }
+    .order-print-document th:nth-child(4), .order-print-document td:nth-child(4) { width: 13%; }
+    .order-print-document th:nth-child(5), .order-print-document td:nth-child(5) { width: 15%; }
+    .order-print-document th:nth-child(6), .order-print-document td:nth-child(6) { width: 8%; }
+    .order-print-document th:nth-child(7), .order-print-document td:nth-child(7) { width: 5%; }
+    .doc-total-box { width: 82mm; margin: 12px 0 0 auto; border: 1px solid #ead7ae; border-radius: 10px; overflow: hidden; }
+    .doc-total-box > div { display: flex; justify-content: space-between; gap: 12px; padding: 7px 10px; border-bottom: 1px solid #ead7ae; background: #fffaf0; }
+    .doc-total-box > div:last-child { border-bottom: 0; }
+    .doc-total-box .grand { background: #8f121b; color: #fff8e8; }
+    .doc-total-box .grand span, .doc-total-box .grand b { color: #fff8e8; }
+    .doc-footer { margin-top: 12px; padding-top: 8px; border-top: 1px solid #ead7ae; display: flex; justify-content: space-between; gap: 12px; color: #7c6754; font-size: 10px; }
+  </style></head><body><main class="print-export-page">${printableDocuments}</main><script>window.onload=function(){setTimeout(function(){window.focus();window.print();},350)};<\/script></body></html>`);
   printWindow.document.close();
 }
 
 function DocumentOrder({ state, order }: { state: AppState; order: Order }) {
   const partner = state.partners.find((item) => item.id === order.partnerId);
-  return <div className="document a4-document order-print-document"><DocHeader title="ORDER" number={order.orderNumber} /><div className="doc-meta-grid"><div><span>Order Untuk</span><b>{partner?.businessName ?? partnerName(state, order.partnerId)}</b><p>{order.shippingAddress}<br />PIC: {partner?.contactPerson ?? '-'} • {partner?.phone ?? '-'}</p></div><div><span>Tanggal Order</span><b>{new Date(order.orderDate).toLocaleString('id-ID')}</b><span>Tanggal Kirim</span><b>{order.requestedDeliveryDate ? new Date(order.requestedDeliveryDate).toLocaleDateString('id-ID') : '-'}</b><span>Status</span><b>{statusLabels[order.status]}</b><span>No Resi</span><b>{order.trackingNumber ?? '-'}</b></div></div><LineItems order={order} showNotesColumn /><div className="doc-total-box"><div><span>Subtotal Produk</span><b>{formatIdr(order.subtotal)}</b></div><div><span>Ongkir</span><b>{formatIdr(order.shippingCost ?? 0)}</b></div><div><span>Packing</span><b>{packingSummary(order)} • {formatIdr(order.packingFee ?? 0)}</b></div><div className="grand"><span>Total Order</span><b>{formatIdr(order.grandTotal)}</b></div></div><DocFooter /></div>;
+  const pages = chunkOrderItemsForPrint(order.items);
+  const totalPages = pages.length;
+  return <>{pages.map((items, index) => {
+    const isFirstPage = index === 0;
+    const isLastPage = index === totalPages - 1;
+    return <div className="document a4-document order-print-document" key={`${order.id}-print-page-${index}`}>
+      <DocHeader title="ORDER" number={order.orderNumber} />
+      <div className="doc-page-label">Halaman {index + 1} dari {totalPages}{!isFirstPage ? ' • Lanjutan item order' : ''}</div>
+      {isFirstPage && <div className="doc-meta-grid"><div><span>Order Untuk</span><b>{partner?.businessName ?? partnerName(state, order.partnerId)}</b><p>{order.shippingAddress}<br />PIC: {partner?.contactPerson ?? '-'} • {partner?.phone ?? '-'}</p></div><div><span>Tanggal Order</span><b>{new Date(order.orderDate).toLocaleString('id-ID')}</b><span>Tanggal Kirim</span><b>{order.requestedDeliveryDate ? new Date(order.requestedDeliveryDate).toLocaleDateString('id-ID') : '-'}</b><span>Ekspedisi</span><b>{expeditionLabels[order.expedition ?? defaultExpedition]}</b><span>Status</span><b>{statusLabels[order.status]}</b><span>No Resi</span><b>{order.trackingNumber ?? '-'}</b></div></div>}
+      <LineItems order={order} items={items} showNotesColumn qtyUnitOverride="PCS" />
+      {isLastPage && <><div className="doc-total-box"><div><span>Subtotal Produk</span><b>{formatIdr(order.subtotal)}</b></div><div><span>Ongkir</span><b>{formatIdr(order.shippingCost ?? 0)}</b></div><div><span>Packing</span><b>{packingSummary(order)} • {formatIdr(order.packingFee ?? 0)}</b></div><div className="grand"><span>Total Order</span><b>{formatIdr(order.grandTotal)}</b></div></div><DocFooter /></>}
+    </div>;
+  })}</>;
+}
+function estimatePrintRowUnits(item: Order['items'][number]) {
+  const textLength = `${item.skuSnapshot} ${item.productNameSnapshot} ${item.tierNameSnapshot} ${item.notes ?? ''}`.length;
+  const noteUnits = item.notes ? Math.ceil(item.notes.length / 42) * 0.75 : 0;
+  const nameUnits = Math.max(0, Math.ceil((textLength - 62) / 54) * 0.35);
+  return 1 + noteUnits + nameUnits;
+}
+function chunkOrderItemsForPrint(items: Order['items']) {
+  const pages: Order['items'][] = [];
+  const firstPageUnits = 23.5;
+  const nextPageUnits = 31;
+  let currentPage: Order['items'] = [];
+  let currentUnits = 0;
+  let pageCapacity = firstPageUnits;
+  for (const item of items) {
+    const rowUnits = estimatePrintRowUnits(item);
+    if (currentPage.length && currentUnits + rowUnits > pageCapacity) {
+      pages.push(currentPage);
+      currentPage = [];
+      currentUnits = 0;
+      pageCapacity = nextPageUnits;
+    }
+    currentPage.push(item);
+    currentUnits += rowUnits;
+  }
+  if (currentPage.length) pages.push(currentPage);
+  return pages.length ? pages : [[]];
 }
 function InvoiceDocument({ state, invoice, order }: { state: AppState; invoice: Invoice; order: Order }) { const partner = state.partners.find((item) => item.id === invoice.partnerId); return <div className="document a4-document invoice-document"><DocHeader title="INVOICE" number={invoice.invoiceNumber} /><div className="doc-meta-grid"><div><span>Ditagihkan Kepada</span><b>{partner?.businessName ?? partnerName(state, invoice.partnerId)}</b><p>{partner?.address ?? order.shippingAddress}<br />{partner?.city ?? '-'}{partner?.province ? `, ${partner.province}` : ''}<br />PIC: {partner?.contactPerson ?? '-'} • {partner?.phone ?? '-'}</p></div><div><span>Tanggal Invoice</span><b>{invoice.invoiceDate}</b><span>Jatuh Tempo</span><b>{invoice.dueDate}</b><span>Status</span><b>{invoice.status}</b></div></div><LineItems order={order} /><div className="doc-total-box"><div><span>Subtotal Produk</span><b>{formatIdr(order.subtotal)}</b></div><div><span>Ongkir</span><b>{formatIdr(order.shippingCost ?? 0)}</b></div><div><span>Packing</span><b>{packingSummary(order)} • {formatIdr(order.packingFee ?? 0)}</b></div><div className="grand"><span>Total Invoice</span><b>{formatIdr(invoice.grandTotal)}</b></div><div><span>Dibayar</span><b>{formatIdr(invoice.amountPaid)}</b></div><div><span>Sisa Tagihan</span><b>{formatIdr(invoice.amountDue)}</b></div></div><DocFooter /></div>; }
 function DocHeader({ title, number }: { title: string; number: string }) { return <div className="doc-brand-head"><div className="doc-brand"><img src="/assets/logo-wahyu-beef.png" alt="Wahyu Beef" /><div><b>Wahyu Beef</b><span>Frozen Food & Meat Supplier</span></div></div><div className="doc-title"><h2>{title}</h2><b>{number}</b></div></div>; }
 function DocFooter() { return <div className="doc-footer"><b>Wahyu Beef</b><span>Dokumen dicetak otomatis dari Mitra App Wahyu Beef.</span></div>; }
-function LineItems({ order, showPrice = true, showNotesColumn = false }: { order: Order; showPrice?: boolean; showNotesColumn?: boolean }) { return <div className="table-wrap" style={{ marginTop: 18 }}><table><thead><tr><th>SKU</th><th>Produk</th><th>Qty</th>{showPrice && <><th>Harga</th><th>Total</th></>}{showNotesColumn && <th>Catatan</th>}</tr></thead><tbody>{order.items.map((item) => <tr key={item.id}><td>{item.skuSnapshot}</td><td>{item.productNameSnapshot}<br /><small>{item.tierNameSnapshot}</small>{!showNotesColumn && item.notes && <div className="line-item-note"><b>Catatan:</b> {item.notes}</div>}</td><td>{item.qty} {item.unitSnapshot}</td>{showPrice && <><td>{formatIdr(item.unitPrice)}</td><td>{formatIdr(item.lineTotal)}</td></>}{showNotesColumn && <td className="line-item-notes-cell">{item.notes || '-'}</td>}</tr>)}</tbody></table></div>; }
+function LineItems({ order, items = order.items, showPrice = true, showNotesColumn = false, qtyUnitOverride }: { order: Order; items?: Order['items']; showPrice?: boolean; showNotesColumn?: boolean; qtyUnitOverride?: string }) { return <div className="table-wrap" style={{ marginTop: 18 }}><table><thead><tr><th>SKU</th><th>Produk</th><th>Qty</th>{showPrice && <><th>Harga</th><th>Total</th></>}{showNotesColumn && <><th>Catatan</th><th>QC</th></>}</tr></thead><tbody>{items.map((item) => { const qcQty = item.productId.startsWith('packaging-') ? undefined : item.qcDeliveredQty; return <tr key={item.id}><td>{item.skuSnapshot}</td><td>{item.productNameSnapshot}<br /><small>{item.tierNameSnapshot}</small>{!showNotesColumn && item.notes && <div className="line-item-note"><b>Catatan:</b> {item.notes}</div>}</td><td>{item.qty} {qtyUnitOverride ?? item.unitSnapshot}</td>{showPrice && <><td>{formatIdr(item.unitPrice)}</td><td>{formatIdr(item.lineTotal)}</td></>}{showNotesColumn && <><td className="line-item-notes-cell">{item.notes || '-'}</td><td className="line-item-qc-cell">{qcQty === undefined ? '-' : `${qcQty} ${qtyUnitOverride ?? item.unitSnapshot}`}</td></>}</tr>; })}</tbody></table></div>; }
 
 function Leaderboard({ state }: { state: AppState }) { const rows = (state.leaderboardRows ?? getLeaderboard(state)).slice(0, 10); return <div className="card mobile-card-table"><h3>Papan Peringkat Mitra</h3><div className="table-wrap responsive-table"><table><thead><tr><th>Rank</th><th>Mitra</th><th>Tier</th><th>Delivered GMV</th><th>Total Qty</th><th>Order</th><th>Poin</th></tr></thead><tbody>{rows.map((row) => <tr key={row.partnerId}><td data-label="Rank"><b className={`rank-badge rank-${row.rank <= 3 ? row.rank : 'default'}`}>{rankMedal(row.rank)} #{row.rank}</b></td><td data-label="Mitra">{row.partnerName}</td><td data-label="Tier">{row.tier}</td><td data-label="Delivered GMV">{formatIdr(row.totalOrderValue)}</td><td data-label="Total Qty">{row.totalOrderQty}</td><td data-label="Order">{row.totalOrders}</td><td data-label="Poin"><b>{row.points}</b></td></tr>)}</tbody></table></div><p className="footer-note">Menampilkan 10 besar mitra. Hanya order delivered yang dihitung agar ranking tidak dimanipulasi dari pending/cancelled.</p></div>; }
 function rankMedal(rank: number) { return rank === 1 ? '🥇' : rank === 2 ? '🥈' : rank === 3 ? '🥉' : ''; }

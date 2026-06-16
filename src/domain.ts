@@ -4,6 +4,7 @@ export type PartnerStatus = 'active' | 'suspended' | 'inactive';
 export type OrderStatus = 'pending' | 'confirmed' | 'in_production' | 'ready_to_ship' | 'shipped' | 'delivered' | 'cancelled';
 export type InvoiceStatus = 'draft' | 'issued' | 'partial' | 'paid' | 'void';
 export type DeliveryNoteStatus = 'draft' | 'issued' | 'received' | 'void';
+export type ExpeditionType = 'truk_thermal_wahyu_beef' | 'kib' | 'kai_logistik' | 'paxel' | 'ekspendingin' | 'esboks';
 export type AccountingEventType =
   | 'ORDER_CREATED'
   | 'INVOICE_ISSUED'
@@ -71,6 +72,7 @@ export interface Product {
   imageUrl?: string;
   minimumOrderQty: number;
   baseCost?: number;
+  retailPrice?: number;
   isActive: boolean;
 }
 
@@ -98,6 +100,7 @@ export interface OrderItem {
   discountAmount: number;
   lineTotal: number;
   notes?: string;
+  qcDeliveredQty?: number;
 }
 
 export interface Order {
@@ -112,6 +115,7 @@ export interface Order {
   grandTotal: number;
   shippingAddress: string;
   requestedDeliveryDate?: string;
+  expedition?: ExpeditionType;
   shippingCost?: number;
   packingFee?: number;
   packingType?: 'none' | 'small_styrofoam' | 'medium_styrofoam' | 'large_styrofoam';
@@ -212,24 +216,38 @@ export interface CartItem {
   notes?: string;
 }
 
+export const expeditionLabels: Record<ExpeditionType, string> = {
+  truk_thermal_wahyu_beef: 'Truk Thermal Wahyu Beef',
+  kib: 'KIB',
+  kai_logistik: 'KAI Logistik',
+  paxel: 'Paxel',
+  ekspendingin: 'Ekspendingin',
+  esboks: 'Esboks',
+};
+
+export const defaultExpedition: ExpeditionType = 'kib';
+export const thermalTruckExpedition: ExpeditionType = 'truk_thermal_wahyu_beef';
+
 export const statusLabels: Record<OrderStatus, string> = {
-  pending: 'Menunggu konfirmasi',
+  pending: 'Menunggu Konfirmasi',
   confirmed: 'Dikonfirmasi',
-  in_production: 'Diproduksi / dipacking',
-  ready_to_ship: 'Siap kirim',
+  in_production: 'Proses Produksi',
+  ready_to_ship: 'Proses QC',
   shipped: 'Dikirim',
   delivered: 'Diterima',
   cancelled: 'Dibatalkan',
 };
 
+export const orderWorkflowStatuses: OrderStatus[] = ['pending', 'confirmed', 'in_production', 'ready_to_ship', 'shipped'];
+
 export const validTransitions: Record<OrderStatus, OrderStatus[]> = {
-  pending: ['confirmed', 'cancelled'],
-  confirmed: ['in_production', 'cancelled'],
-  in_production: ['ready_to_ship', 'cancelled'],
-  ready_to_ship: ['shipped'],
-  shipped: ['delivered'],
-  delivered: [],
-  cancelled: [],
+  pending: ['confirmed', 'in_production', 'ready_to_ship', 'shipped', 'cancelled'],
+  confirmed: ['pending', 'in_production', 'ready_to_ship', 'shipped', 'cancelled'],
+  in_production: ['pending', 'confirmed', 'ready_to_ship', 'shipped', 'cancelled'],
+  ready_to_ship: ['pending', 'confirmed', 'in_production', 'shipped', 'cancelled'],
+  shipped: ['pending', 'confirmed', 'in_production', 'ready_to_ship', 'delivered'],
+  delivered: ['pending', 'confirmed', 'in_production', 'ready_to_ship', 'shipped'],
+  cancelled: ['pending', 'confirmed', 'in_production', 'ready_to_ship', 'shipped'],
 };
 
 export function canTransition(from: OrderStatus, to: OrderStatus) {

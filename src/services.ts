@@ -1,6 +1,6 @@
 import type { AppState } from './seed.ts';
-import { canTransition, todayIso } from './domain.ts';
-import type { AccountingEvent, CartItem, Invoice, Order, OrderItem, OrderStatus, Payment, Product, User } from './domain.ts';
+import { canTransition, defaultExpedition, thermalTruckExpedition, todayIso } from './domain.ts';
+import type { AccountingEvent, CartItem, ExpeditionType, Invoice, Order, OrderItem, OrderStatus, Payment, Product, User } from './domain.ts';
 
 export function findPartnerForUser(state: AppState, user: User) {
   return state.partners.find((partner) => partner.userId === user.id);
@@ -94,7 +94,7 @@ function styrofoamOrderItems(plan: StyrofoamPlanItem[], startIndex: number): Ord
   }));
 }
 
-export function calculateOrder(state: AppState, partnerId: string, cartItems: CartItem[]) {
+export function calculateOrder(state: AppState, partnerId: string, cartItems: CartItem[], expedition: ExpeditionType = defaultExpedition) {
   if (cartItems.length === 0) throw new Error('Keranjang kosong');
   const partner = state.partners.find((item) => item.id === partnerId);
   if (!partner) throw new Error('Mitra tidak ditemukan');
@@ -133,13 +133,14 @@ export function calculateOrder(state: AppState, partnerId: string, cartItems: Ca
 
   const subtotal = items.reduce((sum, item) => sum + item.lineTotal, 0);
   const totalWeightGram = calculateCartWeightGram(state.products, cartItems);
-  const styrofoamPlan = calculateStyrofoamPlan(totalWeightGram);
+  const shouldUseStyrofoam = expedition !== thermalTruckExpedition;
+  const styrofoamPlan = shouldUseStyrofoam ? calculateStyrofoamPlan(totalWeightGram) : [];
   const packingFee = styrofoamPlan.reduce((sum, item) => sum + item.lineTotal, 0);
   return { items: [...items, ...styrofoamOrderItems(styrofoamPlan, items.length)], subtotal, discountTotal: 0, taxTotal: 0, packingFee, totalWeightGram, styrofoamPlan, grandTotal: subtotal + packingFee };
 }
 
-export function createOrder(state: AppState, actor: User, partnerId: string, cartItems: CartItem[], shippingAddress: string, notes?: string, requestedDeliveryDate?: string): Order {
-  const calculated = calculateOrder(state, partnerId, cartItems);
+export function createOrder(state: AppState, actor: User, partnerId: string, cartItems: CartItem[], shippingAddress: string, notes?: string, requestedDeliveryDate?: string, expedition: ExpeditionType = defaultExpedition): Order {
+  const calculated = calculateOrder(state, partnerId, cartItems, expedition);
   const sequence = state.orders.length + 1;
   const id = `ord-${Date.now()}`;
   const orderNumber = `ORD-${new Date().toISOString().slice(0, 7).replace('-', '')}-${String(sequence).padStart(4, '0')}`;
@@ -155,6 +156,7 @@ export function createOrder(state: AppState, actor: User, partnerId: string, car
     taxTotal: calculated.taxTotal,
     grandTotal: calculated.grandTotal,
     shippingAddress,
+    expedition,
     packingFee: calculated.packingFee,
     packingType: calculated.styrofoamPlan.length === 1 ? `${calculated.styrofoamPlan[0].size}_styrofoam` as Order['packingType'] : calculated.styrofoamPlan.length ? 'large_styrofoam' : 'none',
     packingQuantity: calculated.styrofoamPlan.reduce((sum, item) => sum + item.qty, 0),
@@ -167,6 +169,57 @@ export function createOrder(state: AppState, actor: User, partnerId: string, car
   state.statusHistories.unshift({ id: `hist-${Date.now()}`, orderId: id, toStatus: 'pending', note: 'Order dibuat mitra', changedBy: actor.id, changedAt: new Date().toISOString() });
   audit(state, actor.id, 'ORDER_CREATED', 'order', id, undefined, order);
   accounting(state, 'ORDER_CREATED', 'order', id, partnerId, order.grandTotal, { revenueRecognized: false, note: 'Order created belum revenue' }, actor.id);
+  return order;
+}
+
+export function revisePartnerOrder(state: AppState, actor: User, orderId: string, input: { cartItems: CartItem[]; requestedDeliveryDate?: string; expedition?: ExpeditionType; notes?: string }) {
+  if (actor.role !== 'partner') throw new Error('Hanya akun mitra yang bisa mengedit pesanan lewat menu Order Saya');
+  const partner = findPartnerForUser(state, actor);
+  if (!partner) throw new Error('Profil mitra tidak ditemukan');
+  const order = state.orders.find((item) => item.id === orderId);
+  if (!order) throw new Error('Order tidak ditemukan');
+  if (order.partnerId !== partner.id) throw new Error('Order ini bukan milik mitra yang sedang login');
+  if (!['pending', 'confirmed'].includes(order.status)) throw new Error('Order hanya bisa diedit sebelum diproses / dispatching');
+  if (!input.cartItems.length) throw new Error('Pesanan wajib memiliki minimal 1 item produk');
+
+  const oldValue = {
+    subtotal: order.subtotal,
+    grandTotal: order.grandTotal,
+    packingFee: order.packingFee,
+    packingType: order.packingType,
+    packingQuantity: order.packingQuantity,
+    requestedDeliveryDate: order.requestedDeliveryDate,
+    expedition: order.expedition,
+    itemCount: order.items.length,
+  };
+  const expedition = input.expedition ?? order.expedition ?? defaultExpedition;
+  const calculated = calculateOrder(state, partner.id, input.cartItems, expedition);
+  const revisedItems = calculated.items.map((item, index) => ({ ...item, id: `${order.id}-item-${index + 1}`, orderId: order.id }));
+
+  order.subtotal = calculated.subtotal;
+  order.discountTotal = calculated.discountTotal;
+  order.taxTotal = calculated.taxTotal;
+  order.grandTotal = calculated.grandTotal + (order.shippingCost ?? 0);
+  order.packingFee = calculated.packingFee;
+  order.packingType = calculated.styrofoamPlan.length === 1 ? `${calculated.styrofoamPlan[0].size}_styrofoam` as Order['packingType'] : calculated.styrofoamPlan.length ? 'large_styrofoam' : 'none';
+  order.packingQuantity = calculated.styrofoamPlan.reduce((sum, item) => sum + item.qty, 0);
+  order.requestedDeliveryDate = input.requestedDeliveryDate || undefined;
+  order.expedition = expedition;
+  order.notes = input.notes?.trim() || order.notes;
+  order.items = revisedItems;
+
+  const newValue = {
+    subtotal: order.subtotal,
+    grandTotal: order.grandTotal,
+    packingFee: order.packingFee,
+    packingType: order.packingType,
+    packingQuantity: order.packingQuantity,
+    requestedDeliveryDate: order.requestedDeliveryDate,
+    expedition: order.expedition,
+    itemCount: order.items.length,
+  };
+  state.statusHistories.unshift({ id: `hist-revise-${Date.now()}`, orderId, fromStatus: order.status, toStatus: order.status, note: 'Order direvisi mitra', changedBy: actor.id, changedAt: new Date().toISOString() });
+  audit(state, actor.id, 'ORDER_REVISED_BY_PARTNER', 'order', orderId, oldValue, newValue);
   return order;
 }
 
@@ -191,6 +244,52 @@ export function updateOrderShipping(state: AppState, actor: User, orderId: strin
   audit(state, actor.id, 'ORDER_SHIPPING_UPDATED', 'order', orderId, oldValue, { shippingCost: order.shippingCost, packingFee: order.packingFee, packingType: order.packingType, packingQuantity: order.packingQuantity, trackingNumber: order.trackingNumber, trackingReceiptUrl: order.trackingReceiptUrl, grandTotal: order.grandTotal });
   return order;
 }
+
+
+export function updateOrderQc(state: AppState, actor: User, orderId: string, input: { items: { itemId: string; qcDeliveredQty: number }[] }) {
+  const order = state.orders.find((item) => item.id === orderId);
+  if (!order) throw new Error('Order tidak ditemukan');
+  if (order.status !== 'ready_to_ship') throw new Error('Input QC hanya tersedia pada status Proses QC');
+  const oldValue = {
+    subtotal: order.subtotal,
+    packingFee: order.packingFee,
+    packingType: order.packingType,
+    packingQuantity: order.packingQuantity,
+    grandTotal: order.grandTotal,
+    items: order.items.map((item) => ({ id: item.id, qty: item.qty, qcDeliveredQty: item.qcDeliveredQty, lineTotal: item.lineTotal })),
+  };
+  for (const row of input.items) {
+    const item = order.items.find((candidate) => candidate.id === row.itemId);
+    if (!item) continue;
+    const qty = Math.max(0, Math.min(item.qty, Math.round(Number(row.qcDeliveredQty))));
+    if (!Number.isFinite(qty)) throw new Error('Qty hasil QC tidak valid');
+    item.qcDeliveredQty = qty;
+    item.lineTotal = Math.max(0, qty * item.unitPrice - item.discountAmount);
+  }
+  const productItems = order.items.filter((item) => !item.productId.startsWith('packaging-'));
+  const packagingItems = order.items.filter((item) => item.productId.startsWith('packaging-'));
+  order.subtotal = productItems.reduce((sum, item) => sum + item.lineTotal, 0);
+  order.packingFee = packagingItems.reduce((sum, item) => sum + item.lineTotal, 0);
+  order.packingQuantity = packagingItems.reduce((sum, item) => sum + (item.qcDeliveredQty ?? item.qty), 0);
+  const firstActivePackaging = packagingItems.find((item) => (item.qcDeliveredQty ?? item.qty) > 0);
+  order.packingType = !order.packingQuantity ? 'none'
+    : firstActivePackaging?.productId.includes('small') ? 'small_styrofoam'
+      : firstActivePackaging?.productId.includes('medium') ? 'medium_styrofoam'
+        : firstActivePackaging?.productId.includes('large') ? 'large_styrofoam'
+          : order.packingType;
+  order.grandTotal = order.subtotal - order.discountTotal + order.taxTotal + (order.shippingCost ?? 0) + (order.packingFee ?? 0);
+  const newValue = {
+    subtotal: order.subtotal,
+    packingFee: order.packingFee,
+    packingType: order.packingType,
+    packingQuantity: order.packingQuantity,
+    grandTotal: order.grandTotal,
+    items: order.items.map((item) => ({ id: item.id, qty: item.qty, qcDeliveredQty: item.qcDeliveredQty, lineTotal: item.lineTotal })),
+  };
+  audit(state, actor.id, 'ORDER_QC_UPDATED', 'order', orderId, oldValue, newValue);
+  return order;
+}
+
 
 export function updateOrderStatus(state: AppState, actor: User, orderId: string, targetStatus: OrderStatus, note?: string) {
   const order = state.orders.find((item) => item.id === orderId);

@@ -1,5 +1,5 @@
 import type { AppState } from './seed';
-import type { CartItem, OrderStatus, Payment, User } from './domain';
+import type { CartItem, ExpeditionType, OrderStatus, Payment, User } from './domain';
 
 export interface Session {
   token: string;
@@ -52,14 +52,20 @@ export const api = {
   updatePassword(token: string, input: { currentPassword: string; newPassword: string; confirmPassword: string }) {
     return request<{ user: User }>('/profile/password', { method: 'PATCH', body: JSON.stringify(input) }, token);
   },
-  createOrder(token: string, input: { partnerId?: string; shippingAddress: string; requestedDeliveryDate?: string; notes?: string; items: CartItem[] }) {
+  createOrder(token: string, input: { partnerId?: string; shippingAddress: string; requestedDeliveryDate?: string; expedition?: ExpeditionType; notes?: string; items: CartItem[] }) {
     return request('/orders', { method: 'POST', body: JSON.stringify(input) }, token);
   },
   updateOrderStatus(token: string, orderId: string, status: OrderStatus, note?: string) {
     return request(`/orders/${orderId}/status`, { method: 'PATCH', body: JSON.stringify({ status, note }) }, token);
   },
+  updateOrderQc(token: string, orderId: string, input: { items: { itemId: string; qcDeliveredQty: number }[] }) {
+    return request(`/orders/${orderId}/qc`, { method: 'PATCH', body: JSON.stringify(input) }, token);
+  },
   cancelOrder(token: string, orderId: string, note?: string) {
     return request(`/orders/${orderId}/cancel`, { method: 'PATCH', body: JSON.stringify({ note }) }, token);
+  },
+  reviseOrder(token: string, orderId: string, input: { requestedDeliveryDate?: string; expedition?: ExpeditionType; notes?: string; items: CartItem[] }) {
+    return request(`/orders/${orderId}/revise`, { method: 'PATCH', body: JSON.stringify(input) }, token);
   },
   updateOrderShipping(token: string, orderId: string, input: { shippingCost?: number; packingFee?: number; packingType?: 'none' | 'small_styrofoam' | 'medium_styrofoam' | 'large_styrofoam'; packingQuantity?: number; trackingNumber?: string; trackingReceiptUrl?: string }) {
     return request(`/orders/${orderId}/shipping`, { method: 'PATCH', body: JSON.stringify(input) }, token);

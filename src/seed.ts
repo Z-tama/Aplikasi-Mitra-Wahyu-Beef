@@ -131,7 +131,10 @@ export const productCatalogImageUrlById: Record<string, string> = {
   "prd-prs-033": "https://drive.google.com/thumbnail?id=1UbIswv2uM4xm3Ez4S2K488wYvxiHq-XS&sz=w1000",
   "prd-prs-034": "https://drive.google.com/thumbnail?id=1a7W18O22nj7uac2czu3uL6_lB577PzOv&sz=w1000",
   "prd-prs-035": "https://drive.google.com/thumbnail?id=1yfjY3W27ffztpzx6Ez1tj7UsAfbCqbR1&sz=w1000",
-  "prd-prs-036": "https://drive.google.com/thumbnail?id=1xV-Tp7sFFIEDvqZLG9EaN4JSnQCGzWOG&sz=w1000"
+  "prd-prs-036": "https://drive.google.com/thumbnail?id=1xV-Tp7sFFIEDvqZLG9EaN4JSnQCGzWOG&sz=w1000",
+  "prd-prs-037": "/assets/products/custom/authentic-rendang.png",
+  "prd-sfd-001": "/assets/products/custom/dori-fillet.png",
+  "prd-sfd-002": "/assets/products/custom/salmon-fillet.png"
 };
 
 export function syncProductCatalogImages<T extends { products: Product[] }>(state: T): T {
@@ -139,6 +142,34 @@ export function syncProductCatalogImages<T extends { products: Product[] }>(stat
     const imageUrl = productCatalogImageUrlById[product.id];
     return imageUrl ? { ...product, imageUrl } : product;
   });
+  return state;
+}
+
+
+export function syncProductCatalogPrices<T extends { products: Product[]; prices: ProductTierPrice[] }>(state: T): T {
+  const latest = createSeedState();
+  const latestProducts = new Map(latest.products.map((product) => [product.id, product]));
+  const latestPrices = new Map(latest.prices.map((price) => [`${price.productId}:${price.tierId}`, price]));
+
+  state.products = state.products.map((product) => {
+    const latestProduct = latestProducts.get(product.id);
+    if (!latestProduct) return product;
+    return {
+      ...product,
+      baseCost: latestProduct.baseCost,
+      retailPrice: latestProduct.retailPrice,
+    };
+  });
+
+  const existingKeys = new Set(state.prices.map((price) => `${price.productId}:${price.tierId}`));
+  state.prices = state.prices.map((price) => {
+    const latestPrice = latestPrices.get(`${price.productId}:${price.tierId}`);
+    return latestPrice ? { ...price, price: latestPrice.price, effectiveFrom: latestPrice.effectiveFrom, isActive: latestPrice.isActive } : price;
+  });
+  for (const latestPrice of latest.prices) {
+    const key = `${latestPrice.productId}:${latestPrice.tierId}`;
+    if (!existingKeys.has(key)) state.prices.push(latestPrice);
+  }
   return state;
 }
 
@@ -180,92 +211,93 @@ export function createSeedState(): AppState {
   ];
 
   const wahyuProducts = [
-    { id: 'prd-dgs-001', sku: 'WB-DGS-001', name: 'Saikoro', categoryId: 'cat-daging-sapi', size: '1 KG', distributor: 155000, agen: 175000, reseller: 192000 },
-    { id: 'prd-dgs-002', sku: 'WB-DGS-002', name: 'Tenderloin / Has Dalam', categoryId: 'cat-daging-sapi', size: '1 KG', distributor: 150000, agen: 170000, reseller: 186000 },
-    { id: 'prd-dgs-003', sku: 'WB-DGS-003', name: 'Sirloin / Has Luar', categoryId: 'cat-daging-sapi', size: '1 KG', distributor: 140000, agen: 158000, reseller: 174000 },
-    { id: 'prd-dgs-004', sku: 'WB-DGS-004', name: 'Rib Eye / Cube Roll', categoryId: 'cat-daging-sapi', size: '1 KG', distributor: 140000, agen: 158000, reseller: 174000 },
-    { id: 'prd-dgs-005', sku: 'WB-DGS-005', name: 'Rendang Cut', categoryId: 'cat-daging-sapi', size: '1 KG', distributor: 135000, agen: 152500, reseller: 167500 },
-    { id: 'prd-dgs-006', sku: 'WB-DGS-006', name: 'Dice Cut / Potong Dadu', categoryId: 'cat-daging-sapi', size: '1 KG', distributor: 130000, agen: 147000, reseller: 161000 },
-    { id: 'prd-dgs-007', sku: 'WB-DGS-007', name: 'Beef Slice (Non Fat)', categoryId: 'cat-daging-sapi', size: '1 KG', distributor: 135000, agen: 152500, reseller: 167500 },
-    { id: 'prd-dgs-008', sku: 'WB-DGS-008', name: 'Beef Slice (Fat)', categoryId: 'cat-daging-sapi', size: '1 KG', distributor: 130000, agen: 147000, reseller: 161000 },
-    { id: 'prd-dgs-009', sku: 'WB-DGS-009', name: 'Eye Round / Gandik', categoryId: 'cat-daging-sapi', size: '1 KG', distributor: 130000, agen: 147000, reseller: 161000 },
-    { id: 'prd-dgs-010', sku: 'WB-DGS-010', name: 'Knuckle / Kelapa', categoryId: 'cat-daging-sapi', size: '1 KG', distributor: 130000, agen: 147000, reseller: 161000 },
-    { id: 'prd-dgs-011', sku: 'WB-DGS-011', name: 'Blade / Punuk', categoryId: 'cat-daging-sapi', size: '1 KG', distributor: 130000, agen: 147000, reseller: 161000 },
-    { id: 'prd-dgs-012', sku: 'WB-DGS-012', name: 'Topside / Paha', categoryId: 'cat-daging-sapi', size: '1 KG', distributor: 130000, agen: 147000, reseller: 161000 },
-    { id: 'prd-dgs-013', sku: 'WB-DGS-013', name: 'Chuck / Daging Leher', categoryId: 'cat-daging-sapi', size: '1 KG', distributor: 130000, agen: 147000, reseller: 161000 },
-    { id: 'prd-dgs-014', sku: 'WB-DGS-014', name: 'Sengkel / Kisi', categoryId: 'cat-daging-sapi', size: '1 KG', distributor: 130000, agen: 147000, reseller: 161000 },
-    { id: 'prd-dgs-015', sku: 'WB-DGS-015', name: 'Sandung Lamur', categoryId: 'cat-daging-sapi', size: '1 KG', distributor: 125000, agen: 141000, reseller: 155000 },
-    { id: 'prd-dgs-016', sku: 'WB-DGS-016', name: 'Daging Giling (Non Fat)', categoryId: 'cat-daging-sapi', size: '1 KG', distributor: 130000, agen: 147000, reseller: 161000 },
-    { id: 'prd-dgs-017', sku: 'WB-DGS-017', name: 'Daging Giling (Fat 15%)', categoryId: 'cat-daging-sapi', size: '1 KG', distributor: 115000, agen: 130000, reseller: 142500 },
+    { id: 'prd-dgs-001', sku: 'WB-DGS-001', name: 'Saikoro', categoryId: 'cat-daging-sapi', size: '1 KG', distributor: 160000, agen: 181000, reseller: 198500, retail: 214500 },
+    { id: 'prd-dgs-002', sku: 'WB-DGS-002', name: 'Tenderloin / Has Dalam', categoryId: 'cat-daging-sapi', size: '1 KG', distributor: 155000, agen: 175500, reseller: 192500, retail: 208000 },
+    { id: 'prd-dgs-003', sku: 'WB-DGS-003', name: 'Sirloin / Has Luar', categoryId: 'cat-daging-sapi', size: '1 KG', distributor: 145000, agen: 164000, reseller: 180000, retail: 194500 },
+    { id: 'prd-dgs-004', sku: 'WB-DGS-004', name: 'Rib Eye / Cube Roll', categoryId: 'cat-daging-sapi', size: '1 KG', distributor: 145000, agen: 164000, reseller: 180000, retail: 194500 },
+    { id: 'prd-dgs-005', sku: 'WB-DGS-005', name: 'Rendang Cut', categoryId: 'cat-daging-sapi', size: '1 KG', distributor: 140000, agen: 158500, reseller: 174000, retail: 188000 },
+    { id: 'prd-dgs-006', sku: 'WB-DGS-006', name: 'Dice Cut / Potong Dadu', categoryId: 'cat-daging-sapi', size: '1 KG', distributor: 135000, agen: 153000, reseller: 167500, retail: 181000 },
+    { id: 'prd-dgs-007', sku: 'WB-DGS-007', name: 'Beef Slice (Non Fat)', categoryId: 'cat-daging-sapi', size: '1 KG', distributor: 140000, agen: 158500, reseller: 174000, retail: 188000 },
+    { id: 'prd-dgs-008', sku: 'WB-DGS-008', name: 'Beef Slice (Fat)', categoryId: 'cat-daging-sapi', size: '1 KG', distributor: 135000, agen: 153000, reseller: 167500, retail: 181000 },
+    { id: 'prd-dgs-009', sku: 'WB-DGS-009', name: 'Eye Round / Gandik', categoryId: 'cat-daging-sapi', size: '1 KG', distributor: 135000, agen: 153000, reseller: 167500, retail: 181000 },
+    { id: 'prd-dgs-010', sku: 'WB-DGS-010', name: 'Knuckle / Kelapa', categoryId: 'cat-daging-sapi', size: '1 KG', distributor: 135000, agen: 153000, reseller: 167500, retail: 181000 },
+    { id: 'prd-dgs-011', sku: 'WB-DGS-011', name: 'Blade / Punuk', categoryId: 'cat-daging-sapi', size: '1 KG', distributor: 135000, agen: 153000, reseller: 167500, retail: 181000 },
+    { id: 'prd-dgs-012', sku: 'WB-DGS-012', name: 'Topside / Paha', categoryId: 'cat-daging-sapi', size: '1 KG', distributor: 135000, agen: 153000, reseller: 167500, retail: 181000 },
+    { id: 'prd-dgs-013', sku: 'WB-DGS-013', name: 'Chuck / Daging Leher', categoryId: 'cat-daging-sapi', size: '1 KG', distributor: 135000, agen: 153000, reseller: 167500, retail: 181000 },
+    { id: 'prd-dgs-014', sku: 'WB-DGS-014', name: 'Sengkel / Kisi', categoryId: 'cat-daging-sapi', size: '1 KG', distributor: 135000, agen: 153000, reseller: 167500, retail: 181000 },
+    { id: 'prd-dgs-015', sku: 'WB-DGS-015', name: 'Sandung Lamur', categoryId: 'cat-daging-sapi', size: '1 KG', distributor: 130000, agen: 147000, reseller: 161500, retail: 174500 },
+    { id: 'prd-dgs-016', sku: 'WB-DGS-016', name: 'Daging Giling (Non Fat)', categoryId: 'cat-daging-sapi', size: '1 KG', distributor: 135000, agen: 153000, reseller: 167500, retail: 181000 },
+    { id: 'prd-dgs-017', sku: 'WB-DGS-017', name: 'Daging Giling (Fat 15%)', categoryId: 'cat-daging-sapi', size: '1 KG', distributor: 120000, agen: 136000, reseller: 149000, retail: 161000 },
     { id: 'prd-dgs-018', sku: 'WB-DGS-018', name: 'Tetelan FQ 45', categoryId: 'cat-daging-sapi', size: '1 KG', distributor: 70000, agen: 86000, reseller: 101500 },
     { id: 'prd-dgs-019', sku: 'WB-DGS-019', name: 'Tetelan FQ 65', categoryId: 'cat-daging-sapi', size: '1 KG', distributor: 85000, agen: 104500, reseller: 119000 },
     { id: 'prd-dgs-020', sku: 'WB-DGS-020', name: 'Tetelan FQ 85', categoryId: 'cat-daging-sapi', size: '1 KG', distributor: 110000, agen: 126500, reseller: 140000 },
-    { id: 'prd-tls-001', sku: 'WB-TLS-001', name: 'Buntut Super / Center Cut', categoryId: 'cat-tulang-sapi', size: '1 KG', distributor: 120000, agen: 135500, reseller: 150000 },
-    { id: 'prd-tls-002', sku: 'WB-TLS-002', name: 'Buntut Reg. / Oxtail', categoryId: 'cat-tulang-sapi', size: '1 KG', distributor: 90000, agen: 108000, reseller: 121500 },
-    { id: 'prd-tls-003', sku: 'WB-TLS-003', name: 'Iga Super / Short Ribs', categoryId: 'cat-tulang-sapi', size: '1 KG', distributor: 100000, agen: 120000, reseller: 135000 },
-    { id: 'prd-tls-004', sku: 'WB-TLS-004', name: 'Iga Reguler / Spare Ribs', categoryId: 'cat-tulang-sapi', size: '1 KG', distributor: 90000, agen: 108000, reseller: 121500 },
-    { id: 'prd-tls-005', sku: 'WB-TLS-005', name: 'Tulang Muda / Cartilage', categoryId: 'cat-tulang-sapi', size: '1 KG', distributor: 90000, agen: 108000, reseller: 121500 },
-    { id: 'prd-tls-006', sku: 'WB-TLS-006', name: 'Tulang Sapi / Beef Bone', categoryId: 'cat-tulang-sapi', size: '1 KG', distributor: 60000, agen: 75000, reseller: 88000 },
-    { id: 'prd-tls-007', sku: 'WB-TLS-007', name: 'Tulang Leher / Neck Bone', categoryId: 'cat-tulang-sapi', size: '1 KG', distributor: 60000, agen: 75000, reseller: 88000 },
-    { id: 'prd-tls-008', sku: 'WB-TLS-008', name: 'Punggung / Back Bone', categoryId: 'cat-tulang-sapi', size: '1 KG', distributor: 60000, agen: 75000, reseller: 88000 },
-    { id: 'prd-tls-009', sku: 'WB-TLS-009', name: 'Rusuk / Back Ribs', categoryId: 'cat-tulang-sapi', size: '1 KG', distributor: 60000, agen: 75000, reseller: 88000 },
-    { id: 'prd-tls-010', sku: 'WB-TLS-010', name: 'Sum-sum / Bone Marrow', categoryId: 'cat-tulang-sapi', size: '1 KG', distributor: 40000, agen: 54500, reseller: 67500 },
-    { id: 'prd-tls-011', sku: 'WB-TLS-011', name: 'Serbuk Daging & Tulang', categoryId: 'cat-tulang-sapi', size: '1 KG', distributor: 35000, agen: 48000, reseller: 60000 },
-    { id: 'prd-jrh-001', sku: 'WB-JRH-001', name: 'Hati Sapi', categoryId: 'cat-jerohan-sapi', size: '1 KG', distributor: 70000, agen: 86000, reseller: 101500 },
-    { id: 'prd-jrh-002', sku: 'WB-JRH-002', name: 'Lidah Sapi', categoryId: 'cat-jerohan-sapi', size: '1 KG', distributor: 115000, agen: 130000, reseller: 142500 },
-    { id: 'prd-jrh-003', sku: 'WB-JRH-003', name: 'Lidah Slice', categoryId: 'cat-jerohan-sapi', size: '1 KG', distributor: 120000, agen: 135500, reseller: 149000 },
-    { id: 'prd-jrh-004', sku: 'WB-JRH-004', name: 'Ginjal Sapi', categoryId: 'cat-jerohan-sapi', size: '1 KG', distributor: 60000, agen: 75000, reseller: 88000 },
-    { id: 'prd-jrh-005', sku: 'WB-JRH-005', name: 'Jantung Sapi', categoryId: 'cat-jerohan-sapi', size: '1 KG', distributor: 65000, agen: 81000, reseller: 95500 },
-    { id: 'prd-jrh-006', sku: 'WB-JRH-006', name: 'Babat Sapi', categoryId: 'cat-jerohan-sapi', size: '1 KG', distributor: 65000, agen: 81000, reseller: 95500 },
-    { id: 'prd-jrh-007', sku: 'WB-JRH-007', name: 'Kikil Sapi', categoryId: 'cat-jerohan-sapi', size: '1 KG', distributor: 65000, agen: 81000, reseller: 95500 },
-    { id: 'prd-jrh-008', sku: 'WB-JRH-008', name: 'Paru Sapi', categoryId: 'cat-jerohan-sapi', size: '1 KG', distributor: 90000, agen: 108000, reseller: 121500 },
-    { id: 'prd-jrh-009', sku: 'WB-JRH-009', name: 'Paru Slice', categoryId: 'cat-jerohan-sapi', size: '1 KG', distributor: 95000, agen: 114000, reseller: 128000 },
-    { id: 'prd-jrh-010', sku: 'WB-JRH-010', name: 'Kulit Sapi', categoryId: 'cat-jerohan-sapi', size: '1 KG', distributor: 55000, agen: 68500, reseller: 80500 },
-    { id: 'prd-jrh-011', sku: 'WB-JRH-011', name: 'Usus Sapi', categoryId: 'cat-jerohan-sapi', size: '1 KG', distributor: 50000, agen: 62500, reseller: 73500 },
-    { id: 'prd-jrh-012', sku: 'WB-JRH-012', name: 'Torpedo Sapi', categoryId: 'cat-jerohan-sapi', size: '1 KG', distributor: 65000, agen: 81000, reseller: 95500 },
-    { id: 'prd-jrh-013', sku: 'WB-JRH-013', name: 'Cingur Sapi', categoryId: 'cat-jerohan-sapi', size: '1 KG', distributor: 75000, agen: 94000, reseller: 110000 },
-    { id: 'prd-jrh-014', sku: 'WB-JRH-014', name: 'Otot / Urat', categoryId: 'cat-jerohan-sapi', size: '1 KG', distributor: 75000, agen: 94000, reseller: 110000 },
-    { id: 'prd-jrh-015', sku: 'WB-JRH-015', name: 'Limpa Sapi', categoryId: 'cat-jerohan-sapi', size: '1 KG', distributor: 65000, agen: 81000, reseller: 95500 },
-    { id: 'prd-jrh-016', sku: 'WB-JRH-016', name: 'Otak Sapi', categoryId: 'cat-jerohan-sapi', size: 'PCS', distributor: 65000, agen: 73000, reseller: 80500 },
-    { id: 'prd-jrh-017', sku: 'WB-JRH-017', name: 'Lemak Sapi', categoryId: 'cat-jerohan-sapi', size: '1 KG', distributor: 50000, agen: 62500, reseller: 73500 },
-    { id: 'prd-prs-001', sku: 'WB-PRS-001', name: 'Ayam Kampung Bakar', categoryId: 'cat-processed-meat', size: '1/2 EKOR', distributor: 45000, agen: 52500, reseller: 57500 },
-    { id: 'prd-prs-002', sku: 'WB-PRS-002', name: 'Ayam Kampung Ungkep', categoryId: 'cat-processed-meat', size: '1/2 EKOR', distributor: 45000, agen: 52500, reseller: 57500 },
-    { id: 'prd-prs-003', sku: 'WB-PRS-003', name: 'Babat Sapi Ungkep', categoryId: 'cat-processed-meat', size: '200 GR', distributor: 30000, agen: 37500, reseller: 42500 },
-    { id: 'prd-prs-004', sku: 'WB-PRS-004', name: 'Bakso Sapi', categoryId: 'cat-processed-meat', size: '250 GR', distributor: 35000, agen: 42500, reseller: 47500 },
-    { id: 'prd-prs-005', sku: 'WB-PRS-005', name: 'Empal Ungkep', categoryId: 'cat-processed-meat', size: '5 POTONG', distributor: 65000, agen: 72500, reseller: 77500 },
-    { id: 'prd-prs-006', sku: 'WB-PRS-006', name: 'Galantine Ayam', categoryId: 'cat-processed-meat', size: '10 POTONG', distributor: 35000, agen: 42500, reseller: 47500 },
-    { id: 'prd-prs-007', sku: 'WB-PRS-007', name: 'Galantine Sapi', categoryId: 'cat-processed-meat', size: '10 POTONG', distributor: 45000, agen: 52500, reseller: 57500 },
-    { id: 'prd-prs-008', sku: 'WB-PRS-008', name: 'Hati Ampela Ungkep', categoryId: 'cat-processed-meat', size: '10 POTONG', distributor: 35000, agen: 42500, reseller: 47500 },
-    { id: 'prd-prs-009', sku: 'WB-PRS-009', name: 'Hati Sapi Ungkep', categoryId: 'cat-processed-meat', size: '250 GR', distributor: 35000, agen: 42500, reseller: 47500 },
-    { id: 'prd-prs-010', sku: 'WB-PRS-010', name: 'Krengsengan Iga', categoryId: 'cat-processed-meat', size: '400 GR', distributor: 75000, agen: 82500, reseller: 87500 },
-    { id: 'prd-prs-011', sku: 'WB-PRS-011', name: 'Lidah Sapi Ungkep', categoryId: 'cat-processed-meat', size: '250 GR', distributor: 55000, agen: 62500, reseller: 67500 },
-    { id: 'prd-prs-012', sku: 'WB-PRS-012', name: 'Paru Sapi Ungkep', categoryId: 'cat-processed-meat', size: '250 GR', distributor: 40000, agen: 47500, reseller: 52500 },
-    { id: 'prd-prs-013', sku: 'WB-PRS-013', name: 'Sate Ayam', categoryId: 'cat-processed-meat', size: '10 TUSUK', distributor: 35000, agen: 42500, reseller: 47500 },
-    { id: 'prd-prs-014', sku: 'WB-PRS-014', name: 'Sate Sapi', categoryId: 'cat-processed-meat', size: '10 TUSUK', distributor: 45000, agen: 52500, reseller: 57500 },
-    { id: 'prd-prs-015', sku: 'WB-PRS-015', name: 'Usus Sapi Ungkep', categoryId: 'cat-processed-meat', size: '250 GR', distributor: 25000, agen: 32500, reseller: 37500 },
-    { id: 'prd-prs-016', sku: 'WB-PRS-016', name: 'Rolade Daging', categoryId: 'cat-processed-meat', size: '12 POTONG', distributor: 50000, agen: 57500, reseller: 62500 },
-    { id: 'prd-prs-017', sku: 'WB-PRS-017', name: 'Bakso Roemahan', categoryId: 'cat-processed-meat', size: '1 PACK', distributor: 35000, agen: 42500, reseller: 47500 },
-    { id: 'prd-prs-018', sku: 'WB-PRS-018', name: 'Marinated Beef Slice', categoryId: 'cat-processed-meat', size: '250 GR', distributor: 40000, agen: 47500, reseller: 52500 },
-    { id: 'prd-prs-019', sku: 'WB-PRS-019', name: 'Marinated Tenderloin', categoryId: 'cat-processed-meat', size: '250 GR', distributor: 45000, agen: 52500, reseller: 57500 },
-    { id: 'prd-prs-020', sku: 'WB-PRS-020', name: 'Abon Sapi Premium', categoryId: 'cat-processed-meat', size: '100 GR', distributor: 40000, agen: 47500, reseller: 52500 },
-    { id: 'prd-prs-021', sku: 'WB-PRS-021', name: 'Abon Ayam Organik', categoryId: 'cat-processed-meat', size: '100 GR', distributor: 38000, agen: 45500, reseller: 53000 },
-    { id: 'prd-prs-022', sku: 'WB-PRS-022', name: 'Wahyu Beef Tallow', categoryId: 'cat-processed-meat', size: '1 JAR', distributor: 45000, agen: 52500, reseller: 60000 },
-    { id: 'prd-prs-023', sku: 'WB-PRS-023', name: 'Bola Rendang', categoryId: 'cat-processed-meat', size: '250 GR', distributor: 50000, agen: 57500, reseller: 62500 },
-    { id: 'prd-prs-024', sku: 'WB-PRS-024', name: 'Dendeng Balado', categoryId: 'cat-processed-meat', size: '100 GR', distributor: 40000, agen: 47500, reseller: 52500 },
-    { id: 'prd-prs-025', sku: 'WB-PRS-025', name: 'Bakso Veggies', categoryId: 'cat-processed-meat', size: '250 GR', distributor: 45000, agen: 52500, reseller: 60000 },
-    { id: 'prd-prs-026', sku: 'WB-PRS-026', name: 'Paket Krawu', categoryId: 'cat-processed-meat', size: '100 GR', distributor: 35000, agen: 42500, reseller: 47500 },
-    { id: 'prd-prs-027', sku: 'WB-PRS-027', name: 'Sego Sambel Otot Ungkep', categoryId: 'cat-processed-meat', size: '100 GR', distributor: 30000, agen: 37500, reseller: 42500 },
-    { id: 'prd-prs-028', sku: 'WB-PRS-028', name: 'Sego Sambel Babat Ungkep', categoryId: 'cat-processed-meat', size: '100 GR', distributor: 25000, agen: 32500, reseller: 37500 },
-    { id: 'prd-prs-029', sku: 'WB-PRS-029', name: 'Sego Sambel Paru Ungkep', categoryId: 'cat-processed-meat', size: '100 GR', distributor: 25000, agen: 32500, reseller: 37500 },
-    { id: 'prd-prs-030', sku: 'WB-PRS-030', name: 'Sego Sambel Usus Ungkep', categoryId: 'cat-processed-meat', size: '100 GR', distributor: 20000, agen: 27500, reseller: 32500 },
-    { id: 'prd-prs-031', sku: 'WB-PRS-031', name: 'Paket Rolade Sapi', categoryId: 'cat-processed-meat', size: '6 POTONG', distributor: 35000, agen: 42500, reseller: 47500 },
-    { id: 'prd-prs-032', sku: 'WB-PRS-032', name: 'Paket Galantine Sapi', categoryId: 'cat-processed-meat', size: '5 POTONG', distributor: 30000, agen: 37500, reseller: 42500 },
-    { id: 'prd-prs-033', sku: 'WB-PRS-033', name: 'Paket Tenderloin Steak', categoryId: 'cat-processed-meat', size: '200 GR', distributor: 50000, agen: 57500, reseller: 62500 },
-    { id: 'prd-prs-034', sku: 'WB-PRS-034', name: 'Marinated Beef Slice Series', categoryId: 'cat-processed-meat', size: '500 GR', distributor: 80000, agen: 95000, reseller: 105000 },
-    { id: 'prd-prs-035', sku: 'WB-PRS-035', name: 'Beef Patty', categoryId: 'cat-processed-meat', size: '200 GR', distributor: 27500, agen: 35000, reseller: 40000 },
-    { id: 'prd-prs-036', sku: 'WB-PRS-036', name: 'Sosis Sapi', categoryId: 'cat-processed-meat', size: '5 POTONG', distributor: 37500, agen: 45000, reseller: 50000 },
-    { id: 'prd-sfd-001', sku: 'WB-SFD-001', name: 'Dori Fillet', categoryId: 'cat-seafood-series', size: '500 GR', distributor: 25000, agen: 32500, reseller: 37500 },
-    { id: 'prd-sfd-002', sku: 'WB-SFD-002', name: 'Salmon Fillet', categoryId: 'cat-seafood-series', size: '200 GR', distributor: 60000, agen: 62500, reseller: 67500 },
+    { id: 'prd-tls-001', sku: 'WB-TLS-001', name: 'Buntut Super / Center Cut', categoryId: 'cat-tulang-sapi', size: '1 KG', distributor: 125000, agen: 141500, reseller: 155000, retail: 167500 },
+    { id: 'prd-tls-002', sku: 'WB-TLS-002', name: 'Buntut Reg. / Oxtail', categoryId: 'cat-tulang-sapi', size: '1 KG', distributor: 95000, agen: 114000, reseller: 128500, retail: 141000 },
+    { id: 'prd-tls-003', sku: 'WB-TLS-003', name: 'Iga Super / Short Ribs', categoryId: 'cat-tulang-sapi', size: '1 KG', distributor: 105000, agen: 126000, reseller: 142000, retail: 155500 },
+    { id: 'prd-tls-004', sku: 'WB-TLS-004', name: 'Iga Reguler / Spare Ribs', categoryId: 'cat-tulang-sapi', size: '1 KG', distributor: 95000, agen: 114000, reseller: 128500, retail: 141000 },
+    { id: 'prd-tls-005', sku: 'WB-TLS-005', name: 'Tulang Muda / Cartilage', categoryId: 'cat-tulang-sapi', size: '1 KG', distributor: 95000, agen: 114000, reseller: 128500, retail: 141000 },
+    { id: 'prd-tls-006', sku: 'WB-TLS-006', name: 'Tulang Sapi / Beef Bone', categoryId: 'cat-tulang-sapi', size: '1 KG', distributor: 65000, agen: 81500, reseller: 96000, retail: 108000 },
+    { id: 'prd-tls-007', sku: 'WB-TLS-007', name: 'Tulang Leher / Neck Bone', categoryId: 'cat-tulang-sapi', size: '1 KG', distributor: 65000, agen: 81500, reseller: 96000, retail: 108000 },
+    { id: 'prd-tls-008', sku: 'WB-TLS-008', name: 'Punggung / Back Bone', categoryId: 'cat-tulang-sapi', size: '1 KG', distributor: 65000, agen: 81500, reseller: 96000, retail: 108000 },
+    { id: 'prd-tls-009', sku: 'WB-TLS-009', name: 'Rusuk / Back Ribs', categoryId: 'cat-tulang-sapi', size: '1 KG', distributor: 65000, agen: 81500, reseller: 96000, retail: 108000 },
+    { id: 'prd-tls-010', sku: 'WB-TLS-010', name: 'Sum-sum / Bone Marrow', categoryId: 'cat-tulang-sapi', size: '1 KG', distributor: 45000, agen: 62000, reseller: 76500, retail: 89500 },
+    { id: 'prd-tls-011', sku: 'WB-TLS-011', name: 'Serbuk Daging & Tulang', categoryId: 'cat-tulang-sapi', size: '1 KG', distributor: 40000, agen: 55000, reseller: 68000, retail: 79500 },
+    { id: 'prd-jrh-001', sku: 'WB-JRH-001', name: 'Hati Sapi', categoryId: 'cat-jerohan-sapi', size: '1 KG', distributor: 75000, agen: 92500, reseller: 109000, retail: 122500 },
+    { id: 'prd-jrh-002', sku: 'WB-JRH-002', name: 'Lidah Sapi', categoryId: 'cat-jerohan-sapi', size: '1 KG', distributor: 120000, agen: 136000, reseller: 149000, retail: 161000 },
+    { id: 'prd-jrh-003', sku: 'WB-JRH-003', name: 'Lidah Slice', categoryId: 'cat-jerohan-sapi', size: '1 KG', distributor: 125000, agen: 141500, reseller: 155000, retail: 167500 },
+    { id: 'prd-jrh-004', sku: 'WB-JRH-004', name: 'Ginjal Sapi', categoryId: 'cat-jerohan-sapi', size: '1 KG', distributor: 65000, agen: 81500, reseller: 96000, retail: 108000 },
+    { id: 'prd-jrh-005', sku: 'WB-JRH-005', name: 'Jantung Sapi', categoryId: 'cat-jerohan-sapi', size: '1 KG', distributor: 75000, agen: 94000, reseller: 110500, retail: 124500 },
+    { id: 'prd-jrh-006', sku: 'WB-JRH-006', name: 'Babat Sapi', categoryId: 'cat-jerohan-sapi', size: '1 KG', distributor: 75000, agen: 94000, reseller: 110500, retail: 124500 },
+    { id: 'prd-jrh-007', sku: 'WB-JRH-007', name: 'Kikil Sapi', categoryId: 'cat-jerohan-sapi', size: '1 KG', distributor: 75000, agen: 94000, reseller: 110500, retail: 124500 },
+    { id: 'prd-jrh-008', sku: 'WB-JRH-008', name: 'Paru Sapi', categoryId: 'cat-jerohan-sapi', size: '1 KG', distributor: 100000, agen: 120000, reseller: 135000, retail: 148000 },
+    { id: 'prd-jrh-009', sku: 'WB-JRH-009', name: 'Paru Slice', categoryId: 'cat-jerohan-sapi', size: '1 KG', distributor: 105000, agen: 126000, reseller: 142000, retail: 155500 },
+    { id: 'prd-jrh-010', sku: 'WB-JRH-010', name: 'Kulit Sapi', categoryId: 'cat-jerohan-sapi', size: '1 KG', distributor: 55000, agen: 69000, reseller: 81000, retail: 91500 },
+    { id: 'prd-jrh-011', sku: 'WB-JRH-011', name: 'Usus Sapi', categoryId: 'cat-jerohan-sapi', size: '1 KG', distributor: 50000, agen: 62500, reseller: 73500, retail: 83000 },
+    { id: 'prd-jrh-012', sku: 'WB-JRH-012', name: 'Torpedo Sapi', categoryId: 'cat-jerohan-sapi', size: '1 KG', distributor: 65000, agen: 81500, reseller: 96000, retail: 108000 },
+    { id: 'prd-jrh-013', sku: 'WB-JRH-013', name: 'Cingur Sapi', categoryId: 'cat-jerohan-sapi', size: '1 KG', distributor: 75000, agen: 94000, reseller: 110500, retail: 124500 },
+    { id: 'prd-jrh-014', sku: 'WB-JRH-014', name: 'Otot / Urat', categoryId: 'cat-jerohan-sapi', size: '1 KG', distributor: 80000, agen: 100000, reseller: 118000, retail: 133000 },
+    { id: 'prd-jrh-015', sku: 'WB-JRH-015', name: 'Limpa Sapi', categoryId: 'cat-jerohan-sapi', size: '1 KG', distributor: 75000, agen: 94000, reseller: 110500, retail: 124500 },
+    { id: 'prd-jrh-016', sku: 'WB-JRH-016', name: 'Otak Sapi', categoryId: 'cat-jerohan-sapi', size: 'PCS', distributor: 70000, agen: 79000, reseller: 86500, retail: 93500 },
+    { id: 'prd-jrh-017', sku: 'WB-JRH-017', name: 'Lemak Sapi', categoryId: 'cat-jerohan-sapi', size: '1 KG', distributor: 55000, agen: 69000, reseller: 81000, retail: 91500 },
+    { id: 'prd-prs-001', sku: 'WB-PRS-001', name: 'Ayam Kampung Bakar', categoryId: 'cat-processed-meat', size: '1/2 EKOR', distributor: 47500, agen: 55000, reseller: 60000, retail: 64500 },
+    { id: 'prd-prs-002', sku: 'WB-PRS-002', name: 'Ayam Kampung Ungkep', categoryId: 'cat-processed-meat', size: '1/2 EKOR', distributor: 47500, agen: 55000, reseller: 60000, retail: 64500 },
+    { id: 'prd-prs-003', sku: 'WB-PRS-003', name: 'Babat Sapi Ungkep', categoryId: 'cat-processed-meat', size: '200 GR', distributor: 32500, agen: 40000, reseller: 45000, retail: 49500 },
+    { id: 'prd-prs-004', sku: 'WB-PRS-004', name: 'Bakso Sapi', categoryId: 'cat-processed-meat', size: '250 GR', distributor: 37500, agen: 45000, reseller: 50000, retail: 54500 },
+    { id: 'prd-prs-005', sku: 'WB-PRS-005', name: 'Empal Ungkep', categoryId: 'cat-processed-meat', size: '5 POTONG', distributor: 67500, agen: 75000, reseller: 80000, retail: 84500 },
+    { id: 'prd-prs-006', sku: 'WB-PRS-006', name: 'Galantine Ayam', categoryId: 'cat-processed-meat', size: '10 POTONG', distributor: 37500, agen: 45000, reseller: 50000, retail: 54500 },
+    { id: 'prd-prs-007', sku: 'WB-PRS-007', name: 'Galantine Sapi', categoryId: 'cat-processed-meat', size: '10 POTONG', distributor: 42500, agen: 50000, reseller: 55000, retail: 59500 },
+    { id: 'prd-prs-008', sku: 'WB-PRS-008', name: 'Hati Ampela Ungkep', categoryId: 'cat-processed-meat', size: '10 POTONG', distributor: 37500, agen: 45000, reseller: 50000, retail: 54500 },
+    { id: 'prd-prs-009', sku: 'WB-PRS-009', name: 'Hati Sapi Ungkep', categoryId: 'cat-processed-meat', size: '250 GR', distributor: 37500, agen: 45000, reseller: 50000, retail: 54500 },
+    { id: 'prd-prs-010', sku: 'WB-PRS-010', name: 'Krengsengan Iga', categoryId: 'cat-processed-meat', size: '400 GR', distributor: 75000, agen: 82500, reseller: 87500, retail: 92000 },
+    { id: 'prd-prs-011', sku: 'WB-PRS-011', name: 'Lidah Sapi Ungkep', categoryId: 'cat-processed-meat', size: '250 GR', distributor: 55000, agen: 62500, reseller: 67500, retail: 72000 },
+    { id: 'prd-prs-012', sku: 'WB-PRS-012', name: 'Paru Sapi Ungkep', categoryId: 'cat-processed-meat', size: '250 GR', distributor: 50000, agen: 57500, reseller: 62500, retail: 67000 },
+    { id: 'prd-prs-013', sku: 'WB-PRS-013', name: 'Sate Ayam', categoryId: 'cat-processed-meat', size: '10 TUSUK', distributor: 35000, agen: 42500, reseller: 47500, retail: 52000 },
+    { id: 'prd-prs-014', sku: 'WB-PRS-014', name: 'Sate Sapi', categoryId: 'cat-processed-meat', size: '10 TUSUK', distributor: 47500, agen: 55000, reseller: 60000, retail: 64500 },
+    { id: 'prd-prs-015', sku: 'WB-PRS-015', name: 'Usus Sapi Ungkep', categoryId: 'cat-processed-meat', size: '250 GR', distributor: 25000, agen: 32500, reseller: 37500, retail: 42000 },
+    { id: 'prd-prs-016', sku: 'WB-PRS-016', name: 'Rolade Daging', categoryId: 'cat-processed-meat', size: '12 POTONG', distributor: 52500, agen: 60000, reseller: 65000, retail: 69500 },
+    { id: 'prd-prs-017', sku: 'WB-PRS-017', name: 'Bakso Roemahan', categoryId: 'cat-processed-meat', size: '1 PACK', distributor: 37500, agen: 45000, reseller: 50000, retail: 54500 },
+    { id: 'prd-prs-018', sku: 'WB-PRS-018', name: 'Marinated Beef Slice', categoryId: 'cat-processed-meat', size: '250 GR', distributor: 42500, agen: 50000, reseller: 55000, retail: 59500 },
+    { id: 'prd-prs-019', sku: 'WB-PRS-019', name: 'Marinated Tenderloin', categoryId: 'cat-processed-meat', size: '250 GR', distributor: 47500, agen: 55000, reseller: 60000, retail: 64500 },
+    { id: 'prd-prs-020', sku: 'WB-PRS-020', name: 'Abon Sapi Premium', categoryId: 'cat-processed-meat', size: '100 GR', distributor: 42500, agen: 50000, reseller: 55000, retail: 59500 },
+    { id: 'prd-prs-021', sku: 'WB-PRS-021', name: 'Abon Ayam Organik', categoryId: 'cat-processed-meat', size: '100 GR', distributor: 40000, agen: 47500, reseller: 52500, retail: 57000 },
+    { id: 'prd-prs-022', sku: 'WB-PRS-022', name: 'Wahyu Beef Tallow', categoryId: 'cat-processed-meat', size: '1 JAR', distributor: 45000, agen: 52500, reseller: 57500, retail: 62000 },
+    { id: 'prd-prs-023', sku: 'WB-PRS-023', name: 'Bola Rendang', categoryId: 'cat-processed-meat', size: '250 GR', distributor: 55000, agen: 62500, reseller: 67500, retail: 72000 },
+    { id: 'prd-prs-024', sku: 'WB-PRS-024', name: 'Dendeng Balado', categoryId: 'cat-processed-meat', size: '100 GR', distributor: 40000, agen: 47500, reseller: 52500, retail: 57000 },
+    { id: 'prd-prs-025', sku: 'WB-PRS-025', name: 'Bakso Veggies', categoryId: 'cat-processed-meat', size: '250 GR', distributor: 45000, agen: 52500, reseller: 57500, retail: 62000 },
+    { id: 'prd-prs-026', sku: 'WB-PRS-026', name: 'Paket Krawu', categoryId: 'cat-processed-meat', size: '100 GR', distributor: 37500, agen: 45000, reseller: 50000, retail: 54500 },
+    { id: 'prd-prs-027', sku: 'WB-PRS-027', name: 'Sego Sambel Otot Ungkep', categoryId: 'cat-processed-meat', size: '100 GR', distributor: 30000, agen: 37500, reseller: 42500, retail: 47000 },
+    { id: 'prd-prs-028', sku: 'WB-PRS-028', name: 'Sego Sambel Babat Ungkep', categoryId: 'cat-processed-meat', size: '100 GR', distributor: 25000, agen: 32500, reseller: 37500, retail: 42000 },
+    { id: 'prd-prs-029', sku: 'WB-PRS-029', name: 'Sego Sambel Paru Ungkep', categoryId: 'cat-processed-meat', size: '100 GR', distributor: 30000, agen: 37500, reseller: 42500, retail: 47000 },
+    { id: 'prd-prs-030', sku: 'WB-PRS-030', name: 'Sego Sambel Usus Ungkep', categoryId: 'cat-processed-meat', size: '100 GR', distributor: 20000, agen: 27500, reseller: 32500, retail: 37000 },
+    { id: 'prd-prs-031', sku: 'WB-PRS-031', name: 'Paket Rolade Sapi', categoryId: 'cat-processed-meat', size: '6 POTONG', distributor: 35000, agen: 42500, reseller: 47500, retail: 52000 },
+    { id: 'prd-prs-032', sku: 'WB-PRS-032', name: 'Paket Galantine Sapi', categoryId: 'cat-processed-meat', size: '5 POTONG', distributor: 35000, agen: 42500, reseller: 47500, retail: 52000 },
+    { id: 'prd-prs-033', sku: 'WB-PRS-033', name: 'Paket Tenderloin Steak', categoryId: 'cat-processed-meat', size: '200 GR', distributor: 55000, agen: 62500, reseller: 67500, retail: 72000 },
+    { id: 'prd-prs-034', sku: 'WB-PRS-034', name: 'Marinated Beef Slice Series', categoryId: 'cat-processed-meat', size: '500 GR', distributor: 80000, agen: 87500, reseller: 92500, retail: 97000 },
+    { id: 'prd-prs-035', sku: 'WB-PRS-035', name: 'Beef Patty', categoryId: 'cat-processed-meat', size: '200 GR', distributor: 30000, agen: 37500, reseller: 42500, retail: 47000 },
+    { id: 'prd-prs-036', sku: 'WB-PRS-036', name: 'Sosis Sapi', categoryId: 'cat-processed-meat', size: '5 POTONG', distributor: 40000, agen: 47500, reseller: 52500, retail: 57000 },
+    { id: 'prd-prs-037', sku: 'WB-PRS-037', name: 'Authentic Rendang', categoryId: 'cat-processed-meat', size: '250 GR', distributor: 65000, agen: 72500, reseller: 77500, retail: 82000 },
+    { id: 'prd-sfd-001', sku: 'WB-SFD-001', name: 'Dori Fillet', categoryId: 'cat-seafood-series', size: '500 GR', distributor: 30000, agen: 37500, reseller: 42500, retail: 47000 },
+    { id: 'prd-sfd-002', sku: 'WB-SFD-002', name: 'Salmon Fillet', categoryId: 'cat-seafood-series', size: '200 GR', distributor: 65000, agen: 72500, reseller: 77500, retail: 82000 },
     { id: 'prd-sfd-003', sku: 'WB-SFD-003', name: 'Tengiri Fillet', categoryId: 'cat-seafood-series', size: '250 GR', distributor: 40000, agen: 42500, reseller: 52500 },
     { id: 'prd-sfd-004', sku: 'WB-SFD-004', name: 'Tengiri Cut Steak', categoryId: 'cat-seafood-series', size: '500 GR', distributor: 75000, agen: 82500, reseller: 87500 },
     { id: 'prd-sfd-005', sku: 'WB-SFD-005', name: 'Tongkol Fillet', categoryId: 'cat-seafood-series', size: '250 GR', distributor: 20000, agen: 27500, reseller: 32500 },
@@ -365,6 +397,7 @@ export function createSeedState(): AppState {
     'Marinated Beef Slice Series': '/assets/products/foto-daging-sapi-16-daging-giling-non-fat-dscf8076.webp',
     'Beef Patty': '/assets/products/beef-patty-dsc02131.webp',
     'Sosis Sapi': '/assets/products/beef-patty-dsc02128.webp',
+    'Authentic Rendang': '/assets/products/custom/authentic-rendang.png',
     'Dori Fillet': '/assets/products/bakso-veggies-story-1.webp',
     'Salmon Fillet': '/assets/products/bakso-veggies-story-1.webp',
     'Tengiri Fillet': '/assets/products/bakso-veggies-story-1.webp',
@@ -380,6 +413,23 @@ export function createSeedState(): AppState {
     'Tuna Fillet': '/assets/products/bakso-veggies-story-1.webp',
   };
 
+  const archivedProductNames = new Set([
+    'Tetelan FQ 45',
+    'Tetelan FQ 65',
+    'Tetelan FQ 85',
+    'Tengiri Fillet',
+    'Tengiri Cut Steak',
+    'Tongkol Fillet',
+    'Kakap Merah Fillet',
+    'Ikan Kembung',
+    'Udang Vaname',
+    'Udang Kupas',
+    'Cumi Hitam',
+    'Cumi Tube Calamary',
+    'Baby Gurita',
+    'Tuna Fillet',
+  ]);
+
   const products: Product[] = wahyuProducts.map((item) => ({
     id: item.id,
     sku: item.sku,
@@ -390,7 +440,8 @@ export function createSeedState(): AppState {
     imageUrl: productCatalogImageUrlById[item.id] ?? productImageByName[item.name],
     minimumOrderQty: 1,
     baseCost: item.distributor,
-    isActive: true,
+    retailPrice: item.retail,
+    isActive: !archivedProductNames.has(item.name),
   }));
 
   const prices: ProductTierPrice[] = wahyuProducts.flatMap((item) => [

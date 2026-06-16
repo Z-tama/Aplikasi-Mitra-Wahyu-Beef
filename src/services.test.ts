@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { canTransition } from './domain.ts';
 import { createSeedState } from './seed.ts';
-import { calculateOrder, calculateStyrofoamPlan, cancelPartnerOrder, createInvoice, createOrder, findPartnerForUser, parseProductWeightGram, updateOrderShipping, updateOrderStatus } from './services.ts';
+import { calculateOrder, calculateStyrofoamPlan, cancelPartnerOrder, createInvoice, createOrder, findPartnerForUser, parseProductWeightGram, revisePartnerOrder, updateOrderQc, updateOrderShipping, updateOrderStatus } from './services.ts';
 
 test('tier pricing uses partner tier and snapshots totals', () => {
   const state = createSeedState();
@@ -29,6 +29,19 @@ test('styrofoam plan uses large boxes first and remainder box by weight range', 
     { size: 'large', qty: 2, lineTotal: 100000 },
     { size: 'medium', qty: 1, lineTotal: 30000 },
   ]);
+});
+
+test('thermal truck expedition skips styrofoam packaging fee and packaging item', () => {
+  const state = createSeedState();
+  const user = state.users.find((item) => item.email === 'agen@mitra.local')!;
+  const partner = findPartnerForUser(state, user)!;
+  const order = createOrder(state, user, partner.id, [{ productId: state.products[1].id, qty: 3 }], partner.address, undefined, undefined, 'truk_thermal_wahyu_beef');
+  assert.equal(order.expedition, 'truk_thermal_wahyu_beef');
+  assert.equal(order.packingFee, 0);
+  assert.equal(order.packingType, 'none');
+  assert.equal(order.packingQuantity, 0);
+  assert.equal(order.grandTotal, order.subtotal);
+  assert.equal(order.items.some((item) => item.productId.startsWith('packaging-styrofoam-')), false);
 });
 
 test('checkout creates pending order, preserves requested delivery date and item notes, and accounting event without recognizing revenue', () => {
@@ -68,6 +81,36 @@ test('partner can cancel own order before it is processed', () => {
   assert.equal(state.accountingEvents[0].eventType, 'ORDER_CANCELLED');
 });
 
+test('partner can revise own pending order without changing order number', () => {
+  const state = createSeedState();
+  const user = state.users.find((item) => item.email === 'agen@mitra.local')!;
+  const partner = findPartnerForUser(state, user)!;
+  const order = createOrder(state, user, partner.id, [{ productId: state.products[1].id, qty: 3 }], partner.address);
+  const originalNumber = order.orderNumber;
+  const revised = revisePartnerOrder(state, user, order.id, {
+    cartItems: [
+      { productId: state.products[1].id, qty: 4, notes: 'Revisi qty' },
+      { productId: state.products[2].id, qty: 2 },
+    ],
+    requestedDeliveryDate: '2026-06-20',
+    expedition: 'esboks',
+  });
+  assert.equal(revised.orderNumber, originalNumber);
+  assert.equal(revised.items.filter((item) => !item.productId.startsWith('packaging-')).length, 2);
+  assert.equal(revised.requestedDeliveryDate, '2026-06-20');
+  assert.equal(revised.expedition, 'esboks');
+  assert.equal(state.auditLogs[0].action, 'ORDER_REVISED_BY_PARTNER');
+});
+
+test('partner cannot revise order that is already being processed', () => {
+  const state = createSeedState();
+  const user = state.users.find((item) => item.email === 'agen@mitra.local')!;
+  const partner = findPartnerForUser(state, user)!;
+  const order = createOrder(state, user, partner.id, [{ productId: state.products[1].id, qty: 3 }], partner.address);
+  order.status = 'in_production';
+  assert.throws(() => revisePartnerOrder(state, user, order.id, { cartItems: [{ productId: state.products[1].id, qty: 4 }] }), /sebelum diproses/);
+});
+
 test('partner cannot cancel order that is already being processed', () => {
   const state = createSeedState();
   const user = state.users.find((item) => item.email === 'agen@mitra.local')!;
@@ -98,6 +141,32 @@ test('admin can add ongkir, packing qty, and tracking receipt before customer tr
   assert.equal(order.trackingReceiptUrl, 'data:image/png;base64,ZmFrZS1yZXNp');
   assert.equal(order.grandTotal, originalSubtotal + 195000);
   assert.equal(state.auditLogs[0].action, 'ORDER_SHIPPING_UPDATED');
+});
+
+
+test('admin QC input adjusts delivered qty, packaging qty, packing fee, and order total', () => {
+  const state = createSeedState();
+  const warehouse = state.users.find((item) => item.email === 'warehouse@frozen.local')!;
+  const user = state.users.find((item) => item.email === 'agen@mitra.local')!;
+  const partner = findPartnerForUser(state, user)!;
+  const order = createOrder(state, user, partner.id, [{ productId: state.products[1].id, qty: 10 }], partner.address);
+  order.status = 'ready_to_ship';
+  const productItem = order.items.find((item) => !item.productId.startsWith('packaging-'))!;
+  const packagingItem = order.items.find((item) => item.productId.startsWith('packaging-'))!;
+  updateOrderQc(state, warehouse, order.id, { items: [
+    { itemId: productItem.id, qcDeliveredQty: 8 },
+    { itemId: packagingItem.id, qcDeliveredQty: 0 },
+  ] });
+  assert.equal(productItem.qcDeliveredQty, 8);
+  assert.equal(productItem.lineTotal, productItem.unitPrice * 8);
+  assert.equal(packagingItem.qcDeliveredQty, 0);
+  assert.equal(packagingItem.lineTotal, 0);
+  assert.equal(order.subtotal, productItem.unitPrice * 8);
+  assert.equal(order.packingFee, 0);
+  assert.equal(order.packingQuantity, 0);
+  assert.equal(order.packingType, 'none');
+  assert.equal(order.grandTotal, order.subtotal + (order.shippingCost ?? 0));
+  assert.equal(state.auditLogs[0].action, 'ORDER_QC_UPDATED');
 });
 
 test('invoice generation mirrors order snapshot total', () => {

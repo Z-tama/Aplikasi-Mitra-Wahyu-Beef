@@ -5,8 +5,8 @@ import { authenticate, hashPassword, httpError, login, requireRole, verifyPasswo
 import { loadState, mutateState } from './persistence.ts';
 import { backupStatus, runBackup, startBackupScheduler } from './backup.ts';
 import { storeUpload } from './storage.ts';
-import { cancelPartnerOrder, createInvoice, createOrder, findPartnerForUser, getLeaderboard, recordPayment, updateOrderShipping, updateOrderStatus } from '../services.ts';
-import type { OrderStatus, Payment } from '../domain.ts';
+import { cancelPartnerOrder, createInvoice, createOrder, findPartnerForUser, getLeaderboard, recordPayment, revisePartnerOrder, updateOrderQc, updateOrderShipping, updateOrderStatus } from '../services.ts';
+import type { ExpeditionType, OrderStatus, Payment } from '../domain.ts';
 
 const PORT = Number(process.env.PORT ?? 3000);
 const DIST_DIR = resolve(process.cwd(), 'dist');
@@ -165,15 +165,26 @@ const handleApi: Handler = async (req, res, url) => {
   }
 
   if (method === 'POST' && path === '/orders') {
-    const body = await readJson<{ partnerId?: string; shippingAddress: string; requestedDeliveryDate?: string; notes?: string; items: { productId: string; qty: number }[] }>(req);
+    const body = await readJson<{ partnerId?: string; shippingAddress: string; requestedDeliveryDate?: string; expedition?: ExpeditionType; notes?: string; items: { productId: string; qty: number }[] }>(req);
     const result = await mutateState((draft) => {
       const actor = authenticate(draft, req.headers.authorization);
       const actorPartner = findPartnerForUser(draft, actor);
       const partnerId = actor.role === 'partner' ? actorPartner?.id : body.partnerId;
       if (!partnerId) throw httpError(400, 'partnerId wajib untuk admin atau user mitra harus punya partner');
-      return createOrder(draft, actor, partnerId, body.items, body.shippingAddress, body.notes, body.requestedDeliveryDate);
+      return createOrder(draft, actor, partnerId, body.items, body.shippingAddress, body.notes, body.requestedDeliveryDate, body.expedition);
     });
     return json(res, 201, result);
+  }
+
+  const qcMatch = path.match(/^\/orders\/([^/]+)\/qc$/);
+  if (method === 'PATCH' && qcMatch) {
+    const body = await readJson<{ items: { itemId: string; qcDeliveredQty: number }[] }>(req);
+    const result = await mutateState((draft) => {
+      const actor = authenticate(draft, req.headers.authorization);
+      requireRole(actor, ['super_admin', 'sales_admin', 'warehouse']);
+      return updateOrderQc(draft, actor, qcMatch[1], body);
+    });
+    return json(res, 200, result);
   }
 
   const statusMatch = path.match(/^\/orders\/([^/]+)\/status$/);

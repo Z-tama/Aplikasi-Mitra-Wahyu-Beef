@@ -1,12 +1,23 @@
-import { createSeedState, syncProductCatalogImages, type AppState } from '../../../src/seed';
-import { cancelPartnerOrder, createInvoice, createOrder, findPartnerForUser, getLeaderboard, recordPayment, updateOrderShipping, updateOrderStatus } from '../../../src/services';
-import type { OrderStatus, Payment, Role, User } from '../../../src/domain';
+import { createSeedState, syncProductCatalogImages, syncProductCatalogPrices, type AppState } from '../../../src/seed';
+import { cancelPartnerOrder, createInvoice, createOrder, findPartnerForUser, getLeaderboard, recordPayment, revisePartnerOrder, updateOrderQc, updateOrderShipping, updateOrderStatus } from '../../../src/services';
+import { expeditionLabels, formatIdr, statusLabels, type ExpeditionType, type Order, type OrderStatus, type Payment, type Role, type User } from '../../../src/domain';
 
 interface Env {
   AUTH_SECRET?: string;
   ALLOW_DEMO_LOGIN?: string;
   DB?: D1Database;
   UPLOADS?: R2Bucket;
+  WAHA_BASE_URL?: string;
+  WAHA_SESSION?: string;
+  WAHA_API_KEY?: string;
+  WAHA_ADMIN_CHAT_ID?: string;
+  WAHA_ADMIN_PHONE?: string;
+  WAHA_AUTH_HEADER?: string;
+  EMAIL_RELAY_URL?: string;
+  EMAIL_RELAY_API_KEY?: string;
+  RESEND_API_KEY?: string;
+  RESEND_FROM?: string;
+  MAIL_TO?: string;
 }
 
 interface R2Bucket {
@@ -155,13 +166,14 @@ export const onRequest = async ({ request, env }: PagesHandlerContext) => {
     }
 
     if (method === 'POST' && path === '/orders') {
-      const body = await readJson<{ partnerId?: string; shippingAddress: string; requestedDeliveryDate?: string; notes?: string; items: { productId: string; qty: number; packageWeightGram?: 250 | 500 | 1000; packageLabel?: string; notes?: string }[] }>(request);
+      const body = await readJson<{ partnerId?: string; shippingAddress: string; requestedDeliveryDate?: string; expedition?: ExpeditionType; notes?: string; items: { productId: string; qty: number; packageWeightGram?: 250 | 500 | 1000; packageLabel?: string; notes?: string }[] }>(request);
       const result = await mutateState((draft) => {
         const actorPartner = findPartnerForUser(draft, actor);
         const partnerId = actor.role === 'partner' ? actorPartner?.id : body.partnerId;
         if (!partnerId) throw httpError(400, 'partnerId wajib untuk admin atau user mitra harus punya partner');
-        return createOrder(draft, actor, partnerId, body.items, body.shippingAddress, body.notes, body.requestedDeliveryDate);
+        return createOrder(draft, actor, partnerId, body.items, body.shippingAddress, body.notes, body.requestedDeliveryDate, body.expedition);
       }, env);
+      await notifyOrderCreated(env, currentState, result, actor);
       return respond(result, 201);
     }
 
@@ -171,6 +183,16 @@ export const onRequest = async ({ request, env }: PagesHandlerContext) => {
       const result = await mutateState((draft) => {
         requireRole(actor, ['super_admin', 'sales_admin', 'warehouse']);
         return updateOrderShipping(draft, actor, shippingMatch[1], body);
+      }, env);
+      return respond(result, 200);
+    }
+
+    const qcMatch = path.match(/^\/orders\/([^/]+)\/qc$/);
+    if (method === 'PATCH' && qcMatch) {
+      const body = await readJson<{ items: { itemId: string; qcDeliveredQty: number }[] }>(request);
+      const result = await mutateState((draft) => {
+        requireRole(actor, ['super_admin', 'sales_admin', 'warehouse']);
+        return updateOrderQc(draft, actor, qcMatch[1], body);
       }, env);
       return respond(result, 200);
     }
@@ -189,6 +211,15 @@ export const onRequest = async ({ request, env }: PagesHandlerContext) => {
     if (method === 'PATCH' && cancelMatch) {
       const body = await readJson<{ note?: string }>(request);
       const result = await mutateState((draft) => cancelPartnerOrder(draft, actor, cancelMatch[1], body.note), env);
+      await notifyOrderCancelled(env, currentState, result, actor);
+      return respond(result, 200);
+    }
+
+    const reviseMatch = path.match(/^\/orders\/([^/]+)\/revise$/);
+    if (method === 'PATCH' && reviseMatch) {
+      const body = await readJson<{ requestedDeliveryDate?: string; expedition?: ExpeditionType; notes?: string; items: { productId: string; qty: number; packageWeightGram?: 250 | 500 | 1000; packageLabel?: string; notes?: string }[] }>(request);
+      const result = await mutateState((draft) => revisePartnerOrder(draft, actor, reviseMatch[1], { cartItems: body.items, requestedDeliveryDate: body.requestedDeliveryDate, expedition: body.expedition, notes: body.notes }), env);
+      await notifyOrderRevised(env, currentState, result, actor);
       return respond(result, 200);
     }
 
@@ -248,6 +279,338 @@ async function mutateState<T>(fn: (draft: AppState) => T | Promise<T>, env?: Env
   return result;
 }
 
+
+async function notifyOrderCreated(env: Env, currentState: AppState, order: Order, actor: User) {
+  const partner = currentState.partners.find((item) => item.id === order.partnerId);
+
+  if (env.WAHA_BASE_URL && env.WAHA_SESSION && env.WAHA_API_KEY) {
+    const target = env.WAHA_ADMIN_CHAT_ID || (env.WAHA_ADMIN_PHONE ? `${normalizePhone(env.WAHA_ADMIN_PHONE)}@c.us` : '');
+    if (target) {
+      const itemCount = order.items.filter((item) => !item.productId.startsWith('packaging-')).reduce((sum, item) => sum + item.qty, 0);
+      const productLines = order.items
+        .filter((item) => !item.productId.startsWith('packaging-'))
+        .slice(0, 6)
+        .map((item) => `• ${item.productNameSnapshot} x ${item.qty} ${item.unitSnapshot} — ${formatIdr(item.lineTotal)}`)
+        .join('\n');
+      const moreItems = order.items.filter((item) => !item.productId.startsWith('packaging-')).length > 6 ? '\n• ...' : '';
+      const text = [
+        '🔔 *Order Mitra Baru*',
+        '',
+        `No Order: *${order.orderNumber}*`,
+        `Mitra: ${partner?.businessName ?? '-'}`,
+        `PIC: ${partner?.contactPerson ?? actor.name}`,
+        `Kontak: ${partner?.phone ?? actor.phone ?? '-'}`,
+        `Status: ${statusLabels[order.status]}`,
+        `Total: *${formatIdr(order.grandTotal)}*`,
+        `Ekspedisi: ${expeditionLabels[order.expedition ?? 'kib']}`,
+        order.requestedDeliveryDate ? `Jadwal kirim: ${order.requestedDeliveryDate}` : '',
+        `Qty item: ${itemCount}`,
+        '',
+        productLines ? `Ringkasan:\n${productLines}${moreItems}` : '',
+        '',
+        'Buka dashboard:',
+        'https://mitra.wahyubeef.id/orders',
+      ].filter(Boolean).join('\n');
+
+      try {
+        const response = await sendWahaText(env, target, text);
+        await recordNotificationAudit(env, actor.id, order.id, 'WAHA_ORDER_CREATED_SENT', { target, status: response.status, ok: response.ok });
+      } catch (error) {
+        await recordNotificationAudit(env, actor.id, order.id, 'WAHA_ORDER_CREATED_FAILED', { target, error: error instanceof Error ? error.message : 'WAHA notification failed' });
+      }
+    }
+  }
+
+  await notifyOrderCreatedEmail(env, currentState, order, actor);
+}
+
+async function notifyOrderCancelled(env: Env, currentState: AppState, order: Order, actor: User) {
+  const partner = currentState.partners.find((item) => item.id === order.partnerId);
+
+  if (env.WAHA_BASE_URL && env.WAHA_SESSION && env.WAHA_API_KEY) {
+    const target = env.WAHA_ADMIN_CHAT_ID || (env.WAHA_ADMIN_PHONE ? `${normalizePhone(env.WAHA_ADMIN_PHONE)}@c.us` : '');
+    if (target) {
+      const productItems = order.items.filter((item) => !item.productId.startsWith('packaging-'));
+      const itemCount = productItems.reduce((sum, item) => sum + item.qty, 0);
+      const productLines = productItems
+        .slice(0, 8)
+        .map((item) => `• ${item.productNameSnapshot} x ${item.qty} ${item.unitSnapshot} — ${formatIdr(item.lineTotal)}`)
+        .join('\n');
+      const moreItems = productItems.length > 8 ? '\n• ...' : '';
+      const text = [
+        '❌ *Order Mitra Dibatalkan*',
+        '',
+        `No Order: *${order.orderNumber}*`,
+        `Mitra: ${partner?.businessName ?? '-'}`,
+        `PIC: ${partner?.contactPerson ?? actor.name}`,
+        `Kontak: ${partner?.phone ?? actor.phone ?? '-'}`,
+        `Status: ${statusLabels[order.status]}`,
+        `Total order: *${formatIdr(order.grandTotal)}*`,
+        `Ekspedisi: ${expeditionLabels[order.expedition ?? 'kib']}`,
+        order.requestedDeliveryDate ? `Jadwal kirim: ${order.requestedDeliveryDate}` : '',
+        order.cancelledReason ? `Alasan: ${order.cancelledReason}` : '',
+        `Qty item: ${itemCount}`,
+        '',
+        productLines ? `Ringkasan order dibatalkan:\n${productLines}${moreItems}` : '',
+        '',
+        'Buka dashboard:',
+        'https://mitra.wahyubeef.id/orders',
+      ].filter(Boolean).join('\n');
+
+      try {
+        const response = await sendWahaText(env, target, text);
+        await recordNotificationAudit(env, actor.id, order.id, 'WAHA_ORDER_CANCELLED_SENT', { target, status: response.status, ok: response.ok });
+      } catch (error) {
+        await recordNotificationAudit(env, actor.id, order.id, 'WAHA_ORDER_CANCELLED_FAILED', { target, error: error instanceof Error ? error.message : 'WAHA cancelled notification failed' });
+      }
+    }
+  }
+
+  await notifyOrderCancelledEmail(env, currentState, order, actor);
+}
+
+async function notifyOrderCancelledEmail(env: Env, currentState: AppState, order: Order, actor: User) {
+  if (!env.RESEND_API_KEY && (!env.EMAIL_RELAY_URL || !env.EMAIL_RELAY_API_KEY)) return;
+  const partner = currentState.partners.find((item) => item.id === order.partnerId);
+  const payload: OrderEmailPayload = {
+    to: env.MAIL_TO,
+    title: 'Order Mitra Dibatalkan',
+    description: 'Mitra membatalkan pesanan. Mohon hentikan proses operasional untuk order ini bila belum diproses.',
+    subjectPrefix: '[Wahyu Beef] Order Mitra Dibatalkan',
+    order: {
+      orderNumber: order.orderNumber,
+      status: order.status,
+      statusLabel: statusLabels[order.status],
+      grandTotal: order.grandTotal,
+      requestedDeliveryDate: order.requestedDeliveryDate,
+      expedition: order.expedition,
+      orderDate: order.orderDate,
+      notes: order.cancelledReason || order.notes,
+    },
+    partner: {
+      businessName: partner?.businessName ?? '-',
+      contactPerson: partner?.contactPerson ?? actor.name,
+      phone: partner?.phone ?? actor.phone ?? '-',
+      email: partner?.email ?? actor.email,
+      address: partner?.address ?? order.shippingAddress,
+    },
+    items: order.items.map((item) => ({
+      name: item.productNameSnapshot,
+      qty: item.qty,
+      unit: item.unitSnapshot,
+      lineTotal: item.lineTotal,
+      notes: item.notes,
+    })),
+  };
+  try {
+    const response = env.RESEND_API_KEY ? await sendResendOrderEmail(env, payload) : await sendEmailRelay(env, payload);
+    await recordNotificationAudit(env, actor.id, order.id, 'EMAIL_ORDER_CANCELLED_SENT', { provider: env.RESEND_API_KEY ? 'resend' : 'relay', status: response.status, ok: response.ok });
+  } catch (error) {
+    await recordNotificationAudit(env, actor.id, order.id, 'EMAIL_ORDER_CANCELLED_FAILED', { provider: env.RESEND_API_KEY ? 'resend' : 'relay', error: error instanceof Error ? error.message : 'Email cancelled notification failed' });
+  }
+}
+
+async function notifyOrderRevised(env: Env, currentState: AppState, order: Order, actor: User) {
+  const partner = currentState.partners.find((item) => item.id === order.partnerId);
+
+  if (env.WAHA_BASE_URL && env.WAHA_SESSION && env.WAHA_API_KEY) {
+    const target = env.WAHA_ADMIN_CHAT_ID || (env.WAHA_ADMIN_PHONE ? `${normalizePhone(env.WAHA_ADMIN_PHONE)}@c.us` : '');
+    if (target) {
+      const productItems = order.items.filter((item) => !item.productId.startsWith('packaging-'));
+      const itemCount = productItems.reduce((sum, item) => sum + item.qty, 0);
+      const productLines = productItems
+        .slice(0, 8)
+        .map((item) => `• ${item.productNameSnapshot} x ${item.qty} ${item.unitSnapshot} — ${formatIdr(item.lineTotal)}`)
+        .join('\n');
+      const moreItems = productItems.length > 8 ? '\n• ...' : '';
+      const text = [
+        '✏️ *Order Mitra Direvisi*',
+        '',
+        `No Order: *${order.orderNumber}*`,
+        `Mitra: ${partner?.businessName ?? '-'}`,
+        `PIC: ${partner?.contactPerson ?? actor.name}`,
+        `Kontak: ${partner?.phone ?? actor.phone ?? '-'}`,
+        `Status: ${statusLabels[order.status]}`,
+        `Total terbaru: *${formatIdr(order.grandTotal)}*`,
+        `Ekspedisi: ${expeditionLabels[order.expedition ?? 'kib']}`,
+        order.requestedDeliveryDate ? `Jadwal kirim: ${order.requestedDeliveryDate}` : '',
+        `Qty item terbaru: ${itemCount}`,
+        '',
+        productLines ? `Ringkasan revisi:\n${productLines}${moreItems}` : '',
+        '',
+        'Buka dashboard:',
+        'https://mitra.wahyubeef.id/orders',
+      ].filter(Boolean).join('\n');
+
+      try {
+        const response = await sendWahaText(env, target, text);
+        await recordNotificationAudit(env, actor.id, order.id, 'WAHA_ORDER_REVISED_SENT', { target, status: response.status, ok: response.ok });
+      } catch (error) {
+        await recordNotificationAudit(env, actor.id, order.id, 'WAHA_ORDER_REVISED_FAILED', { target, error: error instanceof Error ? error.message : 'WAHA revised notification failed' });
+      }
+    }
+  }
+
+  await notifyOrderRevisedEmail(env, currentState, order, actor);
+}
+
+async function notifyOrderRevisedEmail(env: Env, currentState: AppState, order: Order, actor: User) {
+  if (!env.RESEND_API_KEY && (!env.EMAIL_RELAY_URL || !env.EMAIL_RELAY_API_KEY)) return;
+  const partner = currentState.partners.find((item) => item.id === order.partnerId);
+  const payload: OrderEmailPayload = {
+    to: env.MAIL_TO,
+    title: 'Order Mitra Direvisi',
+    description: 'Mitra merevisi pesanan. Mohon cek ulang item, total, ekspedisi, dan jadwal kirim terbaru.',
+    subjectPrefix: '[Wahyu Beef] Order Mitra Direvisi',
+    order: {
+      orderNumber: order.orderNumber,
+      status: order.status,
+      statusLabel: statusLabels[order.status],
+      grandTotal: order.grandTotal,
+      requestedDeliveryDate: order.requestedDeliveryDate,
+      expedition: order.expedition,
+      orderDate: order.orderDate,
+      notes: order.notes,
+    },
+    partner: {
+      businessName: partner?.businessName ?? '-',
+      contactPerson: partner?.contactPerson ?? actor.name,
+      phone: partner?.phone ?? actor.phone ?? '-',
+      email: partner?.email ?? actor.email,
+      address: partner?.address ?? order.shippingAddress,
+    },
+    items: order.items.map((item) => ({
+      name: item.productNameSnapshot,
+      qty: item.qty,
+      unit: item.unitSnapshot,
+      lineTotal: item.lineTotal,
+      notes: item.notes,
+    })),
+  };
+  try {
+    const response = env.RESEND_API_KEY ? await sendResendOrderEmail(env, payload) : await sendEmailRelay(env, payload);
+    await recordNotificationAudit(env, actor.id, order.id, 'EMAIL_ORDER_REVISED_SENT', { provider: env.RESEND_API_KEY ? 'resend' : 'relay', status: response.status, ok: response.ok });
+  } catch (error) {
+    await recordNotificationAudit(env, actor.id, order.id, 'EMAIL_ORDER_REVISED_FAILED', { provider: env.RESEND_API_KEY ? 'resend' : 'relay', error: error instanceof Error ? error.message : 'Email revised notification failed' });
+  }
+}
+
+async function notifyOrderCreatedEmail(env: Env, currentState: AppState, order: Order, actor: User) {
+  if (!env.RESEND_API_KEY && (!env.EMAIL_RELAY_URL || !env.EMAIL_RELAY_API_KEY)) return;
+  const partner = currentState.partners.find((item) => item.id === order.partnerId);
+  const payload = {
+    to: env.MAIL_TO,
+    order: {
+      orderNumber: order.orderNumber,
+      status: order.status,
+      statusLabel: statusLabels[order.status],
+      grandTotal: order.grandTotal,
+      requestedDeliveryDate: order.requestedDeliveryDate,
+      expedition: order.expedition,
+      orderDate: order.orderDate,
+      notes: order.notes,
+    },
+    partner: {
+      businessName: partner?.businessName ?? '-',
+      contactPerson: partner?.contactPerson ?? actor.name,
+      phone: partner?.phone ?? actor.phone ?? '-',
+      email: partner?.email ?? actor.email,
+      address: partner?.address ?? order.shippingAddress,
+    },
+    items: order.items.map((item) => ({
+      name: item.productNameSnapshot,
+      qty: item.qty,
+      unit: item.unitSnapshot,
+      lineTotal: item.lineTotal,
+      notes: item.notes,
+    })),
+  };
+  try {
+    const response = env.RESEND_API_KEY ? await sendResendOrderEmail(env, payload) : await sendEmailRelay(env, payload);
+    await recordNotificationAudit(env, actor.id, order.id, 'EMAIL_ORDER_CREATED_SENT', { provider: env.RESEND_API_KEY ? 'resend' : 'relay', status: response.status, ok: response.ok });
+  } catch (error) {
+    await recordNotificationAudit(env, actor.id, order.id, 'EMAIL_ORDER_CREATED_FAILED', { provider: env.RESEND_API_KEY ? 'resend' : 'relay', error: error instanceof Error ? error.message : 'Email notification failed' });
+  }
+}
+
+type OrderEmailPayload = {
+  to?: string;
+  title?: string;
+  description?: string;
+  subjectPrefix?: string;
+  order: { orderNumber?: string; status?: string; statusLabel?: string; grandTotal?: number; requestedDeliveryDate?: string; expedition?: ExpeditionType; orderDate?: string; notes?: string };
+  partner: { businessName?: string; contactPerson?: string; phone?: string; email?: string; address?: string };
+  items: { name?: string; qty?: number; unit?: string; lineTotal?: number; notes?: string }[];
+};
+
+async function sendResendOrderEmail(env: Env, payload: OrderEmailPayload) {
+  const response = await fetch('https://api.resend.com/emails', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${env.RESEND_API_KEY}` },
+    body: JSON.stringify({
+      from: env.RESEND_FROM || 'Wahyu Beef Mitra <noreply@wahyubeef.id>',
+      to: [payload.to || env.MAIL_TO || 'wahyubeef.id@gmail.com'],
+      subject: `${payload.subjectPrefix || '[Wahyu Beef] Order Mitra Baru'} - ${payload.order.orderNumber || '-'}`,
+      html: orderEmailTemplate(payload),
+    }),
+  });
+  if (!response.ok) {
+    const body = await response.text().catch(() => '');
+    throw new Error(`RESEND ${response.status}: ${body.slice(0, 300)}`);
+  }
+  return response;
+}
+
+async function sendEmailRelay(env: Env, payload: unknown) {
+  const response = await fetch(env.EMAIL_RELAY_URL!, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${env.EMAIL_RELAY_API_KEY}` },
+    body: JSON.stringify(payload),
+  });
+  if (!response.ok) {
+    const body = await response.text().catch(() => '');
+    throw new Error(`EMAIL_RELAY ${response.status}: ${body.slice(0, 300)}`);
+  }
+  return response;
+}
+
+function orderEmailTemplate(payload: OrderEmailPayload) {
+  const order = payload.order ?? {};
+  const partner = payload.partner ?? {};
+  const items = Array.isArray(payload.items) ? payload.items : [];
+  const itemRows = items.map((item) => `<tr><td style="padding:10px 12px;border-bottom:1px solid #f0e5dc;">${escapeHtml(item.name || '-')}</td><td style="padding:10px 12px;border-bottom:1px solid #f0e5dc;text-align:center;">${escapeHtml(String(item.qty ?? '-'))} ${escapeHtml(item.unit || '')}</td><td style="padding:10px 12px;border-bottom:1px solid #f0e5dc;text-align:right;">${formatIdr(Number(item.lineTotal || 0))}</td></tr>`).join('');
+  return `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${escapeHtml(payload.title || 'Order Mitra Baru')}</title></head><body style="margin:0;background:#fff7ed;font-family:Inter,Arial,sans-serif;color:#2f1d14;"><div style="max-width:720px;margin:0 auto;padding:28px 16px;"><div style="background:#8b1d16;border-radius:22px 22px 0 0;padding:26px;color:#fff;"><div style="font-size:13px;letter-spacing:.14em;text-transform:uppercase;opacity:.9;">Wahyu Beef Mitra</div><h1 style="margin:8px 0 0;font-size:26px;line-height:1.25;">${escapeHtml(payload.title || 'Order Mitra Baru')}</h1><p style="margin:8px 0 0;color:#ffe7c2;">${escapeHtml(payload.description || 'Sistem menerima order baru yang perlu ditindaklanjuti oleh tim kemitraan.')}</p></div><div style="background:#fff;border:1px solid #f0d7bd;border-top:0;border-radius:0 0 22px 22px;padding:24px;"><div style="display:inline-block;background:#fff1d6;color:#8b1d16;border-radius:999px;padding:7px 12px;font-weight:700;font-size:13px;">${escapeHtml(order.statusLabel || order.status || 'Pending')}</div><h2 style="margin:16px 0 6px;font-size:22px;color:#56110d;">${escapeHtml(order.orderNumber || '-')}</h2><p style="margin:0 0 18px;color:#7a5b49;">${escapeHtml(partner.businessName || '-')} • ${escapeHtml(partner.contactPerson || '-')}</p><table style="width:100%;border-collapse:collapse;margin:16px 0;background:#fffaf5;border-radius:14px;overflow:hidden;"><tr><td style="padding:12px;color:#7a5b49;">Total Tagihan</td><td style="padding:12px;text-align:right;font-size:20px;font-weight:800;color:#8b1d16;">${formatIdr(Number(order.grandTotal || 0))}</td></tr><tr><td style="padding:12px;color:#7a5b49;">Kontak Mitra</td><td style="padding:12px;text-align:right;">${escapeHtml(partner.phone || '-')}</td></tr><tr><td style="padding:12px;color:#7a5b49;">Ekspedisi</td><td style="padding:12px;text-align:right;">${escapeHtml(expeditionLabels[order.expedition || 'kib'])}</td></tr><tr><td style="padding:12px;color:#7a5b49;">Jadwal Kirim</td><td style="padding:12px;text-align:right;">${escapeHtml(order.requestedDeliveryDate || '-')}</td></tr></table><h3 style="margin:22px 0 8px;color:#56110d;">Ringkasan Item</h3><table style="width:100%;border-collapse:collapse;border:1px solid #f0e5dc;border-radius:14px;overflow:hidden;"><thead><tr style="background:#fff1d6;color:#56110d;"><th style="padding:10px 12px;text-align:left;">Produk</th><th style="padding:10px 12px;text-align:center;">Qty</th><th style="padding:10px 12px;text-align:right;">Subtotal</th></tr></thead><tbody>${itemRows || '<tr><td colspan="3" style="padding:12px;text-align:center;color:#7a5b49;">Tidak ada item.</td></tr>'}</tbody></table><div style="margin-top:24px;text-align:center;"><a href="https://mitra.wahyubeef.id/orders" style="display:inline-block;background:#8b1d16;color:#fff;text-decoration:none;border-radius:12px;padding:13px 18px;font-weight:800;">Buka Dashboard Mitra</a></div><p style="margin:24px 0 0;color:#7a5b49;font-size:13px;line-height:1.6;">Email ini dikirim otomatis oleh Sistem Mitra Wahyu Beef. Mohon tidak membalas email ini secara langsung.</p></div><div style="text-align:center;color:#9a725d;font-size:12px;margin-top:16px;line-height:1.6;">Wahyu Beef — Sukses Berjamaah<br>https://mitra.wahyubeef.id</div></div></body></html>`;
+}
+
+function escapeHtml(value: unknown) {
+  return String(value ?? '').replace(/[&<>'"]/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' }[char] ?? char));
+}
+
+async function sendWahaText(env: Env, chatId: string, text: string) {
+  const baseUrl = String(env.WAHA_BASE_URL ?? '').replace(/\/+$/, '');
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+  const authHeader = env.WAHA_AUTH_HEADER || 'X-Api-Key';
+  if (authHeader.toLowerCase() === 'authorization') headers.Authorization = `Bearer ${env.WAHA_API_KEY}`;
+  else headers[authHeader] = String(env.WAHA_API_KEY ?? '');
+  const response = await fetch(`${baseUrl}/api/sendText`, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({ session: env.WAHA_SESSION, chatId, text }),
+  });
+  if (!response.ok) {
+    const body = await response.text().catch(() => '');
+    throw new Error(`WAHA ${response.status}: ${body.slice(0, 300)}`);
+  }
+  return response;
+}
+
+async function recordNotificationAudit(env: Env | undefined, actorUserId: string, orderId: string, action: string, newValue: unknown) {
+  await mutateState((draft) => {
+    draft.auditLogs.unshift({ id: `audit-notification-${Date.now()}`, actorUserId, action, entityType: 'order', entityId: orderId, newValue, timestamp: new Date().toISOString() });
+    return null;
+  }, env);
+}
+
 async function readJson<T>(request: Request): Promise<T> {
   const raw = await request.text();
   return raw ? JSON.parse(raw) as T : {} as T;
@@ -303,20 +666,21 @@ function hashPassword(password: string) {
 
 const knownPasswordHashes: Record<string, string> = {
   password: '5e884898da28047151d0e56f8dc6292773603d0d6aabbdd62a11ef721d1542d8',
+  minbeef: '136d3a96cd9a0977941f8384b83d6cac93c984f6f233bb9d71aa3eefad9ad6f0',
   mitrawahyubeef: '2862ae49e05e2b5c76d20d348bf41d4ac203b01dce9dca6ce6302272a6554832',
   wahyubeef: '62e005f8eedafada91e509c342ffaefb1c06ec79484610d10189b30e418a626c',
 };
 
 function verifyPassword(user: User, password: string, env?: Env) {
   const allowDemoLogin = env?.ALLOW_DEMO_LOGIN === 'true';
-  if (user.passwordHash?.startsWith('demo-hash:')) return allowDemoLogin && user.passwordHash === hashPassword(password);
+  if (user.passwordHash?.startsWith('demo-hash:')) return user.passwordHash === hashPassword(password);
   if (user.passwordHash) return knownPasswordHashes[password] === user.passwordHash;
   const fallback = user.email.endsWith('@mitra.wahyubeef.local') ? 'mitrawahyubeef' : allowDemoLogin ? defaultPasswordForUser(user) : undefined;
   return Boolean(fallback) && fallback === password;
 }
 
 function ensureMitraState(currentState: AppState) {
-  return syncProductCatalogImages(currentState);
+  return syncProductCatalogPrices(syncProductCatalogImages(currentState));
 }
 
 
