@@ -102,6 +102,23 @@ test('partner can revise own pending order without changing order number', () =>
   assert.equal(state.auditLogs[0].action, 'ORDER_REVISED_BY_PARTNER');
 });
 
+
+test('admin can revise pending partner order from order management', () => {
+  const state = createSeedState();
+  const admin = state.users.find((item) => item.email === 'sales@frozen.local')!;
+  const order = state.orders.find((item) => item.status === 'pending')!;
+  const originalNumber = order.orderNumber;
+  const revised = revisePartnerOrder(state, admin, order.id, {
+    cartItems: [{ productId: state.products[2].id, qty: 5 }],
+    requestedDeliveryDate: '2026-06-25',
+    expedition: 'kib',
+  });
+  assert.equal(revised.orderNumber, originalNumber);
+  assert.equal(revised.items.filter((item) => !item.productId.startsWith('packaging-')).length, 1);
+  assert.equal(revised.requestedDeliveryDate, '2026-06-25');
+  assert.equal(state.auditLogs[0].action, 'ORDER_REVISED_BY_ADMIN');
+});
+
 test('partner cannot revise order that is already being processed', () => {
   const state = createSeedState();
   const user = state.users.find((item) => item.email === 'agen@mitra.local')!;

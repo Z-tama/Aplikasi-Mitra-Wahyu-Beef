@@ -173,12 +173,11 @@ export function createOrder(state: AppState, actor: User, partnerId: string, car
 }
 
 export function revisePartnerOrder(state: AppState, actor: User, orderId: string, input: { cartItems: CartItem[]; requestedDeliveryDate?: string; expedition?: ExpeditionType; notes?: string }) {
-  if (actor.role !== 'partner') throw new Error('Hanya akun mitra yang bisa mengedit pesanan lewat menu Order Saya');
-  const partner = findPartnerForUser(state, actor);
-  if (!partner) throw new Error('Profil mitra tidak ditemukan');
   const order = state.orders.find((item) => item.id === orderId);
   if (!order) throw new Error('Order tidak ditemukan');
-  if (order.partnerId !== partner.id) throw new Error('Order ini bukan milik mitra yang sedang login');
+  const partner = actor.role === 'partner' ? findPartnerForUser(state, actor) : state.partners.find((item) => item.id === order.partnerId);
+  if (!partner) throw new Error('Profil mitra tidak ditemukan');
+  if (actor.role === 'partner' && order.partnerId !== partner.id) throw new Error('Order ini bukan milik mitra yang sedang login');
   if (!['pending', 'confirmed'].includes(order.status)) throw new Error('Order hanya bisa diedit sebelum diproses / dispatching');
   if (!input.cartItems.length) throw new Error('Pesanan wajib memiliki minimal 1 item produk');
 
@@ -218,8 +217,8 @@ export function revisePartnerOrder(state: AppState, actor: User, orderId: string
     expedition: order.expedition,
     itemCount: order.items.length,
   };
-  state.statusHistories.unshift({ id: `hist-revise-${Date.now()}`, orderId, fromStatus: order.status, toStatus: order.status, note: 'Order direvisi mitra', changedBy: actor.id, changedAt: new Date().toISOString() });
-  audit(state, actor.id, 'ORDER_REVISED_BY_PARTNER', 'order', orderId, oldValue, newValue);
+  state.statusHistories.unshift({ id: `hist-revise-${Date.now()}`, orderId, fromStatus: order.status, toStatus: order.status, note: actor.role === 'partner' ? 'Order direvisi mitra' : 'Order direvisi admin', changedBy: actor.id, changedAt: new Date().toISOString() });
+  audit(state, actor.id, actor.role === 'partner' ? 'ORDER_REVISED_BY_PARTNER' : 'ORDER_REVISED_BY_ADMIN', 'order', orderId, oldValue, newValue);
   return order;
 }
 
