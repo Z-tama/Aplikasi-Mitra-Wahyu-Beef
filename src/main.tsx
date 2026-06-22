@@ -382,13 +382,16 @@ function Dashboard({ state }: { state: AppState }) {
   const dueThisMonth = monthlyInvoices.reduce((sum, invoice) => sum + invoice.amountDue, 0);
   const invoicedThisMonth = monthlyInvoices.reduce((sum, invoice) => sum + invoice.grandTotal, 0);
   const unbilledThisMonth = Math.max(0, monthlyRevenue - invoicedThisMonth);
+  const activeOrders = state.orders.filter((order) => !['delivered', 'cancelled'].includes(order.status)).length;
   const activePartners = state.partners.filter((p) => p.status === 'active').length;
   return <div className="grid">
-    <div className="grid cols-4">
-      <Metric label="Pendapatan Bulan Ini" value={formatIdr(monthlyRevenue)} />
-      <Metric label="Sudah Terbayar" value={formatIdr(paidThisMonth)} />
-      <Metric label="Piutang" value={formatIdr(dueThisMonth)} />
-      <Metric label="Belum Ditagihkan" value={formatIdr(unbilledThisMonth)} />
+    <div className="grid cols-4 dashboard-metrics">
+      <Metric label="Pendapatan Bulan Ini" value={formatIdr(monthlyRevenue)} icon={ReceiptText} />
+      <Metric label="Sudah Terbayar" value={formatIdr(paidThisMonth)} icon={ShieldCheck} />
+      <Metric label="Piutang" value={formatIdr(dueThisMonth)} icon={FileText} />
+      <Metric label="Belum Ditagihkan" value={formatIdr(unbilledThisMonth)} icon={ClipboardList} />
+      <Metric label="Order Aktif" value={String(activeOrders)} icon={Truck} />
+      <Metric label="Mitra Aktif" value={String(activePartners)} icon={Users} />
     </div>
     <div className="grid cols-2">
       <div className="card"><h3>Order by Status</h3><StatusSummary orders={state.orders} /><p className="footer-note">Mitra aktif: {activePartners}. Pendapatan dihitung dari order berstatus Dikirim bulan berjalan.</p></div>
@@ -398,7 +401,7 @@ function Dashboard({ state }: { state: AppState }) {
   </div>;
 }
 
-function Metric({ label, value }: { label: string; value: string }) { return <div className="card metric"><span className="label">{label}</span><span className="value">{value}</span></div>; }
+function Metric({ label, value, icon: Icon = BarChart3 }: { label: string; value: string; icon?: React.ComponentType<{ size?: number }> }) { return <div className="card metric"><span className="metric-icon"><Icon size={20} /></span><span className="label">{label}</span><span className="value">{value}</span></div>; }
 
 function FinanceChartCard({ monthlyRevenue, paid, due, unbilled, monthLabel }: { monthlyRevenue: number; paid: number; due: number; unbilled: number; monthLabel: string }) {
   const clampPct = (value: number) => monthlyRevenue > 0 ? Math.min(100, Math.max(0, Math.round((value / monthlyRevenue) * 100))) : 0;
@@ -408,15 +411,15 @@ function FinanceChartCard({ monthlyRevenue, paid, due, unbilled, monthLabel }: {
   const settledPct = monthlyRevenue > 0 ? Math.min(100, paidPct + duePct + unbilledPct) : 0;
   const maxValue = Math.max(monthlyRevenue, paid, due, unbilled, 1);
   const barHeight = (value: number) => Math.max(8, Math.round((value / maxValue) * 100));
-  return <div className="card finance-chart-card upgraded"><div className="chart-head"><div><h3>Grafik Keuangan</h3><p>Pendapatan Dikirim bulan ini, pembayaran, piutang, dan belum ditagihkan</p></div><span className="area-pill">{monthLabel}</span></div><div className="revenue-highlight"><span>Pendapatan Bulan Ini</span><b>{formatIdr(monthlyRevenue)}</b><em>{settledPct}% sudah terpetakan ke pembayaran/piutang/tagihan</em></div><div className="finance-visual-grid"><div className="mini-bar-chart" aria-label="Grafik pendapatan dan tagihan"><ChartBar label="Pendapatan" value={monthlyRevenue} height={barHeight(monthlyRevenue)} tone="revenue" /><ChartBar label="Terbayar" value={paid} height={barHeight(paid)} tone="paid" /><ChartBar label="Piutang" value={due} height={barHeight(due)} tone="due" /><ChartBar label="Belum Tagih" value={unbilled} height={barHeight(unbilled)} tone="unbilled" /></div><div className="finance-ring" style={{ '--paid': `${paidPct}%`, '--due': `${paidPct + duePct}%`, '--unbilled': `${paidPct + duePct + unbilledPct}%` } as React.CSSProperties}><div><b>{settledPct}%</b><span>mapped</span></div></div></div><div className="invoice-split"><div className="split-track animated"><span className="paid" style={{ width: `${paidPct}%` }} /><span className="due" style={{ width: `${duePct}%` }} /><span className="unbilled" style={{ width: `${unbilledPct}%` }} /></div><div className="split-grid"><FinanceLegend tone="paid" label="Sudah Terbayar" value={paid} pct={paidPct} /><FinanceLegend tone="due" label="Piutang" value={due} pct={duePct} /><FinanceLegend tone="unbilled" label="Belum Ditagihkan" value={unbilled} pct={unbilledPct} /></div></div></div>;
+  return <div className="card finance-chart-card upgraded"><div className="chart-head"><div><h3>Grafik Keuangan</h3><p>Pendapatan Dikirim bulan ini, pembayaran, piutang, dan belum ditagihkan</p></div><span className="area-pill">{monthLabel}</span></div><div className="revenue-highlight"><span>Pendapatan Bulan Ini</span><b>{formatIdr(monthlyRevenue)}</b><em>{settledPct}% sudah terpetakan ke pembayaran/piutang/tagihan</em></div><div className="finance-visual-grid"><div className="mini-bar-chart" aria-label="Grafik pendapatan dan tagihan"><ChartBar label="Pendapatan" value={monthlyRevenue} height={barHeight(monthlyRevenue)} tone="revenue" icon={ReceiptText} /><ChartBar label="Terbayar" value={paid} height={barHeight(paid)} tone="paid" icon={ShieldCheck} /><ChartBar label="Piutang" value={due} height={barHeight(due)} tone="due" icon={FileText} /><ChartBar label="Belum Tagih" value={unbilled} height={barHeight(unbilled)} tone="unbilled" icon={ClipboardList} /></div><div className="finance-ring" style={{ '--paid': `${paidPct}%`, '--due': `${paidPct + duePct}%`, '--unbilled': `${paidPct + duePct + unbilledPct}%` } as React.CSSProperties}><div><b>{settledPct}%</b><span>mapped</span></div></div></div><div className="invoice-split"><div className="split-track animated"><span className="paid" style={{ width: `${paidPct}%` }} /><span className="due" style={{ width: `${duePct}%` }} /><span className="unbilled" style={{ width: `${unbilledPct}%` }} /></div><div className="split-grid"><FinanceLegend tone="paid" label="Sudah Terbayar" value={paid} pct={paidPct} icon={ShieldCheck} /><FinanceLegend tone="due" label="Piutang" value={due} pct={duePct} icon={FileText} /><FinanceLegend tone="unbilled" label="Belum Ditagihkan" value={unbilled} pct={unbilledPct} icon={ClipboardList} /></div></div></div>;
 }
 
-function FinanceLegend({ tone, label, value, pct }: { tone: 'paid' | 'due' | 'unbilled'; label: string; value: number; pct: number }) {
-  return <div><span className={`legend-dot ${tone}-dot`} />{label}<b>{formatIdr(value)}</b><small>{pct}% dari pendapatan bulan ini</small></div>;
+function FinanceLegend({ tone, label, value, pct, icon: Icon }: { tone: 'paid' | 'due' | 'unbilled'; label: string; value: number; pct: number; icon: React.ComponentType<{ size?: number }> }) {
+  return <div><span className={`legend-icon ${tone}`}><Icon size={16} /></span>{label}<b>{formatIdr(value)}</b><small>{pct}% dari pendapatan bulan ini</small></div>;
 }
 
-function ChartBar({ label, value, height, tone }: { label: string; value: number; height: number; tone: 'revenue' | 'paid' | 'due' | 'unbilled' }) {
-  return <div className={`chart-bar ${tone}`}><div className="bar-shell"><span style={{ height: `${height}%` }} /></div><b>{formatIdr(value)}</b><small>{label}</small></div>;
+function ChartBar({ label, value, height, tone, icon: Icon }: { label: string; value: number; height: number; tone: 'revenue' | 'paid' | 'due' | 'unbilled'; icon: React.ComponentType<{ size?: number }> }) {
+  return <div className={`chart-bar ${tone}`}><div className="bar-shell"><span style={{ height: `${height}%` }} /></div><b>{formatIdr(value)}</b><small><Icon size={13} />{label}</small></div>;
 }
 
 type CatalogProduct = ReturnType<typeof getCatalogForPartner>[number];
