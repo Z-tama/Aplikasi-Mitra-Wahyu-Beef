@@ -373,24 +373,26 @@ function Topbar({ state, user, view, onNavigate }: { state: AppState; user: User
 function Dashboard({ state }: { state: AppState }) {
   const now = new Date();
   const monthKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
-  const shippedOrders = state.orders.filter((order) => order.status === 'shipped');
   const shippedMonthKey = (orderId: string, fallbackDate: string) => (state.statusHistories.find((history) => history.orderId === orderId && history.toStatus === 'shipped')?.changedAt ?? fallbackDate).slice(0, 7);
-  const revenue = shippedOrders.reduce((sum, order) => sum + order.grandTotal, 0);
-  const monthlyRevenue = shippedOrders.filter((order) => shippedMonthKey(order.id, order.orderDate) === monthKey).reduce((sum, order) => sum + order.grandTotal, 0);
-  const totalPaid = state.invoices.filter((invoice) => invoice.status !== 'void').reduce((sum, invoice) => sum + invoice.amountPaid, 0);
-  const totalDue = state.invoices.filter((invoice) => invoice.status !== 'void').reduce((sum, invoice) => sum + invoice.amountDue, 0);
-  const invoiceTotal = totalPaid + totalDue;
-  const activeOrders = state.orders.filter((o) => !['delivered', 'cancelled'].includes(o.status)).length;
+  const monthlyShippedOrders = state.orders.filter((order) => order.status === 'shipped' && shippedMonthKey(order.id, order.orderDate) === monthKey);
+  const monthlyShippedOrderIds = new Set(monthlyShippedOrders.map((order) => order.id));
+  const monthlyRevenue = monthlyShippedOrders.reduce((sum, order) => sum + order.grandTotal, 0);
+  const monthlyInvoices = state.invoices.filter((invoice) => invoice.status !== 'void' && monthlyShippedOrderIds.has(invoice.orderId));
+  const paidThisMonth = monthlyInvoices.reduce((sum, invoice) => sum + invoice.amountPaid, 0);
+  const dueThisMonth = monthlyInvoices.reduce((sum, invoice) => sum + invoice.amountDue, 0);
+  const invoicedThisMonth = monthlyInvoices.reduce((sum, invoice) => sum + invoice.grandTotal, 0);
+  const unbilledThisMonth = Math.max(0, monthlyRevenue - invoicedThisMonth);
+  const activePartners = state.partners.filter((p) => p.status === 'active').length;
   return <div className="grid">
     <div className="grid cols-4">
-      <Metric label="Pendapatan" value={formatIdr(revenue)} />
-      <Metric label="Order Aktif" value={String(activeOrders)} />
-      <Metric label="Mitra Aktif" value={String(state.partners.filter((p) => p.status === 'active').length)} />
-      <Metric label="Invoice Outstanding" value={formatIdr(totalDue)} />
+      <Metric label="Pendapatan Bulan Ini" value={formatIdr(monthlyRevenue)} />
+      <Metric label="Sudah Terbayar" value={formatIdr(paidThisMonth)} />
+      <Metric label="Piutang" value={formatIdr(dueThisMonth)} />
+      <Metric label="Belum Ditagihkan" value={formatIdr(unbilledThisMonth)} />
     </div>
     <div className="grid cols-2">
-      <div className="card"><h3>Order by Status</h3><StatusSummary orders={state.orders} /></div>
-      <FinanceChartCard monthlyRevenue={monthlyRevenue} paid={totalPaid} due={totalDue} total={invoiceTotal} monthLabel={now.toLocaleDateString('id-ID', { month: 'long', year: 'numeric' })} />
+      <div className="card"><h3>Order by Status</h3><StatusSummary orders={state.orders} /><p className="footer-note">Mitra aktif: {activePartners}. Pendapatan dihitung dari order berstatus Dikirim bulan berjalan.</p></div>
+      <FinanceChartCard monthlyRevenue={monthlyRevenue} paid={paidThisMonth} due={dueThisMonth} unbilled={unbilledThisMonth} monthLabel={now.toLocaleDateString('id-ID', { month: 'long', year: 'numeric' })} />
     </div>
     <OrdersTable state={state} orders={state.orders.slice(0, 5)} compact />
   </div>;
@@ -398,17 +400,22 @@ function Dashboard({ state }: { state: AppState }) {
 
 function Metric({ label, value }: { label: string; value: string }) { return <div className="card metric"><span className="label">{label}</span><span className="value">{value}</span></div>; }
 
-function FinanceChartCard({ monthlyRevenue, paid, due, total, monthLabel }: { monthlyRevenue: number; paid: number; due: number; total: number; monthLabel: string }) {
-  const paidPct = total > 0 ? Math.round((paid / total) * 100) : 0;
-  const duePct = total > 0 ? Math.round((due / total) * 100) : 0;
-  const maxValue = Math.max(monthlyRevenue, paid, due, 1);
-  const revenueHeight = Math.max(8, Math.round((monthlyRevenue / maxValue) * 100));
-  const paidHeight = Math.max(8, Math.round((paid / maxValue) * 100));
-  const dueHeight = Math.max(8, Math.round((due / maxValue) * 100));
-  return <div className="card finance-chart-card"><div className="chart-head"><div><h3>Grafik Keuangan</h3><p>Total omzet bulan ini & status tagihan</p></div><span className="area-pill">{monthLabel}</span></div><div className="revenue-highlight"><span>Total Omzet Bulan Ini</span><b>{formatIdr(monthlyRevenue)}</b></div><div className="mini-bar-chart" aria-label="Grafik omzet dan tagihan"><ChartBar label="Omzet" value={monthlyRevenue} height={revenueHeight} tone="revenue" /><ChartBar label="Terbayar" value={paid} height={paidHeight} tone="paid" /><ChartBar label="Belum" value={due} height={dueHeight} tone="due" /></div><div className="invoice-split"><div className="split-track"><span className="paid" style={{ width: `${paidPct}%` }} /><span className="due" style={{ width: `${duePct}%` }} /></div><div className="split-grid"><div><span className="legend-dot paid-dot" />Sudah terbayar<b>{formatIdr(paid)}</b><small>{paidPct}%</small></div><div><span className="legend-dot due-dot" />Belum terbayar<b>{formatIdr(due)}</b><small>{duePct}%</small></div></div></div></div>;
+function FinanceChartCard({ monthlyRevenue, paid, due, unbilled, monthLabel }: { monthlyRevenue: number; paid: number; due: number; unbilled: number; monthLabel: string }) {
+  const clampPct = (value: number) => monthlyRevenue > 0 ? Math.min(100, Math.max(0, Math.round((value / monthlyRevenue) * 100))) : 0;
+  const paidPct = clampPct(paid);
+  const duePct = clampPct(due);
+  const unbilledPct = clampPct(unbilled);
+  const settledPct = monthlyRevenue > 0 ? Math.min(100, paidPct + duePct + unbilledPct) : 0;
+  const maxValue = Math.max(monthlyRevenue, paid, due, unbilled, 1);
+  const barHeight = (value: number) => Math.max(8, Math.round((value / maxValue) * 100));
+  return <div className="card finance-chart-card upgraded"><div className="chart-head"><div><h3>Grafik Keuangan</h3><p>Pendapatan Dikirim bulan ini, pembayaran, piutang, dan belum ditagihkan</p></div><span className="area-pill">{monthLabel}</span></div><div className="revenue-highlight"><span>Pendapatan Bulan Ini</span><b>{formatIdr(monthlyRevenue)}</b><em>{settledPct}% sudah terpetakan ke pembayaran/piutang/tagihan</em></div><div className="finance-visual-grid"><div className="mini-bar-chart" aria-label="Grafik pendapatan dan tagihan"><ChartBar label="Pendapatan" value={monthlyRevenue} height={barHeight(monthlyRevenue)} tone="revenue" /><ChartBar label="Terbayar" value={paid} height={barHeight(paid)} tone="paid" /><ChartBar label="Piutang" value={due} height={barHeight(due)} tone="due" /><ChartBar label="Belum Tagih" value={unbilled} height={barHeight(unbilled)} tone="unbilled" /></div><div className="finance-ring" style={{ '--paid': `${paidPct}%`, '--due': `${paidPct + duePct}%`, '--unbilled': `${paidPct + duePct + unbilledPct}%` } as React.CSSProperties}><div><b>{settledPct}%</b><span>mapped</span></div></div></div><div className="invoice-split"><div className="split-track animated"><span className="paid" style={{ width: `${paidPct}%` }} /><span className="due" style={{ width: `${duePct}%` }} /><span className="unbilled" style={{ width: `${unbilledPct}%` }} /></div><div className="split-grid"><FinanceLegend tone="paid" label="Sudah Terbayar" value={paid} pct={paidPct} /><FinanceLegend tone="due" label="Piutang" value={due} pct={duePct} /><FinanceLegend tone="unbilled" label="Belum Ditagihkan" value={unbilled} pct={unbilledPct} /></div></div></div>;
 }
 
-function ChartBar({ label, value, height, tone }: { label: string; value: number; height: number; tone: 'revenue' | 'paid' | 'due' }) {
+function FinanceLegend({ tone, label, value, pct }: { tone: 'paid' | 'due' | 'unbilled'; label: string; value: number; pct: number }) {
+  return <div><span className={`legend-dot ${tone}-dot`} />{label}<b>{formatIdr(value)}</b><small>{pct}% dari pendapatan bulan ini</small></div>;
+}
+
+function ChartBar({ label, value, height, tone }: { label: string; value: number; height: number; tone: 'revenue' | 'paid' | 'due' | 'unbilled' }) {
   return <div className={`chart-bar ${tone}`}><div className="bar-shell"><span style={{ height: `${height}%` }} /></div><b>{formatIdr(value)}</b><small>{label}</small></div>;
 }
 
