@@ -1,4 +1,4 @@
-import { createSeedState, syncProductCatalogImages, syncProductCatalogPrices, type AppState } from '../../../src/seed';
+import { createSeedState, syncProductCatalogImages, syncProductCatalogPrices, type AppState, type PartnerRegistrationSubmission } from '../../../src/seed';
 import { cancelPartnerOrder, createInvoice, createOrder, findPartnerForUser, getLeaderboard, recordPayment, revisePartnerOrder, updateOrderQc, updateOrderShipping, updateOrderStatus } from '../../../src/services';
 import { expeditionLabels, formatIdr, statusLabels, type ExpeditionType, type Order, type OrderStatus, type Payment, type Role, type User } from '../../../src/domain';
 
@@ -74,6 +74,7 @@ export const onRequest = async ({ request, env }: PagesHandlerContext) => {
         });
         return registration;
       }, env);
+      await notifyPartnerRegistrationSubmitted(env, result);
       return respond(result, 201);
     }
 
@@ -82,6 +83,29 @@ export const onRequest = async ({ request, env }: PagesHandlerContext) => {
 
     if (method === 'GET' && path === '/auth/me') return respond({ user: actor }, 200);
     if (method === 'GET' && path === '/snapshot') return respond(filteredStateForUser(currentState, actor.id), 200);
+
+    const registrationStatusMatch = path.match(/^\/partner-registrations\/([^/]+)\/status$/);
+    if (method === 'PATCH' && registrationStatusMatch) {
+      const body = await readJson<{ status?: PartnerRegistrationSubmission['status']; note?: string }>(request);
+      const result = await mutateState((draft) => {
+        requireRole(actor, ['super_admin', 'sales_admin']);
+        const registration = draft.partnerRegistrations?.find((item) => item.id === registrationStatusMatch[1]);
+        if (!registration) throw httpError(404, 'Request mitra tidak ditemukan');
+        if (!['contacted', 'approved', 'rejected'].includes(String(body.status))) throw httpError(400, 'Status request tidak valid');
+        const oldValue = { ...registration };
+        registration.status = body.status as PartnerRegistrationSubmission['status'];
+        let createdPartnerId = '';
+        let createdUserId = '';
+        if (body.status === 'approved') {
+          const created = approvePartnerRegistration(draft, registration);
+          createdPartnerId = created.partnerId;
+          createdUserId = created.userId;
+        }
+        draft.auditLogs.unshift({ id: `audit-registration-status-${Date.now()}`, actorUserId: actor.id, action: body.status === 'approved' ? 'PARTNER_REGISTRATION_APPROVED_AND_ACCOUNT_CREATED' : 'PARTNER_REGISTRATION_STATUS_UPDATED', entityType: 'partnerRegistration', entityId: registration.id, oldValue, newValue: { ...registration, note: clean(body.note), createdPartnerId, createdUserId }, timestamp: new Date().toISOString() });
+        return { registration, state: filteredStateForUser(draft, actor.id) };
+      }, env);
+      return respond(result, 200);
+    }
 
     if (method === 'PATCH' && path === '/profile/password') {
       const body = await readJson<{ currentPassword?: string; newPassword?: string; confirmPassword?: string }>(request);
@@ -279,6 +303,83 @@ async function mutateState<T>(fn: (draft: AppState) => T | Promise<T>, env?: Env
   return result;
 }
 
+
+async function notifyPartnerRegistrationSubmitted(env: Env, registration: PartnerRegistrationSubmission) {
+  if (env.WAHA_BASE_URL && env.WAHA_SESSION && env.WAHA_API_KEY) {
+    const target = env.WAHA_ADMIN_CHAT_ID || (env.WAHA_ADMIN_PHONE ? `${normalizePhone(env.WAHA_ADMIN_PHONE)}@c.us` : '');
+    if (target) {
+      const text = [
+        '🔔 *Calon Mitra Baru Mendaftar*',
+        '',
+        `Usaha: *${registration.businessName}*`,
+        `PIC: ${registration.ownerName}`,
+        `WA: ${registration.phone}`,
+        registration.email ? `Email: ${registration.email}` : '',
+        `Lokasi: ${registration.city}, ${registration.province}`,
+        `Minat tier: ${registration.interestedTier}`,
+        registration.currentSales ? `Estimasi: ${registration.currentSales}` : '',
+        registration.notes ? `Catatan: ${registration.notes}` : '',
+        '',
+        'Buka menu Notifikasi / Mitra Management:',
+        'https://mitra.wahyubeef.id/mitra',
+      ].filter(Boolean).join('\n');
+      try {
+        const response = await sendWahaText(env, target, text);
+        await recordRegistrationNotificationAudit(env, registration.id, 'WAHA_PARTNER_REGISTRATION_SENT', { target, status: response.status, ok: response.ok });
+      } catch (error) {
+        await recordRegistrationNotificationAudit(env, registration.id, 'WAHA_PARTNER_REGISTRATION_FAILED', { target, error: error instanceof Error ? error.message : 'WAHA registration notification failed' });
+      }
+    }
+  }
+  await notifyPartnerRegistrationEmail(env, registration);
+}
+
+async function notifyPartnerRegistrationEmail(env: Env, registration: PartnerRegistrationSubmission) {
+  if (!env.RESEND_API_KEY && (!env.EMAIL_RELAY_URL || !env.EMAIL_RELAY_API_KEY)) return;
+  const payload = {
+    to: env.MAIL_TO,
+    title: 'Calon Mitra Baru Mendaftar',
+    description: 'Ada calon mitra baru yang mengisi form pendaftaran. Silakan review dari menu Mitra Management.',
+    subjectPrefix: '[Wahyu Beef] Calon Mitra Baru',
+    registration,
+  };
+  try {
+    const response = env.RESEND_API_KEY ? await sendResendRegistrationEmail(env, payload) : await sendEmailRelay(env, payload);
+    await recordRegistrationNotificationAudit(env, registration.id, 'EMAIL_PARTNER_REGISTRATION_SENT', { provider: env.RESEND_API_KEY ? 'resend' : 'relay', status: response.status, ok: response.ok });
+  } catch (error) {
+    await recordRegistrationNotificationAudit(env, registration.id, 'EMAIL_PARTNER_REGISTRATION_FAILED', { provider: env.RESEND_API_KEY ? 'resend' : 'relay', error: error instanceof Error ? error.message : 'Email registration notification failed' });
+  }
+}
+
+async function sendResendRegistrationEmail(env: Env, payload: { to?: string; title: string; description: string; subjectPrefix: string; registration: PartnerRegistrationSubmission }) {
+  const response = await fetch('https://api.resend.com/emails', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${env.RESEND_API_KEY}` },
+    body: JSON.stringify({
+      from: env.RESEND_FROM || 'Wahyu Beef Mitra <noreply@wahyubeef.id>',
+      to: [payload.to || env.MAIL_TO || 'wahyubeef.id@gmail.com'],
+      subject: `${payload.subjectPrefix} - ${payload.registration.businessName}`,
+      html: registrationEmailTemplate(payload),
+    }),
+  });
+  if (!response.ok) {
+    const body = await response.text().catch(() => '');
+    throw new Error(`RESEND ${response.status}: ${body.slice(0, 300)}`);
+  }
+  return response;
+}
+
+function registrationEmailTemplate(payload: { title: string; description: string; registration: PartnerRegistrationSubmission }) {
+  const r = payload.registration;
+  return `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${escapeHtml(payload.title)}</title></head><body style="margin:0;background:#fff7ed;font-family:Inter,Arial,sans-serif;color:#2f1d14;"><div style="max-width:720px;margin:0 auto;padding:28px 16px;"><div style="background:#8b1d16;border-radius:22px 22px 0 0;padding:26px;color:#fff;"><div style="font-size:13px;letter-spacing:.14em;text-transform:uppercase;opacity:.9;">Wahyu Beef Mitra</div><h1 style="margin:8px 0 0;font-size:26px;line-height:1.25;">${escapeHtml(payload.title)}</h1><p style="margin:8px 0 0;color:#ffe7c2;">${escapeHtml(payload.description)}</p></div><div style="background:#fff;border:1px solid #f0d7bd;border-top:0;border-radius:0 0 22px 22px;padding:24px;"><div style="display:inline-block;background:#fff1d6;color:#8b1d16;border-radius:999px;padding:7px 12px;font-weight:700;font-size:13px;">Status Request</div><h2 style="margin:16px 0 6px;font-size:22px;color:#56110d;">${escapeHtml(r.businessName)}</h2><p style="margin:0 0 18px;color:#7a5b49;">${escapeHtml(r.ownerName)} • ${escapeHtml(r.phone)}</p><table style="width:100%;border-collapse:collapse;margin:16px 0;background:#fffaf5;border-radius:14px;overflow:hidden;"><tr><td style="padding:12px;color:#7a5b49;">Email</td><td style="padding:12px;text-align:right;">${escapeHtml(r.email || '-')}</td></tr><tr><td style="padding:12px;color:#7a5b49;">Lokasi</td><td style="padding:12px;text-align:right;">${escapeHtml(`${r.city}, ${r.province}`)}</td></tr><tr><td style="padding:12px;color:#7a5b49;">Jenis Usaha</td><td style="padding:12px;text-align:right;">${escapeHtml(r.businessType || '-')}</td></tr><tr><td style="padding:12px;color:#7a5b49;">Minat Tier</td><td style="padding:12px;text-align:right;">${escapeHtml(r.interestedTier || '-')}</td></tr><tr><td style="padding:12px;color:#7a5b49;">Alamat</td><td style="padding:12px;text-align:right;">${escapeHtml(r.address || '-')}</td></tr></table><p style="margin:18px 0;color:#7a5b49;line-height:1.6;">${escapeHtml(r.notes || 'Tidak ada catatan tambahan.')}</p><div style="margin-top:24px;text-align:center;"><a href="https://mitra.wahyubeef.id/mitra" style="display:inline-block;background:#8b1d16;color:#fff;text-decoration:none;border-radius:12px;padding:13px 18px;font-weight:800;">Buka Mitra Management</a></div><p style="margin:24px 0 0;color:#7a5b49;font-size:13px;line-height:1.6;">Email otomatis dari Sistem Mitra Wahyu Beef.</p></div><div style="text-align:center;color:#9a725d;font-size:12px;margin-top:16px;line-height:1.6;">Wahyu Beef — Sukses Berjamaah<br>https://mitra.wahyubeef.id</div></div></body></html>`;
+}
+
+async function recordRegistrationNotificationAudit(env: Env | undefined, registrationId: string, action: string, newValue: unknown) {
+  await mutateState((draft) => {
+    draft.auditLogs.unshift({ id: `audit-registration-notification-${Date.now()}`, actorUserId: 'system', action, entityType: 'partnerRegistration', entityId: registrationId, newValue, timestamp: new Date().toISOString() });
+    return null;
+  }, env);
+}
 
 async function notifyOrderCreated(env: Env, currentState: AppState, order: Order, actor: User) {
   const partner = currentState.partners.find((item) => item.id === order.partnerId);
@@ -680,7 +781,9 @@ function verifyPassword(user: User, password: string, env?: Env) {
 }
 
 function ensureMitraState(currentState: AppState) {
-  return syncProductCatalogPrices(syncProductCatalogImages(currentState));
+  const nextState = syncProductCatalogPrices(syncProductCatalogImages(currentState));
+  backfillApprovedPartnerRegistrations(nextState);
+  return nextState;
 }
 
 
@@ -762,6 +865,90 @@ function buildPartnerRegistration(body: Record<string, string>) {
 
 function clean(value?: string) {
   return String(value ?? '').replace(/\s+/g, ' ').trim();
+}
+
+function backfillApprovedPartnerRegistrations(draft: AppState) {
+  for (const registration of draft.partnerRegistrations ?? []) {
+    if (registration.status !== 'approved') continue;
+    const hasPartner = draft.partners.some((partner) => partner.id === `p-${registration.id}` || partner.phone === registration.phone || (!!registration.email && partner.email.toLowerCase() === registration.email.toLowerCase()));
+    if (!hasPartner) {
+      const created = approvePartnerRegistration(draft, registration);
+      draft.auditLogs.unshift({ id: `audit-registration-backfill-${Date.now()}-${registration.id}`, actorUserId: 'system', action: 'PARTNER_REGISTRATION_APPROVED_BACKFILLED', entityType: 'partnerRegistration', entityId: registration.id, newValue: created, timestamp: new Date().toISOString() });
+    }
+  }
+}
+
+function approvePartnerRegistration(draft: AppState, registration: PartnerRegistrationSubmission) {
+  const existingPartner = draft.partners.find((partner) => partner.phone === registration.phone || (!!registration.email && partner.email.toLowerCase() === registration.email.toLowerCase()));
+  const existingUser = draft.users.find((user) => normalizePhone(user.phone) === normalizePhone(registration.phone) || (!!registration.email && user.email.toLowerCase() === registration.email.toLowerCase()));
+  const tier = tierForRegistration(draft, registration);
+  const timestamp = Date.now();
+  const email = registration.email || `${normalizePhone(registration.phone) || `mitra${timestamp}`}@mitra.wahyubeef.local`;
+  const userId = existingUser?.id || `u-${registration.id}`;
+  const partnerId = existingPartner?.id || `p-${registration.id}`;
+  if (existingUser) {
+    existingUser.name = registration.ownerName;
+    existingUser.email = existingUser.email || email;
+    existingUser.phone = registration.phone;
+    existingUser.role = 'partner';
+    existingUser.status = 'active';
+    existingUser.passwordHash = existingUser.passwordHash || hashPassword(defaultPartnerPassword(registration));
+  } else {
+    draft.users.unshift({ id: userId, name: registration.ownerName, email, phone: registration.phone, role: 'partner', status: 'active', passwordHash: hashPassword(defaultPartnerPassword(registration)) });
+  }
+  if (existingPartner) {
+    existingPartner.userId = userId;
+    existingPartner.tierId = tier.id;
+    existingPartner.partnerCode = existingPartner.partnerCode || nextPartnerCode(draft, tier.code);
+    existingPartner.businessName = registration.businessName;
+    existingPartner.contactPerson = registration.ownerName;
+    existingPartner.phone = registration.phone;
+    existingPartner.email = email;
+    existingPartner.address = registration.address;
+    existingPartner.city = registration.city;
+    existingPartner.province = registration.province;
+    existingPartner.paymentTermDays = defaultPaymentTermDays(tier.code);
+    existingPartner.creditLimit = defaultCreditLimit(tier.code);
+    existingPartner.status = 'active';
+  } else {
+    draft.partners.unshift({ id: partnerId, userId, tierId: tier.id, partnerCode: nextPartnerCode(draft, tier.code), businessName: registration.businessName, contactPerson: registration.ownerName, phone: registration.phone, email, address: registration.address, city: registration.city, province: registration.province, creditLimit: defaultCreditLimit(tier.code), paymentTermDays: defaultPaymentTermDays(tier.code), status: 'active' });
+  }
+  return { partnerId, userId };
+}
+
+function tierForRegistration(draft: AppState, registration: PartnerRegistrationSubmission) {
+  const interest = String(registration.interestedTier ?? '').toLowerCase();
+  const code = interest.includes('distributor') ? 'DISTRIBUTOR' : interest.includes('agen') ? 'AGEN' : 'RESELLER';
+  return draft.tiers.find((tier) => tier.code === code) || draft.tiers.find((tier) => tier.code === 'RESELLER') || draft.tiers[0];
+}
+
+function nextPartnerCode(draft: AppState, tierCode: string) {
+  const letter = tierCode === 'DISTRIBUTOR' ? 'D' : tierCode === 'AGEN' ? 'A' : 'R';
+  const prefix = `MWB-${letter}-`;
+  const legacyPrefix = `MITRA-${letter}-`;
+  const maxNumber = draft.partners.reduce((max, partner) => {
+    const code = partner.partnerCode || '';
+    const value = code.startsWith(prefix) ? Number(code.slice(prefix.length)) : code.startsWith(legacyPrefix) ? Number(code.slice(legacyPrefix.length)) : 0;
+    return Number.isFinite(value) ? Math.max(max, value) : max;
+  }, 0);
+  return `${prefix}${String(maxNumber + 1).padStart(3, '0')}`;
+}
+
+function defaultPaymentTermDays(tierCode: string) {
+  if (tierCode === 'DISTRIBUTOR') return 14;
+  if (tierCode === 'AGEN') return 7;
+  return 0;
+}
+
+function defaultCreditLimit(tierCode: string) {
+  if (tierCode === 'DISTRIBUTOR') return 25_000_000;
+  if (tierCode === 'AGEN') return 12_000_000;
+  return 3_000_000;
+}
+
+function defaultPartnerPassword(registration: PartnerRegistrationSubmission) {
+  const phone = normalizePhone(registration.phone);
+  return phone.length >= 8 ? phone : 'mitrawahyubeef';
 }
 
 function filteredStateForUser(currentState: AppState, userId: string) {

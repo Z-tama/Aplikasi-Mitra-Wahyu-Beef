@@ -1,4 +1,4 @@
-import type { AppState } from './seed';
+import type { AppState, PartnerRegistrationSubmission } from './seed';
 import type { CartItem, ExpeditionType, OrderStatus, Payment, User } from './domain';
 
 export interface Session {
@@ -35,6 +35,9 @@ export const api = {
   },
   submitPartnerRegistration(input: Record<string, string>) {
     return request<{ whatsappMessage: string; adminWhatsapp: string }>('/partner-registrations', { method: 'POST', body: JSON.stringify(input) });
+  },
+  updatePartnerRegistrationStatus(token: string, registrationId: string, status: PartnerRegistrationSubmission['status'], note?: string) {
+    return request<{ registration: PartnerRegistrationSubmission; state: AppState }>(`/partner-registrations/${registrationId}/status`, { method: 'PATCH', body: JSON.stringify({ status, note }) }, token);
   },
   updateProfile(token: string, input: { name: string; address: string; phone: string; avatarUrl?: string }) {
     return request<{ user: User; state: AppState }>('/profile', { method: 'PATCH', body: JSON.stringify(input) }, token);

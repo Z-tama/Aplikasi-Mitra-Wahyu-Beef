@@ -1,6 +1,7 @@
 import type { AppState } from './seed.ts';
 import { canTransition, defaultExpedition, thermalTruckExpedition, todayIso } from './domain.ts';
 import type { AccountingEvent, CartItem, ExpeditionType, Invoice, Order, OrderItem, OrderStatus, Payment, Product, User } from './domain.ts';
+import { applyProductPromotion } from './promotions.ts';
 
 export function findPartnerForUser(state: AppState, user: User) {
   return state.partners.find((partner) => partner.userId === user.id);
@@ -17,11 +18,15 @@ export function getCatalogForPartner(state: AppState, partnerId: string) {
     .filter((product) => product.isActive)
     .map((product) => {
       const price = state.prices.find((item) => item.productId === product.id && item.tierId === partner.tierId && item.isActive);
+      const promoPrice = price ? applyProductPromotion(price.price, product.id) : null;
       return {
         ...product,
         tierId: tier.id,
         tierName: tier.name,
-        price: price?.price ?? null,
+        price: promoPrice?.price ?? null,
+        normalPrice: promoPrice?.normalPrice ?? price?.price ?? null,
+        promoDiscountAmount: promoPrice?.discountAmount ?? 0,
+        promotion: promoPrice?.promo,
         isPriceComplete: Boolean(price),
       };
     });
@@ -112,7 +117,9 @@ export function calculateOrder(state: AppState, partnerId: string, cartItems: Ca
     const canUsePackaging = ['cat-daging-sapi', 'cat-tulang-sapi', 'cat-jerohan-sapi'].includes(product.categoryId);
     const packageRatio = canUsePackaging && packageWeightGram === 250 ? 0.25 : canUsePackaging && packageWeightGram === 500 ? 0.5 : 1;
     const packageLabel = canUsePackaging && packageWeightGram ? `${packageWeightGram} GR` : product.unit;
-    const unitPrice = Math.round(tierPrice.price * packageRatio);
+    const normalUnitPrice = Math.round(tierPrice.price * packageRatio);
+    const promoPrice = applyProductPromotion(normalUnitPrice, product.id);
+    const unitPrice = promoPrice.price;
     const lineTotal = cart.qty * unitPrice;
     return {
       id: `draft-item-${index + 1}`,
@@ -125,18 +132,19 @@ export function calculateOrder(state: AppState, partnerId: string, cartItems: Ca
       tierNameSnapshot: tier.name,
       qty: cart.qty,
       unitPrice,
-      discountAmount: 0,
+      discountAmount: promoPrice.discountAmount * cart.qty,
       lineTotal,
       notes: cart.notes?.trim() || undefined,
     } satisfies OrderItem;
   });
 
   const subtotal = items.reduce((sum, item) => sum + item.lineTotal, 0);
+  const discountTotal = items.reduce((sum, item) => sum + item.discountAmount, 0);
   const totalWeightGram = calculateCartWeightGram(state.products, cartItems);
   const shouldUseStyrofoam = expedition !== thermalTruckExpedition;
   const styrofoamPlan = shouldUseStyrofoam ? calculateStyrofoamPlan(totalWeightGram) : [];
   const packingFee = styrofoamPlan.reduce((sum, item) => sum + item.lineTotal, 0);
-  return { items: [...items, ...styrofoamOrderItems(styrofoamPlan, items.length)], subtotal, discountTotal: 0, taxTotal: 0, packingFee, totalWeightGram, styrofoamPlan, grandTotal: subtotal + packingFee };
+  return { items: [...items, ...styrofoamOrderItems(styrofoamPlan, items.length)], subtotal, discountTotal, taxTotal: 0, packingFee, totalWeightGram, styrofoamPlan, grandTotal: subtotal + packingFee };
 }
 
 export function createOrder(state: AppState, actor: User, partnerId: string, cartItems: CartItem[], shippingAddress: string, notes?: string, requestedDeliveryDate?: string, expedition: ExpeditionType = defaultExpedition): Order {
@@ -173,12 +181,12 @@ export function createOrder(state: AppState, actor: User, partnerId: string, car
 }
 
 export function revisePartnerOrder(state: AppState, actor: User, orderId: string, input: { cartItems: CartItem[]; requestedDeliveryDate?: string; expedition?: ExpeditionType; notes?: string }) {
-  if (actor.role !== 'partner') throw new Error('Hanya akun mitra yang bisa mengedit pesanan lewat menu Order Saya');
-  const partner = findPartnerForUser(state, actor);
-  if (!partner) throw new Error('Profil mitra tidak ditemukan');
+  const isPartnerActor = actor.role === 'partner';
+  const partner = isPartnerActor ? findPartnerForUser(state, actor) : undefined;
+  if (isPartnerActor && !partner) throw new Error('Profil mitra tidak ditemukan');
   const order = state.orders.find((item) => item.id === orderId);
   if (!order) throw new Error('Order tidak ditemukan');
-  if (order.partnerId !== partner.id) throw new Error('Order ini bukan milik mitra yang sedang login');
+  if (isPartnerActor && order.partnerId !== partner?.id) throw new Error('Order ini bukan milik mitra yang sedang login');
   if (!['pending', 'confirmed'].includes(order.status)) throw new Error('Order hanya bisa diedit sebelum diproses / dispatching');
   if (!input.cartItems.length) throw new Error('Pesanan wajib memiliki minimal 1 item produk');
 
@@ -193,7 +201,7 @@ export function revisePartnerOrder(state: AppState, actor: User, orderId: string
     itemCount: order.items.length,
   };
   const expedition = input.expedition ?? order.expedition ?? defaultExpedition;
-  const calculated = calculateOrder(state, partner.id, input.cartItems, expedition);
+  const calculated = calculateOrder(state, order.partnerId, input.cartItems, expedition);
   const revisedItems = calculated.items.map((item, index) => ({ ...item, id: `${order.id}-item-${index + 1}`, orderId: order.id }));
 
   order.subtotal = calculated.subtotal;
@@ -218,8 +226,8 @@ export function revisePartnerOrder(state: AppState, actor: User, orderId: string
     expedition: order.expedition,
     itemCount: order.items.length,
   };
-  state.statusHistories.unshift({ id: `hist-revise-${Date.now()}`, orderId, fromStatus: order.status, toStatus: order.status, note: 'Order direvisi mitra', changedBy: actor.id, changedAt: new Date().toISOString() });
-  audit(state, actor.id, 'ORDER_REVISED_BY_PARTNER', 'order', orderId, oldValue, newValue);
+  state.statusHistories.unshift({ id: `hist-revise-${Date.now()}`, orderId, fromStatus: order.status, toStatus: order.status, note: isPartnerActor ? 'Order direvisi mitra' : 'Order direvisi admin', changedBy: actor.id, changedAt: new Date().toISOString() });
+  audit(state, actor.id, isPartnerActor ? 'ORDER_REVISED_BY_PARTNER' : 'ORDER_REVISED_BY_ADMIN', 'order', orderId, oldValue, newValue);
   return order;
 }
 
@@ -367,11 +375,11 @@ export function recordPayment(state: AppState, actor: User, invoiceId: string, a
 
 export function getLeaderboard(state: AppState) {
   const rows = state.partners.map((partner) => {
-    const delivered = state.orders.filter((order) => order.partnerId === partner.id && order.status === 'delivered');
-    const totalOrderValue = delivered.reduce((sum, order) => sum + order.grandTotal, 0);
-    const totalOrderQty = delivered.reduce((sum, order) => sum + order.items.filter((item) => !item.productId.startsWith('packaging-')).reduce((itemSum, item) => itemSum + item.qty, 0), 0);
+    const shipped = state.orders.filter((order) => order.partnerId === partner.id && order.status === 'shipped');
+    const totalOrderValue = shipped.reduce((sum, order) => sum + order.grandTotal, 0);
+    const totalOrderQty = shipped.reduce((sum, order) => sum + order.items.filter((item) => !item.productId.startsWith('packaging-')).reduce((itemSum, item) => itemSum + item.qty, 0), 0);
     const tier = state.tiers.find((item) => item.id === partner.tierId);
-    return { partnerId: partner.id, partnerName: partner.businessName, tier: tier?.name ?? '-', totalOrderValue, totalOrderQty, totalOrders: delivered.length, points: Math.floor(totalOrderValue / 100000), rank: 0 };
+    return { partnerId: partner.id, partnerName: partner.businessName, tier: tier?.name ?? '-', totalOrderValue, totalOrderQty, totalOrders: shipped.length, points: Math.floor(totalOrderValue / 100000), rank: 0 };
   }).filter((row) => row.totalOrders > 0).sort((a, b) => b.points - a.points || b.totalOrderValue - a.totalOrderValue);
   return rows.map((row, index) => ({ ...row, rank: index + 1 }));
 }

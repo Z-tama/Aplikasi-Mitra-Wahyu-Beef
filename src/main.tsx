@@ -3,15 +3,17 @@ import { createRoot } from 'react-dom/client';
 import { BarChart3, Bell, ClipboardList, Eye, EyeOff, FileText, IceCreamBowl, LayoutDashboard, LogOut, MapPinned, Medal, Menu, Package, Printer, ReceiptText, ShieldCheck, ShoppingCart, Truck, UserCog, Users, X } from 'lucide-react';
 import './styles.css';
 import { AccountingEvent, CartItem, ExpeditionType, Invoice, Order, OrderStatus, Partner, Role, User, defaultExpedition, expeditionLabels, formatIdr, orderWorkflowStatuses, statusLabels, thermalTruckExpedition } from './domain';
-import { AppState, createSeedState } from './seed';
+import { AppState, PartnerRegistrationSubmission, createSeedState } from './seed';
 import { api, type Session } from './apiClient';
 import { calculateCartWeightGram, calculateStyrofoamPlan, findPartnerForUser, getCatalogForPartner, getLeaderboard, parseProductWeightGram } from './services';
+import { applyProductPromotion } from './promotions';
 
 const stateSingleton = createSeedState();
 const emptyRuntimeState: AppState = { ...stateSingleton, orders: [], statusHistories: [], invoices: [], deliveryNotes: [], payments: [], leaderboardRows: [] };
 const sessionStorageKey = 'wahyu-beef-session-v1';
 const demoOrdersStorageKey = 'wahyu-beef-demo-orders-v1';
 const expeditionOptions = Object.entries(expeditionLabels) as [ExpeditionType, string][];
+const orderStatusFilterOptions: OrderStatus[] = ['cancelled', 'pending', 'confirmed', 'in_production', 'ready_to_ship', 'shipped'];
 const sessionTtlMs = 30 * 60 * 1000;
 
 type View = 'dashboard' | 'catalog' | 'checkout' | 'orders' | 'products' | 'partners' | 'pricing' | 'documents' | 'leaderboard' | 'areas' | 'profile' | 'reports' | 'audit' | 'accounting';
@@ -290,7 +292,7 @@ function Shell({ state, user, setUser, token, view, setView, setState, refresh, 
       <div className="mobile-sidebar-head"><div className="brand"><div className="logo logo-image"><img src="/assets/logo-wahyu-beef.png" alt="Logo Wahyu Beef" /></div><div><h2>Wahyu Beef</h2><span>Mitra App</span></div></div><button className="mobile-close-btn" aria-label="Tutup menu" onClick={() => setIsMobileMenuOpen(false)}><X size={20} /></button></div>
       <nav className="nav">{nav.map(([key, label, Icon]) => <button key={key} className={view === key ? 'active' : ''} onClick={() => go(key)}><Icon size={18} /> {label}</button>)}</nav>
       <div className="user-box"><b>{user.name}</b><br /><span>{roleLabel(user.role)}</span><br /><br /><button className="btn sidebar-logout-btn" onClick={onLogout}><LogOut size={18} /> Keluar</button></div>
-      <p className="app-version-note">Versi Aplikasi v1.4.0</p>
+      <p className="app-version-note">Versi Aplikasi v1.5.0</p>
     </aside>
     <main className="main">
       <MobileAppBar state={state} user={user} view={view} onMenu={() => setIsMobileMenuOpen(true)} onNavigate={go} />
@@ -299,7 +301,7 @@ function Shell({ state, user, setUser, token, view, setView, setState, refresh, 
       {(view === 'catalog' || view === 'checkout') && <Catalog state={state} user={user} token={token} refresh={refresh} setView={setView} currentView={view} />}
       {view === 'orders' && <Orders state={state} user={user} token={token} refresh={refresh} />}
       {view === 'products' && <Products state={state} user={user} token={token} refresh={refresh} />}
-      {view === 'partners' && <Partners state={state} />}
+      {view === 'partners' && <Partners state={state} token={token} refresh={refresh} />}
       {view === 'pricing' && <Pricing state={state} />}
       {view === 'documents' && <Documents state={state} user={user} token={token} refresh={refresh} />}
       {view === 'leaderboard' && <Leaderboard state={state} />}
@@ -319,7 +321,9 @@ function getAppNotifications(state: AppState, user: User): AppNotification[] {
   const visibleOrders = user.role === 'partner' ? state.orders.filter((order) => order.createdBy === user.id || findPartnerForUser(state, user)?.id === order.partnerId) : state.orders;
   const activeOrders = visibleOrders.filter((order) => !['delivered', 'cancelled'].includes(order.status));
   const recentInvoices = state.invoices.filter((invoice) => invoice.status !== 'void' && (user.role !== 'partner' || visibleOrders.some((order) => order.id === invoice.orderId))).slice(0, 2);
+  const registrationRequests = user.role === 'partner' ? [] : (state.partnerRegistrations ?? []).filter((item) => item.status === 'new').slice(0, 6);
   return [
+    ...registrationRequests.map((registration) => ({ id: `partner-registration-${registration.id}`, targetView: 'partners' as View, title: 'Request mitra baru', body: `${registration.businessName} • ${registration.ownerName}`, meta: new Date(registration.submittedAt).toLocaleDateString('id-ID') })),
     ...activeOrders.slice(0, 4).map((order) => ({ id: `order-${order.id}`, targetView: 'orders' as View, title: statusLabels[order.status], body: `${order.orderNumber} • ${partnerName(state, order.partnerId)}`, meta: new Date(order.orderDate).toLocaleDateString('id-ID') })),
     ...recentInvoices.map((invoice) => ({ id: `invoice-${invoice.id}`, targetView: 'documents' as View, title: invoice.amountDue > 0 ? 'Invoice belum lunas' : 'Invoice lunas', body: `${invoice.invoiceNumber} • ${formatIdr(invoice.amountDue > 0 ? invoice.amountDue : invoice.grandTotal)}`, meta: invoice.invoiceDate })),
   ];
@@ -343,7 +347,7 @@ function useNotificationReadState(userId: string, notifications: AppNotification
 }
 
 function NotificationDropdown({ notifications, unreadCount, readIds, onRead, onNavigate, onClose }: { notifications: AppNotification[]; unreadCount: number; readIds: string[]; onRead: (id: string) => void; onNavigate: (view: View) => void; onClose: () => void }) {
-  return <div className="notification-panel"><div className="notification-head"><div><b>Notifikasi</b><small>{unreadCount} belum dibaca</small></div><button className="notification-x" type="button" aria-label="Tutup notifikasi" onClick={onClose}><X size={18} /></button></div>{notifications.length ? <div className="notification-list">{notifications.map((item) => { const isRead = readIds.includes(item.id); return <button type="button" className={`notification-item ${isRead ? 'read' : 'unread'}`} key={item.id} onClick={() => onRead(item.id)} onDoubleClick={() => onNavigate(item.targetView)}><span className="notification-dot" /><div><b>{item.title}</b><p>{item.body}</p><small>{isRead ? 'Sudah dibaca' : item.meta}</small></div></button>; })}</div> : <div className="notification-empty">Belum ada notifikasi baru.</div>}<button className="notification-close" type="button" onClick={onClose}>Tutup</button></div>;
+  return <div className="notification-panel"><div className="notification-head"><div><b>Notifikasi</b><small>{unreadCount} belum dibaca</small></div><button className="notification-x" type="button" aria-label="Tutup notifikasi" onClick={onClose}><X size={18} /></button></div>{notifications.length ? <div className="notification-list">{notifications.map((item) => { const isRead = readIds.includes(item.id); return <button type="button" className={`notification-item ${isRead ? 'read' : 'unread'}`} key={item.id} onClick={() => { onRead(item.id); onNavigate(item.targetView); onClose(); }}><span className="notification-dot" /><div><b>{item.title}</b><p>{item.body}</p><small>{isRead ? 'Sudah dibaca' : item.meta}</small></div></button>; })}</div> : <div className="notification-empty">Belum ada notifikasi baru.</div>}<button className="notification-close" type="button" onClick={onClose}>Tutup</button></div>;
 }
 
 function MobileAppBar({ state, user, view, onMenu, onNavigate }: { state: AppState; user: User; view: View; onMenu: () => void; onNavigate: (view: View) => void }) {
@@ -366,41 +370,51 @@ function Topbar({ state, user, view, onNavigate }: { state: AppState; user: User
 function Dashboard({ state }: { state: AppState }) {
   const now = new Date();
   const monthKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
-  const deliveredGmv = state.orders.filter((o) => o.status === 'delivered').reduce((s, o) => s + o.grandTotal, 0);
-  const monthlyRevenue = state.invoices.filter((invoice) => invoice.invoiceDate.startsWith(monthKey) && invoice.status !== 'void').reduce((sum, invoice) => sum + invoice.amountPaid, 0);
-  const totalPaid = state.invoices.filter((invoice) => invoice.status !== 'void').reduce((sum, invoice) => sum + invoice.amountPaid, 0);
-  const totalDue = state.invoices.filter((invoice) => invoice.status !== 'void').reduce((sum, invoice) => sum + invoice.amountDue, 0);
-  const invoiceTotal = totalPaid + totalDue;
-  const activeOrders = state.orders.filter((o) => !['delivered', 'cancelled'].includes(o.status)).length;
+  const shippedMonthKey = (orderId: string, fallbackDate: string) => (state.statusHistories.find((history) => history.orderId === orderId && history.toStatus === 'shipped')?.changedAt ?? fallbackDate).slice(0, 7);
+  const monthlyShippedOrders = state.orders.filter((order) => order.status === 'shipped' && shippedMonthKey(order.id, order.orderDate) === monthKey);
+  const monthlyShippedOrderIds = new Set(monthlyShippedOrders.map((order) => order.id));
+  const monthlyRevenue = monthlyShippedOrders.reduce((sum, order) => sum + order.grandTotal, 0);
+  const monthlyInvoices = state.invoices.filter((invoice) => invoice.status !== 'void' && monthlyShippedOrderIds.has(invoice.orderId));
+  const paidThisMonth = monthlyInvoices.reduce((sum, invoice) => sum + invoice.amountPaid, 0);
+  const dueThisMonth = monthlyInvoices.reduce((sum, invoice) => sum + invoice.amountDue, 0);
+  const invoicedThisMonth = monthlyInvoices.reduce((sum, invoice) => sum + invoice.grandTotal, 0);
+  const unbilledThisMonth = Math.max(0, monthlyRevenue - invoicedThisMonth);
+  const activeOrders = state.orders.filter((order) => !['delivered', 'cancelled'].includes(order.status)).length;
+  const activePartners = state.partners.filter((p) => p.status === 'active').length;
   return <div className="grid">
-    <div className="grid cols-4">
-      <Metric label="GMV Delivered" value={formatIdr(deliveredGmv)} />
-      <Metric label="Order Aktif" value={String(activeOrders)} />
-      <Metric label="Mitra Aktif" value={String(state.partners.filter((p) => p.status === 'active').length)} />
-      <Metric label="Invoice Outstanding" value={formatIdr(totalDue)} />
+    <div className="grid cols-4 dashboard-metrics dashboard-metrics-primary">
+      <Metric label="Pendapatan Bulan Ini" value={formatIdr(monthlyRevenue)} icon={ReceiptText} />
+      <Metric label="Piutang" value={formatIdr(dueThisMonth)} icon={FileText} />
+      <Metric label="Order Aktif" value={String(activeOrders)} icon={Truck} />
+      <Metric label="Mitra Aktif" value={String(activePartners)} icon={Users} />
     </div>
     <div className="grid cols-2">
-      <div className="card"><h3>Order by Status</h3><StatusSummary orders={state.orders} /></div>
-      <FinanceChartCard monthlyRevenue={monthlyRevenue} paid={totalPaid} due={totalDue} total={invoiceTotal} monthLabel={now.toLocaleDateString('id-ID', { month: 'long', year: 'numeric' })} />
+      <div className="card"><h3>Order by Status</h3><StatusSummary orders={state.orders} /><p className="footer-note">Mitra aktif: {activePartners}. Pendapatan dihitung dari order berstatus Dikirim bulan berjalan.</p></div>
+      <FinanceChartCard monthlyRevenue={monthlyRevenue} paid={paidThisMonth} due={dueThisMonth} unbilled={unbilledThisMonth} monthLabel={now.toLocaleDateString('id-ID', { month: 'long', year: 'numeric' })} />
     </div>
     <OrdersTable state={state} orders={state.orders.slice(0, 5)} compact />
   </div>;
 }
 
-function Metric({ label, value }: { label: string; value: string }) { return <div className="card metric"><span className="label">{label}</span><span className="value">{value}</span></div>; }
+function Metric({ label, value, icon: Icon = BarChart3 }: { label: string; value: string; icon?: React.ComponentType<{ size?: number }> }) { return <div className="card metric"><span className="metric-icon"><Icon size={20} /></span><span className="label">{label}</span><span className="value">{value}</span></div>; }
 
-function FinanceChartCard({ monthlyRevenue, paid, due, total, monthLabel }: { monthlyRevenue: number; paid: number; due: number; total: number; monthLabel: string }) {
-  const paidPct = total > 0 ? Math.round((paid / total) * 100) : 0;
-  const duePct = total > 0 ? Math.round((due / total) * 100) : 0;
-  const maxValue = Math.max(monthlyRevenue, paid, due, 1);
-  const revenueHeight = Math.max(8, Math.round((monthlyRevenue / maxValue) * 100));
-  const paidHeight = Math.max(8, Math.round((paid / maxValue) * 100));
-  const dueHeight = Math.max(8, Math.round((due / maxValue) * 100));
-  return <div className="card finance-chart-card"><div className="chart-head"><div><h3>Grafik Keuangan</h3><p>Total omzet bulan ini & status tagihan</p></div><span className="area-pill">{monthLabel}</span></div><div className="revenue-highlight"><span>Total Omzet Bulan Ini</span><b>{formatIdr(monthlyRevenue)}</b></div><div className="mini-bar-chart" aria-label="Grafik omzet dan tagihan"><ChartBar label="Omzet" value={monthlyRevenue} height={revenueHeight} tone="revenue" /><ChartBar label="Terbayar" value={paid} height={paidHeight} tone="paid" /><ChartBar label="Belum" value={due} height={dueHeight} tone="due" /></div><div className="invoice-split"><div className="split-track"><span className="paid" style={{ width: `${paidPct}%` }} /><span className="due" style={{ width: `${duePct}%` }} /></div><div className="split-grid"><div><span className="legend-dot paid-dot" />Sudah terbayar<b>{formatIdr(paid)}</b><small>{paidPct}%</small></div><div><span className="legend-dot due-dot" />Belum terbayar<b>{formatIdr(due)}</b><small>{duePct}%</small></div></div></div></div>;
+function FinanceChartCard({ monthlyRevenue, paid, due, unbilled, monthLabel }: { monthlyRevenue: number; paid: number; due: number; unbilled: number; monthLabel: string }) {
+  const clampPct = (value: number) => monthlyRevenue > 0 ? Math.min(100, Math.max(0, Math.round((value / monthlyRevenue) * 100))) : 0;
+  const paidPct = clampPct(paid);
+  const duePct = clampPct(due);
+  const unbilledPct = clampPct(unbilled);
+  const settledPct = monthlyRevenue > 0 ? Math.min(100, paidPct + duePct + unbilledPct) : 0;
+  const maxValue = Math.max(monthlyRevenue, paid, due, unbilled, 1);
+  const barHeight = (value: number) => Math.max(8, Math.round((value / maxValue) * 100));
+  return <div className="card finance-chart-card upgraded"><div className="chart-head"><div><h3>Grafik Keuangan</h3><p>Pendapatan Dikirim bulan ini, pembayaran, piutang, dan belum ditagihkan</p></div><span className="area-pill">{monthLabel}</span></div><div className="revenue-highlight"><span>Pendapatan Bulan Ini</span><b>{formatIdr(monthlyRevenue)}</b><em>{settledPct}% sudah terpetakan ke pembayaran/piutang/tagihan</em></div><div className="finance-visual-grid"><div className="mini-bar-chart" aria-label="Grafik pendapatan dan tagihan"><ChartBar label="Pendapatan" value={monthlyRevenue} height={barHeight(monthlyRevenue)} tone="revenue" icon={ReceiptText} /><ChartBar label="Terbayar" value={paid} height={barHeight(paid)} tone="paid" icon={ShieldCheck} /><ChartBar label="Piutang" value={due} height={barHeight(due)} tone="due" icon={FileText} /><ChartBar label="Belum Tagih" value={unbilled} height={barHeight(unbilled)} tone="unbilled" icon={ClipboardList} /></div><div className="finance-ring" style={{ '--paid': `${paidPct}%`, '--due': `${paidPct + duePct}%`, '--unbilled': `${paidPct + duePct + unbilledPct}%` } as React.CSSProperties}><div><b>{settledPct}%</b><span>mapped</span></div></div></div><div className="invoice-split"><div className="split-track animated"><span className="paid" style={{ width: `${paidPct}%` }} /><span className="due" style={{ width: `${duePct}%` }} /><span className="unbilled" style={{ width: `${unbilledPct}%` }} /></div><div className="split-grid"><FinanceLegend tone="paid" label="Sudah Terbayar" value={paid} pct={paidPct} icon={ShieldCheck} /><FinanceLegend tone="due" label="Piutang" value={due} pct={duePct} icon={FileText} /><FinanceLegend tone="unbilled" label="Belum Ditagihkan" value={unbilled} pct={unbilledPct} icon={ClipboardList} /></div></div></div>;
 }
 
-function ChartBar({ label, value, height, tone }: { label: string; value: number; height: number; tone: 'revenue' | 'paid' | 'due' }) {
-  return <div className={`chart-bar ${tone}`}><div className="bar-shell"><span style={{ height: `${height}%` }} /></div><b>{formatIdr(value)}</b><small>{label}</small></div>;
+function FinanceLegend({ tone, label, value, pct, icon: Icon }: { tone: 'paid' | 'due' | 'unbilled'; label: string; value: number; pct: number; icon: React.ComponentType<{ size?: number }> }) {
+  return <div><span className={`legend-icon ${tone}`}><Icon size={16} /></span>{label}<b>{formatIdr(value)}</b><small>{pct}% dari pendapatan bulan ini</small></div>;
+}
+
+function ChartBar({ label, value, height, tone, icon: Icon }: { label: string; value: number; height: number; tone: 'revenue' | 'paid' | 'due' | 'unbilled'; icon: React.ComponentType<{ size?: number }> }) {
+  return <div className={`chart-bar ${tone}`}><div className="bar-shell"><span style={{ height: `${height}%` }} /></div><b>{formatIdr(value)}</b><small><Icon size={13} />{label}</small></div>;
 }
 
 type CatalogProduct = ReturnType<typeof getCatalogForPartner>[number];
@@ -494,8 +508,8 @@ function Catalog({ state, user, token, refresh, setView, currentView }: { state:
       <div className="catalog marketplace-catalog">{products.map((product) => {
         const hasPackageOptions = canChoosePackaging(product);
         return <div className="product-card marketplace-card" key={product.id} onClick={() => hasPackageOptions && setSelectedProduct(product)} role={hasPackageOptions ? 'button' : undefined} tabIndex={hasPackageOptions ? 0 : undefined} onKeyDown={(event) => { if (hasPackageOptions && (event.key === 'Enter' || event.key === ' ')) setSelectedProduct(product); }}>
-          <div className={`product-visual marketplace-visual ${product.imageUrl ? 'has-photo' : ''}`}>{product.imageUrl && <img src={product.imageUrl} alt={product.name} loading="lazy" />}<span className="discount-badge">Mitra</span><div className="placeholder-brand">Wahyu Beef</div>{!product.imageUrl && <div className="placeholder-title">{product.name}</div>}<div className="placeholder-pack">{hasPackageOptions ? '250g • 500g • 1kg' : product.unit}</div></div>
-          <div className="product-info"><h3>{product.name}</h3><span className="product-meta">{product.sku} • {hasPackageOptions ? 'Pilih kemasan' : `MOQ ${product.minimumOrderQty} ${product.unit}`}</span><div className="price-row"><span className="voucher-tag">%</span><div className="price">{product.price ? formatIdr(product.price) : 'Belum ada harga'}</div></div><div className="deal-note">{hasPackageOptions ? 'Klik untuk pilih ukuran kemasan' : `Harga khusus ${tierName(state, activePartner.tierId)}`}</div><div className="rating-row"><span>★ 5.0</span><span>•</span><span>{Math.max(10, product.minimumOrderQty * 10)}+ terjual</span></div>{hasPackageOptions ? <button className="btn small product-pick-btn" onClick={(event) => { event.stopPropagation(); setSelectedProduct(product); }}>Pilih</button> : <div className="qty-row compact" onClick={(event) => event.stopPropagation()}><input className="input" type="number" min="0" placeholder="Qty" value={cart[cartKey(product.id)] ?? ''} onChange={(e) => setCart({ ...cart, [cartKey(product.id)]: Number(e.target.value) })} /><button className="btn small" onClick={() => addToCart(product)}>Tambah</button></div>}</div>
+          <div className={`product-visual marketplace-visual ${product.imageUrl ? 'has-photo' : ''}`}>{product.imageUrl && <img src={product.imageUrl} alt={product.name} loading="lazy" />}{product.promotion && <span className="discount-badge">Promo</span>}<div className="placeholder-brand">Wahyu Beef</div>{!product.imageUrl && <div className="placeholder-title">{product.name}</div>}<div className="placeholder-pack">{hasPackageOptions ? '250g • 500g • 1kg' : product.unit}</div></div>
+          <div className="product-info"><h3>{product.name}</h3><span className="product-meta">{product.sku} • {hasPackageOptions ? 'Pilih kemasan' : `MOQ ${product.minimumOrderQty} ${product.unit}`}</span><ProductPrice product={product} /><div className="deal-note">{product.promotion ? `${product.promotion.label} • Berlaku Juni 2026` : hasPackageOptions ? 'Klik untuk pilih ukuran kemasan' : `Harga khusus ${tierName(state, activePartner.tierId)}`}</div><div className="rating-row"><span>★ 5.0</span><span>•</span><span>{Math.max(10, product.minimumOrderQty * 10)}+ terjual</span></div>{hasPackageOptions ? <button className="btn small product-pick-btn" onClick={(event) => { event.stopPropagation(); setSelectedProduct(product); }}>Pilih</button> : <div className="qty-row compact" onClick={(event) => event.stopPropagation()}><input className="input" type="number" min="0" placeholder="Qty" value={cart[cartKey(product.id)] ?? ''} onChange={(e) => setCart({ ...cart, [cartKey(product.id)]: Number(e.target.value) })} /><button className="btn small" onClick={() => addToCart(product)}>Tambah</button></div>}</div>
         </div>;
       })}</div>
     </section>)}</div> : <div className="notice warning">Produk tidak ditemukan. Coba ubah kategori atau kata kunci pencarian.</div>}
@@ -515,15 +529,17 @@ function CheckoutPage({ state, catalog, partnerAddress, assistedPartner, cart, c
     const item = cartKeyToItem(key, qty);
     const product = catalog.find((p) => p.id === item.productId)!;
     const unitPrice = getPackagePrice(product?.price ?? 0, item.packageWeightGram);
-    return { key, item, product, unitPrice, lineTotal: unitPrice * qty };
+    const normalUnitPrice = getPackagePrice(product?.normalPrice ?? product?.price ?? 0, item.packageWeightGram);
+    return { key, item, product, unitPrice, normalUnitPrice, discountTotal: Math.max(0, normalUnitPrice - unitPrice) * qty, lineTotal: unitPrice * qty };
   }).filter((row) => row.product);
   const totalPesanan = rows.reduce((sum, row) => sum + row.lineTotal, 0);
+  const normalTotalPesanan = rows.reduce((sum, row) => sum + row.normalUnitPrice * row.item.qty, 0);
   const totalBeratGram = calculateCartWeightGram(catalog, rows.map((row) => row.item));
   const shouldUseStyrofoam = expedition !== thermalTruckExpedition;
   const styrofoamPlan = shouldUseStyrofoam ? calculateStyrofoamPlan(totalBeratGram) : [];
   const packingTotal = styrofoamPlan.reduce((sum, item) => sum + item.lineTotal, 0);
-  const diskon = 0;
-  const totalTagihan = totalPesanan - diskon + packingTotal;
+  const diskon = rows.reduce((sum, row) => sum + row.discountTotal, 0);
+  const totalTagihan = totalPesanan + packingTotal;
   return <div className="grid checkout-page">
     <div className="card checkout-head"><div><h3>Ringkasan Keranjang</h3><p className="footer-note">Cek ulang produk, ekspedisi, kemasan, qty, sterofoam otomatis, dan catatan sebelum menekan tombol Selesaikan Pesanan.</p>{assistedPartner && <p className="footer-note"><b>Order dibantu admin untuk:</b> {assistedPartner.businessName} • {tierName(state, assistedPartner.tierId)}</p>}</div><button className="btn" onClick={onBack}>Kembali ke Katalog</button></div>
     {message && <div className="notice">{message}</div>}
@@ -532,7 +548,7 @@ function CheckoutPage({ state, catalog, partnerAddress, assistedPartner, cart, c
         const weightGram = parseProductWeightGram(row.product, row.item.packageWeightGram);
         return <div className="checkout-item" key={row.key}>
           <div className={`checkout-thumb ${row.product.imageUrl ? 'has-photo' : ''}`}>{row.product.imageUrl ? <img src={row.product.imageUrl} alt={row.product.name} /> : <span>WB</span>}</div>
-          <div className="checkout-info"><b>{row.item.packageWeightGram ? `${row.product.name} ${row.item.packageWeightGram} gr` : row.product.name}</b><span>{row.product.sku} • {row.item.packageLabel ?? row.product.unit}</span><small>{formatIdr(row.unitPrice)} / item • Berat {formatWeightGram(weightGram * row.item.qty)}</small><label className="checkout-note"><span>Catatan</span><textarea value={cartNotes[row.key] ?? ''} onChange={(event) => onUpdateNote(row.key, event.target.value)} rows={2} placeholder="Contoh: potong kecil, kirim pagi, pilih yang minim lemak" /></label></div>
+          <div className="checkout-info"><b>{row.item.packageWeightGram ? `${row.product.name} ${row.item.packageWeightGram} gr` : row.product.name}</b><span>{row.product.sku} • {row.item.packageLabel ?? row.product.unit}</span><small>{row.discountTotal > 0 ? `${formatIdr(row.unitPrice)} / item • Hemat ${formatIdr(row.discountTotal)}` : `${formatIdr(row.unitPrice)} / item`} • Berat {formatWeightGram(weightGram * row.item.qty)}</small><label className="checkout-note"><span>Catatan</span><textarea value={cartNotes[row.key] ?? ''} onChange={(event) => onUpdateNote(row.key, event.target.value)} rows={2} placeholder="Contoh: potong kecil, kirim pagi, pilih yang minim lemak" /></label></div>
           <div className="qty-stepper checkout-stepper"><button type="button" onClick={() => onUpdateQty(row.key, row.item.qty - 1)}>−</button><input className="input" type="number" min="0" value={row.item.qty} onChange={(event) => onUpdateQty(row.key, Number(event.target.value) || 0)} /><button type="button" onClick={() => onUpdateQty(row.key, row.item.qty + 1)}>+</button></div>
           <div className="checkout-line-total"><b>{formatIdr(row.lineTotal)}</b><button className="btn small" onClick={() => onUpdateQty(row.key, 0)}>Hapus</button></div>
         </div>;
@@ -543,7 +559,7 @@ function CheckoutPage({ state, catalog, partnerAddress, assistedPartner, cart, c
         <div className="checkout-line-total"><b>{formatIdr(item.lineTotal)}</b><small>Otomatis</small></div>
       </div>)}</div>}
     </div>
-    <div className="card checkout-summary proper-checkout-summary"><div className="checkout-address-block"><b>Alamat Kirim</b><p>{partnerAddress}</p></div><div className="field checkout-expedition-field"><label>Ekspedisi</label><select value={expedition} onChange={(event) => setExpedition(event.target.value as ExpeditionType)}>{expeditionOptions.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select><small>{expedition === thermalTruckExpedition ? 'Truk thermal: biaya sterofoam otomatis Rp0.' : 'Pilih ekspedisi untuk pengiriman order.'}</small></div><div className="field checkout-delivery-date"><label>Tanggal Kirim</label><input className="input" type="date" value={requestedDeliveryDate} onChange={(event) => setRequestedDeliveryDate(event.target.value)} /><small>Diisi oleh mitra saat membuat order.</small></div><div className="checkout-total-panel"><div><span>Total Pesanan</span><b>{formatIdr(totalPesanan)}</b></div><div><span>Total Berat</span><b>{formatWeightGram(totalBeratGram)}</b></div><div><span>Ekspedisi</span><b>{expeditionLabels[expedition]}</b></div><div><span>Biaya Sterofoam</span><b>{formatIdr(packingTotal)}</b></div><div><span>Diskon</span><b>{formatIdr(diskon)}</b></div><div className="checkout-grand-total"><span>Total Tagihan</span><strong>{formatIdr(totalTagihan)}</strong></div></div><button className="btn primary" disabled={rows.length === 0} onClick={() => onPlaceOrder(requestedDeliveryDate, expedition)}>Selesaikan Pesanan</button></div>
+    <div className="card checkout-summary proper-checkout-summary"><div className="checkout-address-block"><b>Alamat Kirim</b><p>{partnerAddress}</p></div><div className="field checkout-expedition-field"><label>Ekspedisi</label><select value={expedition} onChange={(event) => setExpedition(event.target.value as ExpeditionType)}>{expeditionOptions.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select><small>{expedition === thermalTruckExpedition ? 'Truk thermal: biaya sterofoam otomatis Rp0.' : 'Pilih ekspedisi untuk pengiriman order.'}</small></div><div className="field checkout-delivery-date"><label>Tanggal Kirim</label><input className="input" type="date" value={requestedDeliveryDate} onChange={(event) => setRequestedDeliveryDate(event.target.value)} /><small>Diisi oleh mitra saat membuat order.</small></div><div className="checkout-total-panel"><div><span>Total Normal</span><b>{formatIdr(normalTotalPesanan)}</b></div><div><span>Diskon Promo</span><b>{diskon ? `-${formatIdr(diskon)}` : formatIdr(0)}</b></div><div><span>Total Pesanan</span><b>{formatIdr(totalPesanan)}</b></div><div><span>Total Berat</span><b>{formatWeightGram(totalBeratGram)}</b></div><div><span>Ekspedisi</span><b>{expeditionLabels[expedition]}</b></div><div><span>Biaya Sterofoam</span><b>{formatIdr(packingTotal)}</b></div><div className="checkout-grand-total"><span>Total Tagihan</span><strong>{formatIdr(totalTagihan)}</strong></div></div><button className="btn primary" disabled={rows.length === 0} onClick={() => onPlaceOrder(requestedDeliveryDate, expedition)}>Selesaikan Pesanan</button></div>
   </div>;
 }
 
@@ -557,6 +573,11 @@ function PackageModal({ product, onClose, onAdd }: { product: CatalogProduct; on
   </div></div>;
 }
 
+function ProductPrice({ product, weightGram }: { product: CatalogProduct; weightGram?: number }) {
+  const price = getPackagePrice(product.price ?? 0, weightGram);
+  const normalPrice = getPackagePrice(product.normalPrice ?? product.price ?? 0, weightGram);
+  return <div className="price-row">{product.promotion && <span className="voucher-tag">%</span>}<div className="price-stack">{product.promotion && normalPrice > price && <span className="normal-price">{formatIdr(normalPrice)}</span>}<div className="price">{price ? formatIdr(price) : 'Belum ada harga'}</div></div></div>;
+}
 function canChoosePackaging(product: CatalogProduct) { return packagingCategoryIds.has(product.categoryId); }
 function getPackagePrice(basePrice: number, weightGram?: number) { return Math.round(basePrice * (weightGram === 250 ? 0.25 : weightGram === 500 ? 0.5 : 1)); }
 function formatWeightGram(value: number) { return `${Math.round(value).toLocaleString('id-ID')} Gram`; }
@@ -566,7 +587,9 @@ function cartKeyToItem(key: string, qty: number): CartItem { const [productId, w
 function Orders({ state, user, token, refresh }: { state: AppState; user: User; token: string; refresh: () => Promise<void> }) {
   const partner = findPartnerForUser(state, user);
   const orders = user.role === 'partner' && partner ? state.orders.filter((o) => o.partnerId === partner.id) : state.orders;
-  return <div className="grid"><OrdersTable state={state} orders={orders} user={user} token={token} refresh={refresh} /></div>;
+  const [statusFilter, setStatusFilter] = useState<'all' | OrderStatus>('all');
+  const filteredOrders = statusFilter === 'all' ? orders : orders.filter((order) => order.status === statusFilter);
+  return <div className="grid"><div className="card order-filter-card"><h3>Filter Order Management</h3><div className="catalog-filter-bar order-status-filter-bar"><div className="field"><label>Sort / Filter Status</label><select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value as 'all' | OrderStatus)}><option value="all">Semua Status</option>{orderStatusFilterOptions.map((status) => <option key={status} value={status}>{statusLabels[status]} ({orders.filter((order) => order.status === status).length})</option>)}</select></div><div className="field"><label>Hasil</label><div className="order-filter-result"><b>{filteredOrders.length}</b><span>dari {orders.length} order</span></div></div>{statusFilter !== 'all' && <button type="button" className="btn small" onClick={() => setStatusFilter('all')}>Reset Filter</button>}</div><div className="catalog-filter-summary"><b>{statusFilter === 'all' ? 'Semua Status' : statusLabels[statusFilter]}</b><span>Menampilkan order sesuai status: Dibatalkan, Menunggu Konfirmasi, Dikonfirmasi, Proses Produksi, Proses QC, atau Dikirim.</span></div></div>{filteredOrders.length ? <OrdersTable state={state} orders={filteredOrders} user={user} token={token} refresh={refresh} /> : <div className="notice warning">Belum ada order dengan status {statusFilter === 'all' ? 'dipilih' : statusLabels[statusFilter]}.</div>}</div>;
 }
 
 
@@ -673,11 +696,10 @@ function OrdersTable({ state, orders, user, token, refresh, compact }: { state: 
   const selectedOrder = selected ? state.orders.find((order) => order.id === selected.id) ?? selected : null;
   const [editingOrder, setEditingOrder] = useState<Order | null>(null);
   const [actionMessage, setActionMessage] = useState('');
-  const canPartnerCancel = (order: Order) => user?.role === 'partner' && ['pending', 'confirmed'].includes(order.status);
-  const canPartnerEdit = canPartnerCancel;
+  const canEditOrder = (order: Order) => Boolean(user && token && refresh && ['pending', 'confirmed'].includes(order.status));
   return <div className="card orders-card"><h3>{compact ? 'Order Terbaru' : 'Daftar Order'}</h3>{actionMessage && <div className={`notice ${actionMessage.includes('berhasil') ? '' : 'warning'}`}>{actionMessage}</div>}<div className="table-wrap orders-table"><table><thead><tr><th>No Order</th><th>Mitra</th><th>Status</th><th>Total</th><th>Packing</th><th>Item</th><th>% Kesesuaian</th><th>Aksi</th></tr></thead><tbody>{orders.map((order) => {
     const suitability = orderSuitabilityPercent(order);
-    return <tr key={order.id}><td data-label="No Order"><b>{order.orderNumber}</b><br /><small>{new Date(order.orderDate).toLocaleString('id-ID')}</small></td><td data-label="Mitra">{partnerName(state, order.partnerId)}<br /><small>{tierName(state, state.partners.find((p) => p.id === order.partnerId)?.tierId ?? '')}</small></td><td data-label="Status"><span className={`status ${order.status}`}>{statusLabels[order.status]}</span></td><td data-label="Total"><b>{formatIdr(order.grandTotal)}</b><br /><small>{(order.shippingCost || order.packingFee) ? `+ ${formatIdr((order.shippingCost ?? 0) + (order.packingFee ?? 0))} ongkir/packing` : 'Belum ada tambahan'}</small></td><td data-label="Packing">{packingSummary(order)}<br /><small>{formatIdr(order.packingFee ?? 0)}</small></td><td data-label="Item">{order.items.length} item</td><td data-label="% Kesesuaian"><span className={`status ${suitabilityClass(suitability)}`}>{suitability}%</span><br /><small>{orderQcDeliveredQty(order)} / {orderRequestedQty(order)} qty</small></td><td data-label="Aksi"><div className="actions"><button className="btn small" onClick={() => setSelected(order)}>Detail</button></div></td></tr>;
+    return <tr key={order.id}><td data-label="No Order"><b>{order.orderNumber}</b><br /><small>{new Date(order.orderDate).toLocaleString('id-ID')}</small></td><td data-label="Mitra">{partnerName(state, order.partnerId)}<br /><small>{tierName(state, state.partners.find((p) => p.id === order.partnerId)?.tierId ?? '')}</small></td><td data-label="Status"><span className={`status ${order.status}`}>{statusLabels[order.status]}</span></td><td data-label="Total"><b>{formatIdr(order.grandTotal)}</b><br /><small>{(order.shippingCost || order.packingFee) ? `+ ${formatIdr((order.shippingCost ?? 0) + (order.packingFee ?? 0))} ongkir/packing` : 'Belum ada tambahan'}</small></td><td data-label="Packing">{packingSummary(order)}<br /><small>{formatIdr(order.packingFee ?? 0)}</small></td><td data-label="Item">{order.items.length} item</td><td data-label="% Kesesuaian"><span className={`status ${suitabilityClass(suitability)}`}>{suitability}%</span><br /><small>{orderQcDeliveredQty(order)} / {orderRequestedQty(order)} qty</small></td><td data-label="Aksi"><div className="actions"><button className="btn small" onClick={() => setSelected(order)}>Detail</button>{canEditOrder(order) && <button className="btn small primary" onClick={() => setEditingOrder(order)}>Edit Pesanan</button>}</div></td></tr>;
   })}</tbody></table></div>{selectedOrder && <OrderModal state={state} order={selectedOrder} user={user} token={token} refresh={refresh} onClose={() => setSelected(null)} onEditOrder={(orderToEdit) => setEditingOrder(orderToEdit)} />}{editingOrder && user && token && refresh && <EditOrderModal state={state} order={editingOrder} token={token} refresh={refresh} onClose={() => setEditingOrder(null)} onSaved={(updated) => { setEditingOrder(null); setSelected(updated); setActionMessage(`${updated.orderNumber} berhasil direvisi.`); }} />}</div>;
 }
 
@@ -760,6 +782,30 @@ function OrderStatusPanel({ order, token, refresh }: { order: Order; token: stri
   return <div className="shipping-panel status-panel"><b>Status Order</b><div className="grid cols-2"><div className="field"><label>Pilih Tahapan Status</label><select value={targetStatus} onChange={(event) => setTargetStatus(event.target.value as OrderStatus)}>{orderWorkflowStatuses.map((status) => <option key={status} value={status}>{statusLabels[status]}</option>)}</select><small>Status utama disederhanakan menjadi 5 tahap operasional.</small></div><div className="field"><label>Status Saat Ini</label><span className={`status ${order.status}`}>{statusLabels[order.status]}</span></div></div>{message && <div className={`notice ${message.includes('berhasil') ? '' : 'warning'}`}>{message}</div>}<div className="actions"><button className="btn primary" type="button" disabled={targetStatus === order.status} onClick={saveStatus}>Simpan Status</button></div></div>;
 }
 
+function AdminCancelOrderPanel({ order, token, refresh, onClose }: { order: Order; token: string; refresh: () => Promise<void>; onClose: () => void }) {
+  const [message, setMessage] = useState('');
+  const [cancelling, setCancelling] = useState(false);
+  const canCancel = order.status !== 'cancelled';
+  async function cancelOrder() {
+    if (!canCancel || cancelling) return;
+    const ok = window.confirm(`Batalkan pesanan ${order.orderNumber}? Status order akan berubah menjadi Dibatalkan.`);
+    if (!ok) return;
+    setCancelling(true);
+    setMessage('');
+    try {
+      await api.updateOrderStatus(token, order.id, 'cancelled', 'Dibatalkan oleh admin dari popup detail order');
+      await refresh();
+      setMessage('Pesanan berhasil dibatalkan.');
+      onClose();
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Pesanan gagal dibatalkan.');
+    } finally {
+      setCancelling(false);
+    }
+  }
+  return <div className="shipping-panel danger-zone"><b>Batalkan / Hapus Pesanan</b><div className="notice warning">Gunakan tombol ini jika pesanan perlu dibatalkan dari akun admin. Data order tetap tersimpan untuk audit trail, tetapi status berubah menjadi <b>Dibatalkan</b>.</div>{message && <div className={`notice ${message.includes('berhasil') ? '' : 'warning'}`}>{message}</div>}<div className="actions"><button className="btn danger" type="button" disabled={!canCancel || cancelling} onClick={cancelOrder}>{order.status === 'cancelled' ? 'Pesanan Sudah Dibatalkan' : cancelling ? 'Membatalkan...' : 'Batalkan Pesanan'}</button></div></div>;
+}
+
 function OrderQcPanel({ order, token, refresh, onEditOrder }: { order: Order; token: string; refresh: () => Promise<void>; onEditOrder?: (order: Order) => void }) {
   const qcItems = order.items;
   const productItems = orderProductItems(order);
@@ -791,7 +837,7 @@ function OrderQcPanel({ order, token, refresh, onEditOrder }: { order: Order; to
 function OrderModal({ state, order, user, token, refresh, onClose, onEditOrder }: { state: AppState; order: Order; user?: User; token?: string; refresh?: () => Promise<void>; onClose: () => void; onEditOrder?: (order: Order) => void }) {
   const documentRef = useRef<HTMLDivElement>(null);
   const isAdmin = Boolean(user && user.role !== 'partner' && token && refresh);
-  return <div className="modal-backdrop print-backdrop"><div className="modal order-modal print-modal"><button className="modal-x" type="button" aria-label="Tutup detail order" onClick={onClose}><X size={20} /></button><div className="topbar"><div><h2>{order.orderNumber}</h2><p>{partnerName(state, order.partnerId)} • {statusLabels[order.status]}</p></div><div className="actions desktop-modal-actions"><button className="btn" type="button" onClick={() => printDocumentOnly(documentRef.current)}><Printer size={16} /> Cetak Order</button><button className="btn desktop-modal-close" onClick={onClose}>Tutup</button></div></div><div ref={documentRef}><DocumentOrder state={state} order={order} /></div><div className="actions mobile-print-actions"><button className="btn primary" type="button" onClick={() => printDocumentOnly(documentRef.current)}><Printer size={16} /> Cetak Order</button></div>{isAdmin && <><OrderStatusPanel order={order} token={token!} refresh={refresh!} />{order.status === 'ready_to_ship' && <OrderQcPanel order={order} token={token!} refresh={refresh!} onEditOrder={onEditOrder} />}<OrderShippingPanel order={order} token={token!} refresh={refresh!} /></>}</div></div>;
+  return <div className="modal-backdrop print-backdrop"><div className="modal order-modal print-modal"><button className="modal-x" type="button" aria-label="Tutup detail order" onClick={onClose}><X size={20} /></button><div className="topbar"><div><h2>{order.orderNumber}</h2><p>{partnerName(state, order.partnerId)} • {statusLabels[order.status]}</p></div><div className="actions desktop-modal-actions"><button className="btn" type="button" onClick={() => printDocumentOnly(documentRef.current)}><Printer size={16} /> Cetak Order</button><button className="btn desktop-modal-close" onClick={onClose}>Tutup</button></div></div><div ref={documentRef}><DocumentOrder state={state} order={order} /></div><div className="actions mobile-print-actions"><button className="btn primary" type="button" onClick={() => printDocumentOnly(documentRef.current)}><Printer size={16} /> Cetak Order</button></div>{isAdmin && <><OrderStatusPanel order={order} token={token!} refresh={refresh!} />{order.status === 'ready_to_ship' && <OrderQcPanel order={order} token={token!} refresh={refresh!} onEditOrder={onEditOrder} />}<OrderShippingPanel order={order} token={token!} refresh={refresh!} /><AdminCancelOrderPanel order={order} token={token!} refresh={refresh!} onClose={onClose} /></>}</div></div>;
 }
 
 
@@ -822,7 +868,7 @@ const areaPoints: AreaPoint[] = [
 ];
 
 function isRealPartner(partner: AppState['partners'][number]) {
-  return partner.partnerCode?.startsWith('MWB-');
+  return partner.partnerCode?.startsWith('MWB-') || partner.id.startsWith('p-reg-') || partner.userId.startsWith('u-reg-');
 }
 function tierCode(state: AppState, tierId: string) {
   return state.tiers.find((tier) => tier.id === tierId)?.code ?? 'RESELLER';
@@ -1001,17 +1047,22 @@ function ProfileSettings({ state, user, token, setUser, setState }: { state: App
 function initials(name: string) { return name.split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part[0]?.toUpperCase()).join('') || 'M'; }
 
 function AdminOrderCatalog({ state, user, token, refresh }: { state: AppState; user: User; token: string; refresh: () => Promise<void> }) {
-  const partners = state.partners.filter((partner) => partner.status === 'active');
+  const partners = state.partners.filter((partner) => partner.status === 'active' && isRealPartner(partner)).sort((a, b) => a.businessName.localeCompare(b.businessName, 'id', { sensitivity: 'base' }));
   const [selectedPartnerId, setSelectedPartnerId] = useState(partners[0]?.id ?? '');
   const [cart, setCart] = useState<Record<string, number>>({});
   const [cartNotes, setCartNotes] = useState<Record<string, string>>({});
   const [message, setMessage] = useState('');
   const [selectedProduct, setSelectedProduct] = useState<CatalogProduct | null>(null);
   const [isCheckout, setIsCheckout] = useState(false);
+  const [productSearch, setProductSearch] = useState('');
   const selectedPartner = partners.find((partner) => partner.id === selectedPartnerId) ?? partners[0];
   if (!selectedPartner) return <div className="notice warning">Belum ada mitra aktif untuk dibuatkan order.</div>;
   const catalog = getCatalogForPartner(state, selectedPartner.id);
   const activeProducts = catalog.filter((product) => product.isActive);
+  const normalizedSearch = productSearch.trim().toLowerCase();
+  const visibleProducts = normalizedSearch
+    ? activeProducts.filter((product) => [product.name, product.sku, product.categoryId, product.unit].some((value) => String(value ?? '').toLowerCase().includes(normalizedSearch)))
+    : activeProducts;
   const items: CartItem[] = Object.entries(cart).filter(([, qty]) => qty > 0).map(([key, qty]) => ({ ...cartKeyToItem(key, qty), notes: cartNotes[key]?.trim() || undefined }));
   const total = items.reduce((sum, item) => {
     const product = catalog.find((p) => p.id === item.productId);
@@ -1044,9 +1095,9 @@ function AdminOrderCatalog({ state, user, token, refresh }: { state: AppState; u
     }
   }
   if (isCheckout) return <CheckoutPage state={state} catalog={catalog} partnerAddress={selectedPartner.address} assistedPartner={selectedPartner} cart={cart} cartNotes={cartNotes} message={message} onBack={() => setIsCheckout(false)} onUpdateQty={updateCartQty} onUpdateNote={(key, note) => setCartNotes((current) => ({ ...current, [key]: note }))} onPlaceOrder={placeOrder} />;
-  return <div className="grid"><div className="card admin-assisted-order"><div className="products-catalog-head"><div><h3>Buat Order untuk Mitra</h3><p className="footer-note">Admin bisa membantu transaksi order mitra. Pilih mitra dulu agar harga tier, alamat kirim, WA, dan email notification tetap sesuai data mitra.</p></div><span className="area-pill">{cartQty} item • {formatIdr(total)}</span></div><div className="grid cols-2"><div className="field"><label>Mitra yang dibantu order</label><select value={selectedPartner.id} onChange={(event) => { setSelectedPartnerId(event.target.value); setCart({}); setCartNotes({}); }}>{partners.map((partner) => <option key={partner.id} value={partner.id}>{partner.businessName} • {tierName(state, partner.tierId)}</option>)}</select><small>{selectedPartner.address}</small></div><div className="field"><label>Ringkasan Keranjang</label><button className="btn primary" disabled={items.length === 0} onClick={() => setIsCheckout(true)}>Checkout Order Mitra</button><small>{items.length} produk • {formatIdr(total)}</small></div></div>{message && <div className={`notice ${message.includes('berhasil') ? '' : 'warning'}`}>{message}</div>}</div><div className="catalog marketplace-catalog">{activeProducts.map((product) => {
+  return <div className="grid"><div className="card admin-assisted-order"><div className="products-catalog-head"><div><h3>Buat Order untuk Mitra</h3><p className="footer-note">Admin bisa membantu transaksi order mitra. Pilih mitra dulu agar harga tier, alamat kirim, WA, dan email notification tetap sesuai data mitra.</p></div><span className="area-pill">{cartQty} item • {formatIdr(total)}</span></div><div className="grid cols-2"><div className="field"><label>Mitra yang dibantu order</label><select value={selectedPartner.id} onChange={(event) => { setSelectedPartnerId(event.target.value); setCart({}); setCartNotes({}); }}>{partners.map((partner) => <option key={partner.id} value={partner.id}>{partner.businessName} • {tierName(state, partner.tierId)}</option>)}</select><small>{selectedPartner.address}</small></div><div className="field"><label>Ringkasan Keranjang</label><button className="btn primary" disabled={items.length === 0} onClick={() => setIsCheckout(true)}>Checkout Order Mitra</button><small>{items.length} produk • {formatIdr(total)}</small></div></div><div className="product-search-row"><div className="field"><label>Cari Produk</label><input className="input" type="search" value={productSearch} onChange={(event) => setProductSearch(event.target.value)} placeholder="Cari nama produk, SKU, kategori, atau unit..." /></div><span className="area-pill">{visibleProducts.length} / {activeProducts.length} produk</span></div>{message && <div className={`notice ${message.includes('berhasil') ? '' : 'warning'}`}>{message}</div>}</div>{visibleProducts.length === 0 && <div className="notice warning">Produk tidak ditemukan untuk kata kunci “{productSearch}”.</div>}<div className="catalog marketplace-catalog">{visibleProducts.map((product) => {
     const hasPackageOptions = canChoosePackaging(product);
-    return <div className="product-card marketplace-card" key={product.id} onClick={() => hasPackageOptions && setSelectedProduct(product)} role={hasPackageOptions ? 'button' : undefined}><div className={`product-visual marketplace-visual ${product.imageUrl ? 'has-photo' : ''}`}>{product.imageUrl && <img src={product.imageUrl} alt={product.name} loading="lazy" />}<span className="discount-badge">Admin</span><div className="placeholder-brand">Wahyu Beef</div><div className="placeholder-pack">{hasPackageOptions ? '250g • 500g • 1kg' : product.unit}</div></div><div className="product-info"><h3>{product.name}</h3><span className="product-meta">{product.sku} • {hasPackageOptions ? 'Pilih kemasan' : `MOQ ${product.minimumOrderQty} ${product.unit}`}</span><div className="price-row"><span className="voucher-tag">%</span><div className="price">{product.price ? formatIdr(product.price) : 'Belum ada harga'}</div></div><div className="deal-note">Harga {tierName(state, selectedPartner.tierId)}</div>{hasPackageOptions ? <button className="btn small product-pick-btn" onClick={(event) => { event.stopPropagation(); setSelectedProduct(product); }}>Pilih</button> : <div className="qty-row compact" onClick={(event) => event.stopPropagation()}><input className="input" type="number" min="0" placeholder="Qty" value={cart[cartKey(product.id)] ?? ''} onChange={(e) => setCart({ ...cart, [cartKey(product.id)]: Number(e.target.value) })} /><button className="btn small" onClick={() => addToCart(product)}>Tambah</button></div>}</div></div>;
+    return <div className="product-card marketplace-card" key={product.id} onClick={() => hasPackageOptions && setSelectedProduct(product)} role={hasPackageOptions ? 'button' : undefined}><div className={`product-visual marketplace-visual ${product.imageUrl ? 'has-photo' : ''}`}>{product.imageUrl && <img src={product.imageUrl} alt={product.name} loading="lazy" />}{product.promotion && <span className="discount-badge">Promo</span>}<div className="placeholder-brand">Wahyu Beef</div><div className="placeholder-pack">{hasPackageOptions ? '250g • 500g • 1kg' : product.unit}</div></div><div className="product-info"><h3>{product.name}</h3><span className="product-meta">{product.sku} • {hasPackageOptions ? 'Pilih kemasan' : `MOQ ${product.minimumOrderQty} ${product.unit}`}</span><ProductPrice product={product} /><div className="deal-note">{product.promotion ? `${product.promotion.label} • Berlaku Juni 2026` : `Harga ${tierName(state, selectedPartner.tierId)}`}</div>{hasPackageOptions ? <button className="btn small product-pick-btn" onClick={(event) => { event.stopPropagation(); setSelectedProduct(product); }}>Pilih</button> : <div className="qty-row compact" onClick={(event) => event.stopPropagation()}><input className="input" type="number" min="0" placeholder="Qty" value={cart[cartKey(product.id)] ?? ''} onChange={(e) => setCart({ ...cart, [cartKey(product.id)]: Number(e.target.value) })} /><button className="btn small" onClick={() => addToCart(product)}>Tambah</button></div>}</div></div>;
   })}</div>{selectedProduct && <PackageModal product={selectedProduct} onClose={() => setSelectedProduct(null)} onAdd={(option, qty) => { addToCart(selectedProduct, qty, option); setSelectedProduct(null); }} />}</div>;
 }
 
@@ -1054,8 +1105,46 @@ function Products({ state, user, token, refresh }: { state: AppState; user: User
   return <AdminOrderCatalog state={state} user={user} token={token} refresh={refresh} />;
 }
 
-function Partners({ state }: { state: AppState }) { const partners = state.partners.filter(isRealPartner); return <div className="card mobile-card-table"><h3>Data Mitra</h3><p className="footer-note">Menampilkan database mitra asli Wahyu Beef. Mitra dummy sudah dihapus dari data live.</p><div className="table-wrap responsive-table"><table><thead><tr><th>Kode</th><th>Nama Bisnis</th><th>Tier</th><th>Kontak</th><th>Area</th><th>Termin</th><th>Status</th></tr></thead><tbody>{partners.map((p) => <tr key={p.id}><td data-label="Kode">{p.partnerCode}</td><td data-label="Nama Bisnis"><b>{p.businessName}</b><br /><small>{p.address}</small></td><td data-label="Tier">{tierName(state, p.tierId)}</td><td data-label="Kontak">{p.contactPerson}<br /><small>{p.phone}</small></td><td data-label="Area">{p.city}<br /><small>{p.province || '-'}</small></td><td data-label="Termin">{p.paymentTermDays} hari</td><td data-label="Status"><span className={`status ${p.status === 'active' ? 'delivered' : 'cancelled'}`}>{p.status}</span></td></tr>)}</tbody></table></div></div>; }
-function Pricing({ state }: { state: AppState }) { const activeProducts = state.products.filter((product) => product.isActive); return <div className="card mobile-card-table"><h3>Harga Produk per Tier</h3><div className="table-wrap responsive-table"><table><thead><tr><th>Produk</th>{state.tiers.map((t) => <th key={t.id}>{t.name}</th>)}</tr></thead><tbody>{activeProducts.map((p) => <tr key={p.id}><td data-label="Produk"><b>{p.name}</b><br /><small>{p.sku}</small></td>{state.tiers.map((t) => <td data-label={t.name} key={t.id}>{formatIdr(state.prices.find((price) => price.productId === p.id && price.tierId === t.id)?.price ?? 0)}</td>)}</tr>)}</tbody></table></div></div>; }
+function Partners({ state, token, refresh }: { state: AppState; token: string; refresh: () => Promise<void> }) {
+  const partners = state.partners.filter(isRealPartner).sort((a, b) => a.businessName.localeCompare(b.businessName, 'id', { sensitivity: 'base' }));
+  const requestRegistrations = [...(state.partnerRegistrations ?? [])].filter((item) => item.status === 'new').sort((a, b) => b.submittedAt.localeCompare(a.submittedAt));
+  const [selectedRegistration, setSelectedRegistration] = useState<PartnerRegistrationSubmission | null>(null);
+  return <div className="grid">
+    <div className="card mobile-card-table"><div className="products-catalog-head"><div><h3>Request Calon Mitra</h3><p className="footer-note">Status request bisa diklik untuk membuka popup approve atau reject.</p></div><span className="area-pill">{requestRegistrations.length} request</span></div><div className="table-wrap responsive-table"><table><thead><tr><th>Usaha</th><th>PIC</th><th>Lokasi</th><th>Minat</th><th>Submit</th><th>Status</th></tr></thead><tbody>{requestRegistrations.length ? requestRegistrations.map((item) => <tr key={item.id}><td data-label="Usaha"><b>{item.businessName}</b><br /><small>{item.businessType || '-'}</small></td><td data-label="PIC">{item.ownerName}<br /><small>{item.phone}{item.email ? ` • ${item.email}` : ''}</small></td><td data-label="Lokasi">{item.city}<br /><small>{item.province}</small></td><td data-label="Minat">{item.interestedTier || '-'}</td><td data-label="Submit">{new Date(item.submittedAt).toLocaleDateString('id-ID')}</td><td data-label="Status"><button type="button" className="status-button status pending" onClick={() => setSelectedRegistration(item)}>{item.status === 'new' ? 'request' : item.status}</button></td></tr>) : <tr><td colSpan={6} style={{ textAlign: 'center' }}>Belum ada request pendaftaran mitra.</td></tr>}</tbody></table></div></div>
+    <div className="card mobile-card-table"><h3>Data Mitra</h3><p className="footer-note">Menampilkan database mitra asli Wahyu Beef. Mitra dummy sudah dihapus dari data live.</p><div className="table-wrap responsive-table"><table><thead><tr><th>Kode</th><th>Nama Bisnis</th><th>Tier</th><th>Kontak</th><th>Area</th><th>Termin</th><th>Status</th></tr></thead><tbody>{partners.map((p) => <tr key={p.id}><td data-label="Kode">{p.partnerCode}</td><td data-label="Nama Bisnis"><b>{p.businessName}</b><br /><small>{p.address}</small></td><td data-label="Tier">{tierName(state, p.tierId)}</td><td data-label="Kontak">{p.contactPerson}<br /><small>{p.phone}</small></td><td data-label="Area">{p.city}<br /><small>{p.province || '-'}</small></td><td data-label="Termin">{p.paymentTermDays} hari</td><td data-label="Status"><span className={`status ${p.status === 'active' ? 'delivered' : 'cancelled'}`}>{p.status}</span></td></tr>)}</tbody></table></div></div>
+    {selectedRegistration && <PartnerRegistrationDecisionModal token={token} registration={selectedRegistration} onClose={() => setSelectedRegistration(null)} onDone={async () => { setSelectedRegistration(null); await refresh(); }} />}
+  </div>;
+}
+
+function PartnerRegistrationDecisionModal({ token, registration, onClose, onDone }: { token: string; registration: PartnerRegistrationSubmission; onClose: () => void; onDone: () => Promise<void> }) {
+  const [note, setNote] = useState('');
+  const [message, setMessage] = useState('');
+  const [saving, setSaving] = useState(false);
+  async function decide(status: PartnerRegistrationSubmission['status']) {
+    setSaving(true);
+    setMessage('');
+    try {
+      await api.updatePartnerRegistrationStatus(token, registration.id, status, note);
+      await onDone();
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Gagal memperbarui request mitra.');
+    } finally {
+      setSaving(false);
+    }
+  }
+  return <div className="modal-backdrop"><div className="modal"><div className="modal-head"><div><h3>Review Request Mitra</h3><p>{registration.businessName} • {registration.ownerName}</p></div><button className="notification-x" type="button" onClick={onClose}><X size={18} /></button></div><div className="grid cols-2"><div className="field"><label>WhatsApp</label><input className="input" readOnly value={registration.phone} /></div><div className="field"><label>Email</label><input className="input" readOnly value={registration.email || '-'} /></div><div className="field"><label>Lokasi</label><input className="input" readOnly value={`${registration.city}, ${registration.province}`} /></div><div className="field"><label>Minat Tier</label><input className="input" readOnly value={registration.interestedTier || '-'} /></div><div className="field registration-wide"><label>Alamat</label><textarea readOnly rows={2} value={registration.address} /></div><div className="field registration-wide"><label>Catatan Admin</label><textarea rows={3} value={note} onChange={(event) => setNote(event.target.value)} placeholder="Opsional: alasan approve/reject atau catatan follow up" /></div></div>{message && <div className="notice warning">{message}</div>}<div className="actions" style={{ justifyContent: 'flex-end', marginTop: 16 }}><button className="btn" disabled={saving} onClick={() => decide('contacted')}>Tandai Contacted</button><button className="btn danger" disabled={saving} onClick={() => decide('rejected')}>Reject</button><button className="btn success" disabled={saving} onClick={() => decide('approved')}>Approve</button></div></div></div>;
+}
+function Pricing({ state }: { state: AppState }) {
+  const activeProducts = state.products.filter((product) => product.isActive);
+  return <div className="card mobile-card-table"><h3>Harga Produk per Tier</h3><p className="footer-note">Harga promo Juni 2026 otomatis tampil untuk akun admin dan ikut dipakai saat admin membuat order mitra.</p><div className="table-wrap responsive-table"><table><thead><tr><th>Produk</th>{state.tiers.map((t) => <th key={t.id}>{t.name}</th>)}</tr></thead><tbody>{activeProducts.map((p) => {
+    const samplePromo = applyProductPromotion(1000, p.id);
+    return <tr key={p.id}><td data-label="Produk"><b>{p.name}</b><br /><small>{p.sku}</small>{samplePromo.promo && <><br /><span className="status confirmed">Promo</span></>}</td>{state.tiers.map((t) => {
+      const normalPrice = state.prices.find((price) => price.productId === p.id && price.tierId === t.id)?.price ?? 0;
+      const promoPrice = applyProductPromotion(normalPrice, p.id);
+      return <td data-label={t.name} key={t.id}>{promoPrice.promo && promoPrice.normalPrice > promoPrice.price ? <div className="price-stack admin-price-stack"><span className="normal-price">{formatIdr(promoPrice.normalPrice)}</span><b className="promo-price">{formatIdr(promoPrice.price)}</b><small>{promoPrice.promo.label}</small></div> : formatIdr(normalPrice)}</td>;
+    })}</tr>;
+  })}</tbody></table></div></div>;
+}
 
 function Documents({ state, user, token, refresh }: { state: AppState; user: User; token: string; refresh: () => Promise<void> }) {
   const [doc, setDoc] = useState<{ invoice: Invoice } | null>(null);
@@ -1169,7 +1258,7 @@ function DocHeader({ title, number }: { title: string; number: string }) { retur
 function DocFooter() { return <div className="doc-footer"><b>Wahyu Beef</b><span>Dokumen dicetak otomatis dari Mitra App Wahyu Beef.</span></div>; }
 function LineItems({ order, items = order.items, showPrice = true, showNotesColumn = false, qtyUnitOverride }: { order: Order; items?: Order['items']; showPrice?: boolean; showNotesColumn?: boolean; qtyUnitOverride?: string }) { return <div className="table-wrap" style={{ marginTop: 18 }}><table><thead><tr><th>SKU</th><th>Produk</th><th>Qty</th>{showPrice && <><th>Harga</th><th>Total</th></>}{showNotesColumn && <><th>Catatan</th><th>QC</th></>}</tr></thead><tbody>{items.map((item) => { const qcQty = item.productId.startsWith('packaging-') ? undefined : item.qcDeliveredQty; return <tr key={item.id}><td>{item.skuSnapshot}</td><td>{item.productNameSnapshot}<br /><small>{item.tierNameSnapshot}</small>{!showNotesColumn && item.notes && <div className="line-item-note"><b>Catatan:</b> {item.notes}</div>}</td><td>{item.qty} {qtyUnitOverride ?? item.unitSnapshot}</td>{showPrice && <><td>{formatIdr(item.unitPrice)}</td><td>{formatIdr(item.lineTotal)}</td></>}{showNotesColumn && <><td className="line-item-notes-cell">{item.notes || '-'}</td><td className="line-item-qc-cell">{qcQty === undefined ? '-' : `${qcQty} ${qtyUnitOverride ?? item.unitSnapshot}`}</td></>}</tr>; })}</tbody></table></div>; }
 
-function Leaderboard({ state }: { state: AppState }) { const rows = (state.leaderboardRows ?? getLeaderboard(state)).slice(0, 10); return <div className="card mobile-card-table"><h3>Papan Peringkat Mitra</h3><div className="table-wrap responsive-table"><table><thead><tr><th>Rank</th><th>Mitra</th><th>Tier</th><th>Delivered GMV</th><th>Total Qty</th><th>Order</th><th>Poin</th></tr></thead><tbody>{rows.map((row) => <tr key={row.partnerId}><td data-label="Rank"><b className={`rank-badge rank-${row.rank <= 3 ? row.rank : 'default'}`}>{rankMedal(row.rank)} #{row.rank}</b></td><td data-label="Mitra">{row.partnerName}</td><td data-label="Tier">{row.tier}</td><td data-label="Delivered GMV">{formatIdr(row.totalOrderValue)}</td><td data-label="Total Qty">{row.totalOrderQty}</td><td data-label="Order">{row.totalOrders}</td><td data-label="Poin"><b>{row.points}</b></td></tr>)}</tbody></table></div><p className="footer-note">Menampilkan 10 besar mitra. Hanya order delivered yang dihitung agar ranking tidak dimanipulasi dari pending/cancelled.</p></div>; }
+function Leaderboard({ state }: { state: AppState }) { const rows = (state.leaderboardRows?.length ? state.leaderboardRows : getLeaderboard(state)).slice(0, 10); return <div className="card mobile-card-table"><h3>Papan Peringkat Mitra</h3><div className="table-wrap responsive-table"><table><thead><tr><th>Rank</th><th>Mitra</th><th>Tier</th><th>Dikirim GMV</th><th>Total Qty</th><th>Order</th><th>Poin</th></tr></thead><tbody>{rows.map((row) => <tr key={row.partnerId}><td data-label="Rank"><b className={`rank-badge rank-${row.rank <= 3 ? row.rank : 'default'}`}>{rankMedal(row.rank)} #{row.rank}</b></td><td data-label="Mitra">{row.partnerName}</td><td data-label="Tier">{row.tier}</td><td data-label="Dikirim GMV">{formatIdr(row.totalOrderValue)}</td><td data-label="Total Qty">{row.totalOrderQty}</td><td data-label="Order">{row.totalOrders}</td><td data-label="Poin"><b>{row.points}</b></td></tr>)}</tbody></table></div><p className="footer-note">Menampilkan 10 besar mitra. Hanya order berstatus Dikirim yang dihitung agar ranking tidak dimanipulasi dari pending/cancelled.</p></div>; }
 function rankMedal(rank: number) { return rank === 1 ? '🥇' : rank === 2 ? '🥈' : rank === 3 ? '🥉' : ''; }
 function Reports({ state }: { state: AppState }) { const topProducts = state.products.map((p) => ({ p, qty: state.orders.flatMap((o) => o.items).filter((i) => i.productId === p.id).reduce((s, i) => s + i.qty, 0) })).sort((a, b) => b.qty - a.qty).slice(0, 5); return <div className="grid cols-2"><div className="card"><h3>Sales Summary</h3><StatusSummary orders={state.orders} /></div><div className="card"><h3>Top Products</h3>{topProducts.map((row) => <p key={row.p.id}><b>{row.p.name}</b><br />{row.qty} pack terjual/order</p>)}</div><div className="card"><h3>Invoice Aging</h3>{state.invoices.map((i) => <p key={i.id}><b>{i.invoiceNumber}</b> • {partnerName(state, i.partnerId)}<br />Outstanding {formatIdr(i.amountDue)} • due {i.dueDate}</p>)}</div><div className="card"><h3>Export Ready</h3><div className="notice">Data report sudah dipisah untuk sales, produk, aging invoice, audit, dan accounting event export.</div></div></div>; }
 function Audit({ state }: { state: AppState }) { return <LogTable logs={state.auditLogs.map((log) => ({ id: log.id, type: log.action, ref: `${log.entityType}:${log.entityId}`, amount: '', time: log.timestamp, meta: JSON.stringify(log.newValue ?? {}) }))} />; }
