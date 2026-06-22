@@ -12,6 +12,7 @@ const emptyRuntimeState: AppState = { ...stateSingleton, orders: [], statusHisto
 const sessionStorageKey = 'wahyu-beef-session-v1';
 const demoOrdersStorageKey = 'wahyu-beef-demo-orders-v1';
 const expeditionOptions = Object.entries(expeditionLabels) as [ExpeditionType, string][];
+const orderStatusFilterOptions: OrderStatus[] = ['cancelled', 'pending', 'confirmed', 'in_production', 'ready_to_ship', 'shipped'];
 const sessionTtlMs = 30 * 60 * 1000;
 
 type View = 'dashboard' | 'catalog' | 'checkout' | 'orders' | 'products' | 'partners' | 'pricing' | 'documents' | 'leaderboard' | 'areas' | 'profile' | 'reports' | 'audit' | 'accounting';
@@ -566,7 +567,9 @@ function cartKeyToItem(key: string, qty: number): CartItem { const [productId, w
 function Orders({ state, user, token, refresh }: { state: AppState; user: User; token: string; refresh: () => Promise<void> }) {
   const partner = findPartnerForUser(state, user);
   const orders = user.role === 'partner' && partner ? state.orders.filter((o) => o.partnerId === partner.id) : state.orders;
-  return <div className="grid"><OrdersTable state={state} orders={orders} user={user} token={token} refresh={refresh} /></div>;
+  const [statusFilter, setStatusFilter] = useState<'all' | OrderStatus>('all');
+  const filteredOrders = statusFilter === 'all' ? orders : orders.filter((order) => order.status === statusFilter);
+  return <div className="grid"><div className="card order-filter-card"><h3>Filter Order Management</h3><div className="catalog-filter-bar order-status-filter-bar"><div className="field"><label>Sort / Filter Status</label><select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value as 'all' | OrderStatus)}><option value="all">Semua Status</option>{orderStatusFilterOptions.map((status) => <option key={status} value={status}>{statusLabels[status]} ({orders.filter((order) => order.status === status).length})</option>)}</select></div><div className="field"><label>Hasil</label><div className="order-filter-result"><b>{filteredOrders.length}</b><span>dari {orders.length} order</span></div></div>{statusFilter !== 'all' && <button type="button" className="btn small" onClick={() => setStatusFilter('all')}>Reset Filter</button>}</div><div className="catalog-filter-summary"><b>{statusFilter === 'all' ? 'Semua Status' : statusLabels[statusFilter]}</b><span>Menampilkan order sesuai status: Dibatalkan, Menunggu Konfirmasi, Dikonfirmasi, Proses Produksi, Proses QC, atau Dikirim.</span></div></div>{filteredOrders.length ? <OrdersTable state={state} orders={filteredOrders} user={user} token={token} refresh={refresh} /> : <div className="notice warning">Belum ada order dengan status {statusFilter === 'all' ? 'dipilih' : statusLabels[statusFilter]}.</div>}</div>;
 }
 
 

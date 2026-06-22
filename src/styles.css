@@ -695,3 +695,9 @@ th { background: #fff3d8; color: #7b5b2f; font-size: 12px; text-transform: upper
 .legend-dot.paid-dot { background: #7f8d58; box-shadow: 0 0 0 3px rgba(127,141,88,.16); }
 .legend-dot.due-dot { background: #b51d2b; box-shadow: 0 0 0 3px rgba(181,29,43,.14); }
 @media (max-width: 560px) { .split-grid { grid-template-columns: minmax(0, 1fr); } .mini-bar-chart { gap: 8px; } }
+
+.order-status-filter-bar { grid-template-columns: minmax(220px, 320px) minmax(160px, 1fr) auto; }
+.order-filter-result { min-height: 48px; display: flex; align-items: center; gap: 8px; padding: 12px 14px; border: 1px solid #ead7ae; border-radius: 16px; background: #fffaf0; color: #5f4631; }
+.order-filter-result b { color: #8f121b; font-size: 20px; }
+.order-filter-result span { color: #7c6754; font-weight: 800; }
+@media (max-width: 720px) { .order-status-filter-bar { grid-template-columns: minmax(0, 1fr); } }
