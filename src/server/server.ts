@@ -292,7 +292,7 @@ function clean(value?: string) {
 
 function filteredStateForUser(state: Awaited<ReturnType<typeof loadState>>, userId: string) {
   const user = state.users.find((item) => item.id === userId)!;
-  if (user.role !== 'partner') return state;
+  if (user.role !== 'partner') return { ...state, leaderboardRows: getLeaderboard(state).slice(0, 10) };
   const partner = state.partners.find((item) => item.userId === user.id);
   if (!partner) return { ...state, partners: [], orders: [], invoices: [], deliveryNotes: [], payments: [], auditLogs: [], accountingEvents: [] };
   const orderIds = new Set(state.orders.filter((item) => item.partnerId === partner.id).map((item) => item.id));

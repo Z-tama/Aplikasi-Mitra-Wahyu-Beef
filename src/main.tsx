@@ -110,6 +110,12 @@ function mergeDemoOrders(snapshot: AppState): AppState {
   return missing.length ? { ...snapshot, orders: [...missing, ...snapshot.orders] } : snapshot;
 }
 
+function hydrateRuntimeState(snapshot: AppState): AppState {
+  const merged = mergeDemoOrders(snapshot);
+  const leaderboardRows = merged.leaderboardRows?.length ? merged.leaderboardRows : getLeaderboard(merged).slice(0, 10);
+  return { ...merged, leaderboardRows };
+}
+
 function App() {
   const [state, setState] = useState<AppState>(emptyRuntimeState);
   const [currentUser, setCurrentUser] = useState<User | null>(null);
@@ -120,7 +126,7 @@ function App() {
 
   async function refresh(nextToken = token) {
     const snapshot = await api.snapshot(nextToken);
-    setState(mergeDemoOrders(snapshot));
+    setState(hydrateRuntimeState(snapshot));
   }
 
   function clearSavedSession() {
@@ -161,7 +167,7 @@ function App() {
     }
   }, []);
 
-  useEffect(() => setState((current) => mergeDemoOrders(current)), []);
+  useEffect(() => setState((current) => hydrateRuntimeState(current)), []);
 
   useEffect(() => {
     function onPopState() {
@@ -1171,7 +1177,7 @@ function DocHeader({ title, number }: { title: string; number: string }) { retur
 function DocFooter() { return <div className="doc-footer"><b>Wahyu Beef</b><span>Dokumen dicetak otomatis dari Mitra App Wahyu Beef.</span></div>; }
 function LineItems({ order, items = order.items, showPrice = true, showNotesColumn = false, qtyUnitOverride }: { order: Order; items?: Order['items']; showPrice?: boolean; showNotesColumn?: boolean; qtyUnitOverride?: string }) { return <div className="table-wrap" style={{ marginTop: 18 }}><table><thead><tr><th>SKU</th><th>Produk</th><th>Qty</th>{showPrice && <><th>Harga</th><th>Total</th></>}{showNotesColumn && <><th>Catatan</th><th>QC</th></>}</tr></thead><tbody>{items.map((item) => { const qcQty = item.productId.startsWith('packaging-') ? undefined : item.qcDeliveredQty; return <tr key={item.id}><td>{item.skuSnapshot}</td><td>{item.productNameSnapshot}<br /><small>{item.tierNameSnapshot}</small>{!showNotesColumn && item.notes && <div className="line-item-note"><b>Catatan:</b> {item.notes}</div>}</td><td>{item.qty} {qtyUnitOverride ?? item.unitSnapshot}</td>{showPrice && <><td>{formatIdr(item.unitPrice)}</td><td>{formatIdr(item.lineTotal)}</td></>}{showNotesColumn && <><td className="line-item-notes-cell">{item.notes || '-'}</td><td className="line-item-qc-cell">{qcQty === undefined ? '-' : `${qcQty} ${qtyUnitOverride ?? item.unitSnapshot}`}</td></>}</tr>; })}</tbody></table></div>; }
 
-function Leaderboard({ state }: { state: AppState }) { const rows = (state.leaderboardRows ?? getLeaderboard(state)).slice(0, 10); return <div className="card mobile-card-table"><h3>Papan Peringkat Mitra</h3><div className="table-wrap responsive-table"><table><thead><tr><th>Rank</th><th>Mitra</th><th>Tier</th><th>Dikirim GMV</th><th>Total Qty</th><th>Order</th><th>Poin</th></tr></thead><tbody>{rows.map((row) => <tr key={row.partnerId}><td data-label="Rank"><b className={`rank-badge rank-${row.rank <= 3 ? row.rank : 'default'}`}>{rankMedal(row.rank)} #{row.rank}</b></td><td data-label="Mitra">{row.partnerName}</td><td data-label="Tier">{row.tier}</td><td data-label="Dikirim GMV">{formatIdr(row.totalOrderValue)}</td><td data-label="Total Qty">{row.totalOrderQty}</td><td data-label="Order">{row.totalOrders}</td><td data-label="Poin"><b>{row.points}</b></td></tr>)}</tbody></table></div><p className="footer-note">Menampilkan 10 besar mitra. Hanya order berstatus Dikirim yang dihitung agar ranking tidak dimanipulasi dari pending/cancelled.</p></div>; }
+function Leaderboard({ state }: { state: AppState }) { const rows = (state.leaderboardRows?.length ? state.leaderboardRows : getLeaderboard(state)).slice(0, 10); return <div className="card mobile-card-table"><h3>Papan Peringkat Mitra</h3><div className="table-wrap responsive-table"><table><thead><tr><th>Rank</th><th>Mitra</th><th>Tier</th><th>Dikirim GMV</th><th>Total Qty</th><th>Order</th><th>Poin</th></tr></thead><tbody>{rows.map((row) => <tr key={row.partnerId}><td data-label="Rank"><b className={`rank-badge rank-${row.rank <= 3 ? row.rank : 'default'}`}>{rankMedal(row.rank)} #{row.rank}</b></td><td data-label="Mitra">{row.partnerName}</td><td data-label="Tier">{row.tier}</td><td data-label="Dikirim GMV">{formatIdr(row.totalOrderValue)}</td><td data-label="Total Qty">{row.totalOrderQty}</td><td data-label="Order">{row.totalOrders}</td><td data-label="Poin"><b>{row.points}</b></td></tr>)}</tbody></table></div><p className="footer-note">Menampilkan 10 besar mitra. Hanya order berstatus Dikirim yang dihitung agar ranking tidak dimanipulasi dari pending/cancelled.</p></div>; }
 function rankMedal(rank: number) { return rank === 1 ? '🥇' : rank === 2 ? '🥈' : rank === 3 ? '🥉' : ''; }
 function Reports({ state }: { state: AppState }) { const topProducts = state.products.map((p) => ({ p, qty: state.orders.flatMap((o) => o.items).filter((i) => i.productId === p.id).reduce((s, i) => s + i.qty, 0) })).sort((a, b) => b.qty - a.qty).slice(0, 5); return <div className="grid cols-2"><div className="card"><h3>Sales Summary</h3><StatusSummary orders={state.orders} /></div><div className="card"><h3>Top Products</h3>{topProducts.map((row) => <p key={row.p.id}><b>{row.p.name}</b><br />{row.qty} pack terjual/order</p>)}</div><div className="card"><h3>Invoice Aging</h3>{state.invoices.map((i) => <p key={i.id}><b>{i.invoiceNumber}</b> • {partnerName(state, i.partnerId)}<br />Outstanding {formatIdr(i.amountDue)} • due {i.dueDate}</p>)}</div><div className="card"><h3>Export Ready</h3><div className="notice">Data report sudah dipisah untuk sales, produk, aging invoice, audit, dan accounting event export.</div></div></div>; }
 function Audit({ state }: { state: AppState }) { return <LogTable logs={state.auditLogs.map((log) => ({ id: log.id, type: log.action, ref: `${log.entityType}:${log.entityId}`, amount: '', time: log.timestamp, meta: JSON.stringify(log.newValue ?? {}) }))} />; }

@@ -766,7 +766,7 @@ function clean(value?: string) {
 
 function filteredStateForUser(currentState: AppState, userId: string) {
   const user = currentState.users.find((item) => item.id === userId)!;
-  if (user.role !== 'partner') return currentState;
+  if (user.role !== 'partner') return { ...currentState, leaderboardRows: getLeaderboard(currentState).slice(0, 10) };
   const partner = currentState.partners.find((item) => item.userId === user.id);
   if (!partner) return { ...currentState, partners: [], orders: [], invoices: [], deliveryNotes: [], payments: [], auditLogs: [], accountingEvents: [] };
   const orderIds = new Set(currentState.orders.filter((item) => item.partnerId === partner.id).map((item) => item.id));
