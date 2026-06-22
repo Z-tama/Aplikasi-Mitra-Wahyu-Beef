@@ -385,11 +385,9 @@ function Dashboard({ state }: { state: AppState }) {
   const activeOrders = state.orders.filter((order) => !['delivered', 'cancelled'].includes(order.status)).length;
   const activePartners = state.partners.filter((p) => p.status === 'active').length;
   return <div className="grid">
-    <div className="grid cols-4 dashboard-metrics">
+    <div className="grid cols-4 dashboard-metrics dashboard-metrics-primary">
       <Metric label="Pendapatan Bulan Ini" value={formatIdr(monthlyRevenue)} icon={ReceiptText} />
-      <Metric label="Sudah Terbayar" value={formatIdr(paidThisMonth)} icon={ShieldCheck} />
       <Metric label="Piutang" value={formatIdr(dueThisMonth)} icon={FileText} />
-      <Metric label="Belum Ditagihkan" value={formatIdr(unbilledThisMonth)} icon={ClipboardList} />
       <Metric label="Order Aktif" value={String(activeOrders)} icon={Truck} />
       <Metric label="Mitra Aktif" value={String(activePartners)} icon={Users} />
     </div>
