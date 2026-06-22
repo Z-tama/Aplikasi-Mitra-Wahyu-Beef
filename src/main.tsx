@@ -373,15 +373,17 @@ function Topbar({ state, user, view, onNavigate }: { state: AppState; user: User
 function Dashboard({ state }: { state: AppState }) {
   const now = new Date();
   const monthKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
-  const deliveredGmv = state.orders.filter((o) => o.status === 'delivered').reduce((s, o) => s + o.grandTotal, 0);
-  const monthlyRevenue = state.invoices.filter((invoice) => invoice.invoiceDate.startsWith(monthKey) && invoice.status !== 'void').reduce((sum, invoice) => sum + invoice.amountPaid, 0);
+  const shippedOrders = state.orders.filter((order) => order.status === 'shipped');
+  const shippedMonthKey = (orderId: string, fallbackDate: string) => (state.statusHistories.find((history) => history.orderId === orderId && history.toStatus === 'shipped')?.changedAt ?? fallbackDate).slice(0, 7);
+  const revenue = shippedOrders.reduce((sum, order) => sum + order.grandTotal, 0);
+  const monthlyRevenue = shippedOrders.filter((order) => shippedMonthKey(order.id, order.orderDate) === monthKey).reduce((sum, order) => sum + order.grandTotal, 0);
   const totalPaid = state.invoices.filter((invoice) => invoice.status !== 'void').reduce((sum, invoice) => sum + invoice.amountPaid, 0);
   const totalDue = state.invoices.filter((invoice) => invoice.status !== 'void').reduce((sum, invoice) => sum + invoice.amountDue, 0);
   const invoiceTotal = totalPaid + totalDue;
   const activeOrders = state.orders.filter((o) => !['delivered', 'cancelled'].includes(o.status)).length;
   return <div className="grid">
     <div className="grid cols-4">
-      <Metric label="GMV Delivered" value={formatIdr(deliveredGmv)} />
+      <Metric label="Pendapatan" value={formatIdr(revenue)} />
       <Metric label="Order Aktif" value={String(activeOrders)} />
       <Metric label="Mitra Aktif" value={String(state.partners.filter((p) => p.status === 'active').length)} />
       <Metric label="Invoice Outstanding" value={formatIdr(totalDue)} />
