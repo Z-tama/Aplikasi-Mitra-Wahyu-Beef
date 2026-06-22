@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { canTransition } from './domain.ts';
 import { createSeedState } from './seed.ts';
-import { calculateOrder, calculateStyrofoamPlan, cancelPartnerOrder, createInvoice, createOrder, findPartnerForUser, parseProductWeightGram, revisePartnerOrder, updateOrderQc, updateOrderShipping, updateOrderStatus } from './services.ts';
+import { calculateOrder, calculateStyrofoamPlan, cancelPartnerOrder, createInvoice, createOrder, findPartnerForUser, getLeaderboard, parseProductWeightGram, revisePartnerOrder, updateOrderQc, updateOrderShipping, updateOrderStatus } from './services.ts';
 
 test('tier pricing uses partner tier and snapshots totals', () => {
   const state = createSeedState();
@@ -167,6 +167,18 @@ test('admin QC input adjusts delivered qty, packaging qty, packing fee, and orde
   assert.equal(order.packingType, 'none');
   assert.equal(order.grandTotal, order.subtotal + (order.shippingCost ?? 0));
   assert.equal(state.auditLogs[0].action, 'ORDER_QC_UPDATED');
+});
+
+
+test('leaderboard counts shipped orders as terkirim ranking source', () => {
+  const state = createSeedState();
+  const rows = getLeaderboard(state);
+  const shippedPartnerIds = new Set(state.orders.filter((item) => item.status === 'shipped').map((item) => item.partnerId));
+  const deliveredPartnerIds = new Set(state.orders.filter((item) => item.status === 'delivered').map((item) => item.partnerId));
+  assert.equal(rows.length, shippedPartnerIds.size);
+  assert.deepEqual(new Set(rows.map((row) => row.partnerId)), shippedPartnerIds);
+  assert.notDeepEqual(new Set(rows.map((row) => row.partnerId)), deliveredPartnerIds);
+  assert.equal(rows.reduce((sum, row) => sum + row.totalOrders, 0), state.orders.filter((item) => item.status === 'shipped').length);
 });
 
 test('invoice generation mirrors order snapshot total', () => {

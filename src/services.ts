@@ -367,11 +367,11 @@ export function recordPayment(state: AppState, actor: User, invoiceId: string, a
 
 export function getLeaderboard(state: AppState) {
   const rows = state.partners.map((partner) => {
-    const delivered = state.orders.filter((order) => order.partnerId === partner.id && order.status === 'delivered');
-    const totalOrderValue = delivered.reduce((sum, order) => sum + order.grandTotal, 0);
-    const totalOrderQty = delivered.reduce((sum, order) => sum + order.items.filter((item) => !item.productId.startsWith('packaging-')).reduce((itemSum, item) => itemSum + item.qty, 0), 0);
+    const shipped = state.orders.filter((order) => order.partnerId === partner.id && order.status === 'shipped');
+    const totalOrderValue = shipped.reduce((sum, order) => sum + order.grandTotal, 0);
+    const totalOrderQty = shipped.reduce((sum, order) => sum + order.items.filter((item) => !item.productId.startsWith('packaging-')).reduce((itemSum, item) => itemSum + item.qty, 0), 0);
     const tier = state.tiers.find((item) => item.id === partner.tierId);
-    return { partnerId: partner.id, partnerName: partner.businessName, tier: tier?.name ?? '-', totalOrderValue, totalOrderQty, totalOrders: delivered.length, points: Math.floor(totalOrderValue / 100000), rank: 0 };
+    return { partnerId: partner.id, partnerName: partner.businessName, tier: tier?.name ?? '-', totalOrderValue, totalOrderQty, totalOrders: shipped.length, points: Math.floor(totalOrderValue / 100000), rank: 0 };
   }).filter((row) => row.totalOrders > 0).sort((a, b) => b.points - a.points || b.totalOrderValue - a.totalOrderValue);
   return rows.map((row, index) => ({ ...row, rank: index + 1 }));
 }
