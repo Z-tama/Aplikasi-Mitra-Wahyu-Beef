@@ -1136,7 +1136,7 @@ function PartnerRegistrationDecisionModal({ token, registration, onClose, onDone
 }
 function Pricing({ state }: { state: AppState }) {
   const activeProducts = state.products.filter((product) => product.isActive);
-  return <div className="card mobile-card-table"><h3>Harga Produk per Tier</h3><p className="footer-note">Harga promo Juni 2026 otomatis tampil untuk akun admin dan ikut dipakai saat admin membuat order mitra.</p><div className="table-wrap responsive-table"><table><thead><tr><th>Produk</th>{state.tiers.map((t) => <th key={t.id}>{t.name}</th>)}</tr></thead><tbody>{activeProducts.map((p) => {
+  return <div className="card mobile-card-table"><h3>Harga Produk per Tier</h3><p className="footer-note">Harga promo Juli 2026 otomatis tampil untuk akun admin dan ikut dipakai saat admin membuat order mitra. Setelah Juli berakhir, harga kembali normal otomatis.</p><div className="table-wrap responsive-table"><table><thead><tr><th>Produk</th>{state.tiers.map((t) => <th key={t.id}>{t.name}</th>)}</tr></thead><tbody>{activeProducts.map((p) => {
     const samplePromo = applyProductPromotion(1000, p.id);
     return <tr key={p.id}><td data-label="Produk"><b>{p.name}</b><br /><small>{p.sku}</small>{samplePromo.promo && <><br /><span className="status confirmed">Promo</span></>}</td>{state.tiers.map((t) => {
       const normalPrice = state.prices.find((price) => price.productId === p.id && price.tierId === t.id)?.price ?? 0;
