@@ -57,3 +57,71 @@ When ending work, report:
 4. Deploy/production status if touched
 5. Known blockers or next steps
 
+
+<!-- GIT_COLLABORATION_SAFETY_START -->
+## Git Collaboration Safety Rules
+
+These rules are mandatory for every human or AI agent working in this repository.
+
+### Before starting work
+
+1. Do not work from a stale clone.
+2. Sync the latest `main` first:
+
+```bash
+git fetch origin
+git checkout main
+git pull --ff-only origin main
+```
+
+3. Create a new feature branch from the latest `main`:
+
+```bash
+git checkout -b feature/short-description
+```
+
+### During work
+
+- Keep changes scoped to the requested task.
+- Do not overwrite unrelated files.
+- Do not delete or replace existing work unless explicitly requested.
+- If conflicts appear, stop and report them instead of guessing.
+
+### Before pushing
+
+Run project checks. For Node/Vite/React projects, use:
+
+```bash
+npm test
+npm run build
+```
+
+If a project has different documented checks, run those instead and report exactly what passed or failed.
+
+### Push and merge policy
+
+- Never push directly to `main`.
+- Never force push.
+- Push only the feature branch:
+
+```bash
+git push origin feature/short-description
+```
+
+- Open a Pull Request or report the branch name to the coordinator.
+- Production deploys must be done only by the project owner/coordinator.
+
+### If local clone is outdated and local changes are disposable
+
+Only after confirming no local work needs saving:
+
+```bash
+git fetch origin
+git checkout main
+git reset --hard origin/main
+git clean -fd
+git checkout -b feature/short-description
+```
+
+Warning: `git reset --hard` and `git clean -fd` delete local uncommitted work.
+<!-- GIT_COLLABORATION_SAFETY_END -->
