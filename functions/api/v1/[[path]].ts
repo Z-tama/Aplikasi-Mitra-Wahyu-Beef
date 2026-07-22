@@ -675,7 +675,7 @@ function verifyPassword(user: User, password: string, env?: Env) {
   const allowDemoLogin = env?.ALLOW_DEMO_LOGIN === 'true';
   if (user.passwordHash?.startsWith('demo-hash:')) return user.passwordHash === hashPassword(password);
   if (user.passwordHash) return knownPasswordHashes[password] === user.passwordHash;
-  const fallback = user.email.endsWith('@mitra.wahyubeef.local') ? 'mitrawahyubeef' : allowDemoLogin ? defaultPasswordForUser(user) : undefined;
+  const fallback = user.role === 'partner' ? 'mitrawahyubeef' : allowDemoLogin ? defaultPasswordForUser(user) : undefined;
   return Boolean(fallback) && fallback === password;
 }
 
@@ -685,7 +685,7 @@ function ensureMitraState(currentState: AppState) {
 
 
 function defaultPasswordForUser(user: User) {
-  if (user.email.endsWith('@mitra.wahyubeef.local')) return 'mitrawahyubeef';
+  if (user.role === 'partner') return 'mitrawahyubeef';
   return demoPasswords[user.email];
 }
 

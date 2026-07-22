@@ -73,7 +73,7 @@ export function verifyPassword(user: User, password: string) {
 }
 
 function defaultPasswordForUser(user: User) {
-  if (user.email.endsWith('@mitra.wahyubeef.local')) return 'mitrawahyubeef';
+  if (user.role === 'partner') return 'mitrawahyubeef';
   return demoPasswords[user.email];
 }
 
