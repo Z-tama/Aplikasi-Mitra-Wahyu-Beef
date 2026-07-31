@@ -274,17 +274,21 @@ export const onRequest = async ({ request, env }: PagesHandlerContext) => {
 };
 
 async function loadState(env?: Env) {
-  if (state) return ensureMitraState(state);
   if (env?.DB) {
     const row = await env.DB.prepare("SELECT value FROM app_state WHERE key = ?").bind('state').first<{ value: string }>();
     if (row?.value) {
-      state = ensureMitraState(JSON.parse(row.value) as AppState);
-      await saveState(env, state);
-      return state;
+      const latestState = ensureMitraState(JSON.parse(row.value) as AppState);
+      state = latestState;
+      await saveState(env, latestState);
+      return latestState;
     }
+    const seededState = ensureMitraState(createSeedState());
+    state = seededState;
+    await saveState(env, seededState);
+    return seededState;
   }
+  if (state) return ensureMitraState(state);
   state = ensureMitraState(createSeedState());
-  if (env?.DB) await saveState(env, state);
   return state;
 }
 
