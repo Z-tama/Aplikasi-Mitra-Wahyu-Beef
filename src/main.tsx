@@ -1148,9 +1148,59 @@ function Pricing({ state }: { state: AppState }) {
 
 function Documents({ state, user, token, refresh }: { state: AppState; user: User; token: string; refresh: () => Promise<void> }) {
   const [doc, setDoc] = useState<{ invoice: Invoice } | null>(null);
+  const [invoiceAction, setInvoiceAction] = useState<{ type: 'generate'; order: Order } | { type: 'payment'; order: Order; invoice: Invoice } | null>(null);
   const partner = findPartnerForUser(state, user);
   const orders = user.role === 'partner' && partner ? state.orders.filter((o) => o.partnerId === partner.id) : state.orders;
-  return <div className="grid"><div className="card documents-card"><h3>Generate & Print Invoice</h3><div className="table-wrap documents-table"><table><thead><tr><th>Order</th><th>Mitra</th><th>Invoice</th><th>Aksi</th></tr></thead><tbody>{orders.map((order) => { const inv = state.invoices.find((i) => i.orderId === order.id && i.status !== 'void'); return <tr key={order.id}><td data-label="Order"><b>{order.orderNumber}</b><br /><span className={`status ${order.status}`}>{statusLabels[order.status]}</span></td><td data-label="Mitra">{partnerName(state, order.partnerId)}</td><td data-label="Invoice">{inv ? <button className="btn small" onClick={() => setDoc({ invoice: inv })}>{inv.invoiceNumber}</button> : '-'}</td><td data-label="Aksi"><div className="actions">{user.role !== 'partner' && <><button className="btn small" onClick={async () => { await api.createInvoice(token, order.id); await refresh(); }}>Generate Invoice</button>{inv && inv.amountDue > 0 && <button className="btn small success" onClick={async () => { await api.recordPayment(token, inv.id, { amount: Math.min(500000, inv.amountDue), method: 'bank_transfer', referenceNumber: 'PAY-DEMO' }); await refresh(); }}>Catat Bayar</button>}</>}</div></td></tr>; })}</tbody></table></div></div>{doc && <DocumentModal state={state} doc={doc} onClose={() => setDoc(null)} />}</div>;
+  return <div className="grid"><div className="card documents-card"><h3>Generate & Print Invoice</h3><div className="table-wrap documents-table"><table><thead><tr><th>Order</th><th>Mitra</th><th>Invoice</th><th>Aksi</th></tr></thead><tbody>{orders.map((order) => { const inv = state.invoices.find((i) => i.orderId === order.id && i.status !== 'void'); return <tr key={order.id}><td data-label="Order"><b>{order.orderNumber}</b><br /><span className={`status ${order.status}`}>{statusLabels[order.status]}</span></td><td data-label="Mitra">{partnerName(state, order.partnerId)}</td><td data-label="Invoice">{inv ? <button type="button" className="btn small" onClick={() => setDoc({ invoice: inv })}>{inv.invoiceNumber}</button> : '-'}</td><td data-label="Aksi"><div className="actions">{user.role !== 'partner' && <><button type="button" className="btn small" onClick={() => setInvoiceAction({ type: 'generate', order })}>Generate Invoice</button>{inv && inv.amountDue > 0 && <button type="button" className="btn small success" onClick={() => setInvoiceAction({ type: 'payment', order, invoice: inv })}>Catat Bayar</button>}</>}</div></td></tr>; })}</tbody></table></div></div>{doc && <DocumentModal state={state} doc={doc} onClose={() => setDoc(null)} />}{invoiceAction?.type === 'generate' && <GenerateInvoiceModal state={state} token={token} order={invoiceAction.order} onClose={() => setInvoiceAction(null)} onDone={async () => { setInvoiceAction(null); await refresh(); }} />}{invoiceAction?.type === 'payment' && <RecordPaymentModal token={token} invoice={invoiceAction.invoice} order={invoiceAction.order} onClose={() => setInvoiceAction(null)} onDone={async () => { setInvoiceAction(null); await refresh(); }} />}</div>;
+}
+
+function GenerateInvoiceModal({ state, token, order, onClose, onDone }: { state: AppState; token: string; order: Order; onClose: () => void; onDone: () => Promise<void> }) {
+  const existingInvoice = state.invoices.find((invoice) => invoice.orderId === order.id && invoice.status !== 'void');
+  const [message, setMessage] = useState('');
+  const [saving, setSaving] = useState(false);
+  async function submit() {
+    setSaving(true);
+    setMessage('');
+    try {
+      await api.createInvoice(token, order.id);
+      await onDone();
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Gagal generate invoice.');
+    } finally {
+      setSaving(false);
+    }
+  }
+  return <div className="modal-backdrop"><div className="modal"><div className="modal-head"><div><h3>Generate Invoice</h3><p>{order.orderNumber} • {partnerName(state, order.partnerId)}</p></div><button className="notification-x" type="button" onClick={onClose}><X size={18} /></button></div><div className="grid cols-2"><div className="field"><label>Total Order</label><input className="input" readOnly value={formatIdr(order.grandTotal)} /></div><div className="field"><label>Status Order</label><input className="input" readOnly value={statusLabels[order.status]} /></div></div>{existingInvoice && <div className="notice warning">Invoice aktif sudah ada: {existingInvoice.invoiceNumber}. Generate baru tidak diperlukan.</div>}{message && <div className="notice warning">{message}</div>}<div className="actions" style={{ justifyContent: 'flex-end', marginTop: 16 }}><button type="button" className="btn" disabled={saving} onClick={onClose}>Batal</button><button type="button" className="btn primary" disabled={saving || Boolean(existingInvoice)} onClick={submit}>{saving ? 'Memproses...' : 'Generate Invoice'}</button></div></div></div>;
+}
+
+function RecordPaymentModal({ token, invoice, order, onClose, onDone }: { token: string; invoice: Invoice; order: Order; onClose: () => void; onDone: () => Promise<void> }) {
+  const [amount, setAmount] = useState(String(invoice.amountDue));
+  const [method, setMethod] = useState<'cash' | 'bank_transfer' | 'other'>('bank_transfer');
+  const [referenceNumber, setReferenceNumber] = useState('');
+  const [message, setMessage] = useState('');
+  const [saving, setSaving] = useState(false);
+  async function submit() {
+    const parsedAmount = Number(amount);
+    if (!Number.isFinite(parsedAmount) || parsedAmount <= 0) {
+      setMessage('Nominal pembayaran harus lebih dari 0.');
+      return;
+    }
+    if (parsedAmount > invoice.amountDue) {
+      setMessage('Nominal pembayaran tidak boleh melebihi sisa tagihan.');
+      return;
+    }
+    setSaving(true);
+    setMessage('');
+    try {
+      await api.recordPayment(token, invoice.id, { amount: parsedAmount, method, referenceNumber: referenceNumber.trim() || undefined });
+      await onDone();
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Gagal mencatat pembayaran.');
+    } finally {
+      setSaving(false);
+    }
+  }
+  return <div className="modal-backdrop"><div className="modal"><div className="modal-head"><div><h3>Catat Bayar</h3><p>{invoice.invoiceNumber} • {order.orderNumber}</p></div><button className="notification-x" type="button" onClick={onClose}><X size={18} /></button></div><div className="grid cols-2"><div className="field"><label>Sisa Tagihan</label><input className="input" readOnly value={formatIdr(invoice.amountDue)} /></div><div className="field"><label>Nominal Bayar</label><input className="input" type="number" min="1" max={invoice.amountDue} value={amount} onChange={(event) => setAmount(event.target.value)} /></div><div className="field"><label>Metode</label><select value={method} onChange={(event) => setMethod(event.target.value as 'cash' | 'bank_transfer' | 'other')}><option value="bank_transfer">Bank Transfer</option><option value="cash">Cash</option><option value="other">Lainnya</option></select></div><div className="field"><label>Nomor Referensi</label><input className="input" value={referenceNumber} onChange={(event) => setReferenceNumber(event.target.value)} placeholder="Opsional" /></div></div>{message && <div className="notice warning">{message}</div>}<div className="actions" style={{ justifyContent: 'flex-end', marginTop: 16 }}><button type="button" className="btn" disabled={saving} onClick={onClose}>Batal</button><button type="button" className="btn success" disabled={saving} onClick={submit}>{saving ? 'Menyimpan...' : 'Catat Bayar'}</button></div></div></div>;
 }
 
 function DocumentModal({ state, doc, onClose }: { state: AppState; doc: { invoice: Invoice }; onClose: () => void }) {
