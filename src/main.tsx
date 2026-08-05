@@ -292,7 +292,7 @@ function Shell({ state, user, setUser, token, view, setView, setState, refresh, 
       <div className="mobile-sidebar-head"><div className="brand"><div className="logo logo-image"><img src="/assets/logo-wahyu-beef.png" alt="Logo Wahyu Beef" /></div><div><h2>Wahyu Beef</h2><span>Mitra App</span></div></div><button className="mobile-close-btn" aria-label="Tutup menu" onClick={() => setIsMobileMenuOpen(false)}><X size={20} /></button></div>
       <nav className="nav">{nav.map(([key, label, Icon]) => <button key={key} className={view === key ? 'active' : ''} onClick={() => go(key)}><Icon size={18} /> {label}</button>)}</nav>
       <div className="user-box"><b>{user.name}</b><br /><span>{roleLabel(user.role)}</span><br /><br /><button className="btn sidebar-logout-btn" onClick={onLogout}><LogOut size={18} /> Keluar</button></div>
-      <p className="app-version-note">Versi Aplikasi v1.5.0</p>
+      <p className="app-version-note">Versi Aplikasi v1.6.0</p>
     </aside>
     <main className="main">
       <MobileAppBar state={state} user={user} view={view} onMenu={() => setIsMobileMenuOpen(true)} onNavigate={go} />

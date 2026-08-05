@@ -22,8 +22,23 @@ export const july2026ProductPromotions: ProductPromotion[] = [
   { productId: 'prd-tls-002', percent: 7, label: 'Promo Juli 7%', startsAt: july2026PromotionStartsAt, endsAt: july2026PromotionEndsAt },
 ];
 
+export const august2026PromotionStartsAt = '2026-08-01T00:00:00+07:00';
+export const august2026PromotionEndsAt = '2026-08-31T23:59:59+07:00';
+
+export const august2026ProductPromotions: ProductPromotion[] = [
+  { productId: 'prd-prs-003', percent: 8, label: 'Promo Agustus 8%', startsAt: august2026PromotionStartsAt, endsAt: august2026PromotionEndsAt },
+  { productId: 'prd-prs-004', percent: 8, label: 'Promo Agustus 8%', startsAt: august2026PromotionStartsAt, endsAt: august2026PromotionEndsAt },
+  { productId: 'prd-prs-009', percent: 18, label: 'Promo Agustus 18%', startsAt: august2026PromotionStartsAt, endsAt: august2026PromotionEndsAt },
+  { productId: 'prd-jrh-007', percent: 8, label: 'Promo Agustus 8%', startsAt: august2026PromotionStartsAt, endsAt: august2026PromotionEndsAt },
+  { productId: 'prd-jrh-001', percent: 8, label: 'Promo Agustus 8%', startsAt: august2026PromotionStartsAt, endsAt: august2026PromotionEndsAt },
+  { productId: 'prd-tls-006', percent: 8, label: 'Promo Agustus 8%', startsAt: august2026PromotionStartsAt, endsAt: august2026PromotionEndsAt },
+  { productId: 'prd-tls-004', percent: 8, label: 'Promo Agustus 8%', startsAt: august2026PromotionStartsAt, endsAt: august2026PromotionEndsAt },
+  { productId: 'prd-tls-002', percent: 8, label: 'Promo Agustus 8%', startsAt: august2026PromotionStartsAt, endsAt: august2026PromotionEndsAt },
+];
+
 export const productPromotions: ProductPromotion[] = [
   ...july2026ProductPromotions,
+  ...august2026ProductPromotions,
 ];
 
 export function getActiveProductPromotion(productId: string, now: Date = new Date()) {
